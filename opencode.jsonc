@@ -12,7 +12,9 @@
   // IMPORTANT: This file contains NO secrets.
   // API key is injected via USAI_API_KEY secret.
   "$schema": "https://opencode.ai/config.json",
-  "enabled_providers": ["usai"],
+  "enabled_providers": [
+    "usai"
+  ],
   "provider": {
     "usai": {
       "npm": "@ai-sdk/openai-compatible",
@@ -22,87 +24,87 @@
         "apiKey": "{env:USAI_API_KEY}",
         "timeout": 3600000, // 1 hour, for long-running tasks
         "headers": {
-          "User-Agent": "OpenCode-USAI/1.0",
-        },
+          "User-Agent": "OpenCode-USAI/1.0"
+        }
       },
       "models": {
         "claude_4_5_opus": {
           "name": "Claude 4.5 Opus",
           "limit": {
             "context": 200000,
-            "output": 32768,
-          },
+            "output": 32768
+          }
         },
         "claude_4_5_sonnet": {
           "name": "Claude 4.5 Sonnet",
           "limit": {
             "context": 200000,
-            "output": 32768,
-          },
+            "output": 32768
+          }
         },
         "claude_3_5_haiku": {
           "name": "Claude 3.5 Haiku",
           "limit": {
             "context": 200000,
-            "output": 8192,
-          },
+            "output": 8192
+          }
         },
         "gpt-5.4-latest-guardrails-defaultv2": {
           "name": "GPT-5.4 Latest — Guardrails Default v2",
           "limit": {
             "context": 400000,
-            "output": 32768,
-          },
+            "output": 32768
+          }
         },
         "gpt-5.2-latest-guardrails-defaultv2": {
           "name": "GPT-5.2 Latest — Guardrails Default v2",
           "limit": {
             "context": 400000,
-            "output": 32768,
-          },
+            "output": 32768
+          }
         },
         "gemini-2.5-pro": {
           "name": "Gemini 2.5 Pro",
           "limit": {
             "context": 1048576,
-            "output": 65536,
-          },
+            "output": 65536
+          }
         },
         "gemini-2.5-flash": {
           "name": "Gemini 2.5 Flash",
           "limit": {
             "context": 1048576,
-            "output": 65536,
-          },
+            "output": 65536
+          }
         },
         "gemini-2.5-flash-lite": {
           "name": "Gemini 2.5 Flash Lite",
           "limit": {
             "context": 1048576,
-            "output": 32768,
-          },
+            "output": 32768
+          }
         },
         "llama_4_maverick": {
           "name": "Llama 4 Maverick",
           "limit": {
             "context": 128000,
-            "output": 16384,
-          },
+            "output": 16384
+          }
         },
         "cohere_english_v3": {
           "name": "Cohere English v3",
           "limit": {
             "context": 128000,
-            "output": 8192,
-          },
-        },
+            "output": 8192
+          }
+        }
         // Intentionally omitted:
         // "text-embedding-005"
         //
         // That model appears to be an embedding model, not a chat/coding model.
         // Add it only if OpenCode/USAI exposes a separate embedding-model config path.
-      },
-    },
+      }
+    }
   },
   // Main coding model.
   "model": "usai/claude_4_5_sonnet",
@@ -111,20 +113,20 @@
   "agent": {
     "compaction": {
       // GPT-5.2 is a strong choice for context compaction.
-      "model": "usai/gpt-5.2-latest-guardrails-defaultv2",
-    },
+      "model": "usai/gpt-5.2-latest-guardrails-defaultv2"
+    }
   },
   "compaction": {
     "auto": true,
     "prune": true,
-    "reserved": 10000,
+    "reserved": 10000
   },
   "instructions": [
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
     ".cursor/rules/*.md",
-    ".github/copilot-instructions.md",
+    ".github/copilot-instructions.md"
   ],
   "permission": {
     // Conservative default: anything not explicitly handled asks first.
@@ -138,7 +140,6 @@
     // must come after broader deny rules.
     "read": {
       "*": "allow",
-      "input.yml": "deny",
       ".env": "deny",
       ".env.*": "deny",
       "*.env": "deny",
@@ -153,7 +154,7 @@
       "*.tfvars.json": "deny",
       ".env.example": "allow",
       "*.env.example": "allow",
-      "*.tfvars.example": "allow",
+      "*.tfvars.example": "allow"
     },
     // File modification.
     //
@@ -260,8 +261,8 @@
       "ssh *": "deny",
       "scp *": "deny",
       "sftp *": "deny",
-      "rsync *": "ask",
-    },
+      "rsync *": "ask"
+    }
   },
   "watcher": {
     "ignore": [
@@ -277,7 +278,7 @@
       ".pytest_cache/**",
       ".mypy_cache/**",
       ".ruff_cache/**",
-      "coverage/**",
-    ],
-  },
+      "coverage/**"
+    ]
+  }
 }

@@ -14,6 +14,8 @@ RUN apt-get update && \
     unzip \
     libaio1 \
     libaio-dev \
+    jq \
+    vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install Oracle Instant Client 19 Basic and SQL*Plus

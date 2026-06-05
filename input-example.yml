@@ -4,9 +4,13 @@ user: ""
 # description: Password Oracle DB (e.g., 'xvIA7zonxGM=1')
 password: ""
 
+# description: Port for Oracle DB (e.g., '1521')
+# When using cf service-connect, use the -N reported port
+port: "1521"
 
 # description: Hostname Oracle DB (e.g., 'localhost')
-host: ""
+# On MacOs w/ Docker, and SSH tunneling, this will be host.docker.internal
+host: "host.docker.internal"
 
 # description: Service name Oracle DB (e.g., 'ORCLCDB')
 service: "ORCL"

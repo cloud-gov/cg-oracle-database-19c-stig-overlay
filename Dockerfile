@@ -46,6 +46,6 @@ ENV PATH=$ORACLE_HOME:$PATH
 RUN sh -c "echo $ORACLE_HOME > /etc/ld.so.conf.d/oracle-instantclient.conf" && \
     ldconfig
 
-WORKDIR /
+WORKDIR /share
 # ENTRYPOINT [ "/bin/bash" ]
 

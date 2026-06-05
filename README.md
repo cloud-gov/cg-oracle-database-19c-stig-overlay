@@ -74,48 +74,20 @@ The Heimdall-Lite interface will be available at <http://localhost:8080>. From
 the Finder, you can then drag the `.json` results into the viewer to see if
 there are any variations from our standards.
 
-## Running over Cloud.gov SSH
-
-APP="cinc-auditor" APP_GUID=$(cf app $APP --guid)
-PROC_GUID=$(cf curl
-/v3/apps/${APP_GUID}/processes | jq -r '.resources[] | select(.type=="web") | .guid')
-SSH_USER=cf:$PROC_GUID/0
-SSH_ENDPOINT=ssh.dev.us-gov-west-1.aws-us-gov.cloud.gov PORT=2222
-
-ssh -p $PORT $SSH_USER@$SSH_ENDPOINT
-
----
-
-cf:$(cf curl /v3/apps/$(cf app APP-NAME --guid)/processes | jq -r '.resources[]
-| select(.type=="web") | .guid')/0@SSH-ENDPOINT
-
-ssh
-
-    inspec exec . -t ssh://<hostip> --user '<admin-account>' --password=<password> --input-file input.yml
-
-ssh -p PORT-NUMBER cf:$(cf curl /v3/apps/$(cf app APP-NAME --guid)/processes |
-jq -r '.resources[] | select(.type=="web") | .guid')/0@SSH-ENDPOINT
-
-    #--reporter cli json:<filename>.json
-
-Runs this profile over ssh to the host at IP address <hostip> as a privileged
-user account (i.e., an account with administrative privileges), reporting
-results to both the command line interface (cli) and to a machine-readable JSON
-file. inspec exec
-https://github.com/mitre/oracle-database-12c-stig-baseline/archive/master.tar.gz
--t
-ssh://$hostip --user '<admin-account>' --password=<password> --input-file oracle-database-input-file.yml --reporter cli json:oracle-database-12c-stig-baseline-results.json
-inspec exec <name of generated archive> -t ssh://$hostip
---user '<admin-account>' --password=<password>
---input-file=<path_to_your_inputs_file/name_of_your_inputs_file.yml>
---reporter=cli json:<path_to_your_output_file/name_of_your_output_file.json>
-inspec exec <name of generated archive> -t ssh://$hostip --user
-'<admin-account>' --password=<password>
---input-file=<path_to_your_inputs_file/name_of_your_inputs_file.yml>
---reporter=cli json:<path_to_your_output_file/name_of_your_output_file.json>
+## Testing / Debugging Snippes
 
 SQLPLUS direct for testing
 
-sqlplus $username/$password@127.0.0.1:62549/ORCL
+    sqlplus $username/$password@host.docker.internal:62549/ORCL
 
-<logon> is: {<username>[/<password>][@<connect_identifier>] | / }
+# smoke test
+
+docker run -v $(pwd):/share cinc-auditor-oracle version
+
+# run profile
+
+docker run -v $(pwd):/share cinc-auditor-oracle exec . --input-file input.yml
+
+# shell
+
+docker run -v $(pwd):/share -it cinc-auditor-oracle shell --input-file input.yml

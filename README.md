@@ -114,4 +114,8 @@ inspec exec <name of generated archive> -t ssh://$hostip --user
 --input-file=<path_to_your_inputs_file/name_of_your_inputs_file.yml>
 --reporter=cli json:<path_to_your_output_file/name_of_your_output_file.json>
 
-kkkkkkk
+SQLPLUS direct for testing
+
+sqlplus $username/$password@127.0.0.1:62549/ORCL
+
+<logon> is: {<username>[/<password>][@<connect_identifier>] | / }

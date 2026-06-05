@@ -3,7 +3,8 @@
 # Variables
 IMAGE_NAME := cinc-auditor-oracle
 CONTAINER_NAME := cinc-auditor-oracle
-PLATFORM := linux/amd64
+#PLATFORM := linux/amd64
+PLATFORM := linux/arm64
 DOCKER_USERNAME ?= peterburkholdergsa
 VERSION ?= latest
 

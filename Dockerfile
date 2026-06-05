@@ -8,6 +8,7 @@ RUN cp /tmp/zscaler-root-ca.crt /usr/local/share/ca-certificates/zscaler.crt && 
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 # Install Oracle Instant Client 19 and SQL*Plus prerequisites
+# jq, vim-tiny, netcat for debuging only
 RUN apt-get update && \
     apt-get install -y \
     wget \
@@ -16,15 +17,25 @@ RUN apt-get update && \
     libaio-dev \
     jq \
     vim-tiny \
+    netcat \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install Oracle Instant Client 19 Basic and SQL*Plus
 WORKDIR /tmp
-RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
-RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip
-RUN unzip instantclient-basic-linux.x64-19.23.0.0.0dbru.zip -d /opt/oracle && \
-    unzip -o instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip -d /opt/oracle && \
-    rm -f instantclient-basic-linux.x64-19.23.0.0.0dbru.zip instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip
+
+# amd64
+# RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
+# RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip
+# RUN unzip instantclient-basic-linux.x64-19.23.0.0.0dbru.zip -d /opt/oracle && \
+#     unzip -o instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip -d /opt/oracle && \
+#     rm -f instantclient-basic-linux.x64-19.23.0.0.0dbru.zip instantclient-sqlplus-linux.x64-19.23.0.0.0dbru.zip
+
+RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.arm64-19.23.0.0.0dbru.zip
+RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-sqlplus-linux.arm64-19.23.0.0.0dbru.zip
+RUN unzip instantclient-basic-linux.arm64-19.23.0.0.0dbru.zip -d /opt/oracle && \
+   unzip -o instantclient-sqlplus-linux.arm64-19.23.0.0.0dbru.zip -d /opt/oracle && \
+   rm -f instantclient-basic-linux.arm64-19.23.0.0.0dbru.zip instantclient-sqlplus-linux.arm64-19.23.0.0.0dbru.zip
+
 
 # Set Oracle environment variables
 ENV ORACLE_HOME=/opt/oracle/instantclient_19_23

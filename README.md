@@ -10,31 +10,42 @@ For this work we use the open-source `cinc-auditor` from the
 [Cinc Project](https://cinc.sh), derived from
 [Chef InSpec](https://docs.chef.io/inspec/).
 
-## Testing this overlay against an existing AWS RDS DB in Cloud.gov
+## Architecture and overview
 
-### ToDo: Update for Oracle and brokered databases
+The essential components are:
 
-Auditing is currently done on-demand from a Cloud.gov platform operator's
-workstation. Running as part of CI/CD is a future implementation step (as of
-2025-08-06). Assuming you're on a Cloud.gov dev workstation:
+- The Oracle DB under test, instantiated with the Cloud.gov AWS Broker
+- A Cloud.gov Cloud Foundry app, "bridge", with a binding to the Oracle DB
+- A CINC Auditor + Oracle SQLPlus client Docker container running locally on the
+  testing workstation.
 
-- Install `mysql-client` and `cinc-auditor`
-  - e.g. `brew install cinc-workstation; brew install mysql-client`
-  - note: We have requested that corporate policies allow access to
-    downloads.cinc.sh, but that may not yet have happened.
-- The next steps are fully described in
-  <https://github.com/cloud.gov/internal-docs>:
-  - Obtain the MySQL database hostname, username, and password
-  - Establish an SSH tunnel from localhost:3306 to remote_server:3306
-  - Test `mysql` connection with `mysql -p -h 127.0.0.1 -u <USERNAME>` (and
-    password)
-  - Note: **DO NOT** use `mysql -p$PASSWORD -h 127.0.0.1 -u <USERNAME>` as the
-    passwords will be visible in the system process list.
-- Copy `input_sample.yml` to `input.yml`
-- Update `input.yml` with the `user` and `password`. Be sure to
-  - set strict file permissions
-  - delete the file when your work is done
-- Run `cinc-auditor` for the profile:
+To run the audit, we:
+
+- Build the Docker image (or pull it from a repository)
+- Start the bridge app
+- Bind the Oracle DB to the bridge app
+- Establish an SSH connection with `cf ssh` to the bridge app and tunneling to
+  port 1521 on the Oracle DB
+- Update the `input.yml` with the credentails to connect to the Oracle DB
+- Run the audit
+
+> [!ADR NOTES]
+>
+> - This uses cinc-auditor instead of Chef Inspec to avoid licensing issues
+> - This uses cinc-auditor in Docker to avoid supply-chain risks
+> - Installing `sqlplus` on the bridge app, and using
+>   `cinc-auditor -t ssh://...` fails because CINC's ssh algorithms are
+>   incompatible with Cloud Foundry's algorithm So this seems like the most
+>   practable steps at this point.
+
+## Steps
+
+- make docker-image
+- make app
+- make binding
+- make input
+- make ssh
+- make audit
 
 ```sh
 cinc-auditor exec .  --show-progress --input-file input.yml  \
@@ -62,3 +73,45 @@ npx @mitre/heimdall-lite &
 The Heimdall-Lite interface will be available at <http://localhost:8080>. From
 the Finder, you can then drag the `.json` results into the viewer to see if
 there are any variations from our standards.
+
+## Running over Cloud.gov SSH
+
+APP="cinc-auditor" APP_GUID=$(cf app $APP --guid)
+PROC_GUID=$(cf curl
+/v3/apps/${APP_GUID}/processes | jq -r '.resources[] | select(.type=="web") | .guid')
+SSH_USER=cf:$PROC_GUID/0
+SSH_ENDPOINT=ssh.dev.us-gov-west-1.aws-us-gov.cloud.gov PORT=2222
+
+ssh -p $PORT $SSH_USER@$SSH_ENDPOINT
+
+---
+
+cf:$(cf curl /v3/apps/$(cf app APP-NAME --guid)/processes | jq -r '.resources[]
+| select(.type=="web") | .guid')/0@SSH-ENDPOINT
+
+ssh
+
+    inspec exec . -t ssh://<hostip> --user '<admin-account>' --password=<password> --input-file input.yml
+
+ssh -p PORT-NUMBER cf:$(cf curl /v3/apps/$(cf app APP-NAME --guid)/processes |
+jq -r '.resources[] | select(.type=="web") | .guid')/0@SSH-ENDPOINT
+
+    #--reporter cli json:<filename>.json
+
+Runs this profile over ssh to the host at IP address <hostip> as a privileged
+user account (i.e., an account with administrative privileges), reporting
+results to both the command line interface (cli) and to a machine-readable JSON
+file. inspec exec
+https://github.com/mitre/oracle-database-12c-stig-baseline/archive/master.tar.gz
+-t
+ssh://$hostip --user '<admin-account>' --password=<password> --input-file oracle-database-input-file.yml --reporter cli json:oracle-database-12c-stig-baseline-results.json
+inspec exec <name of generated archive> -t ssh://$hostip
+--user '<admin-account>' --password=<password>
+--input-file=<path_to_your_inputs_file/name_of_your_inputs_file.yml>
+--reporter=cli json:<path_to_your_output_file/name_of_your_output_file.json>
+inspec exec <name of generated archive> -t ssh://$hostip --user
+'<admin-account>' --password=<password>
+--input-file=<path_to_your_inputs_file/name_of_your_inputs_file.yml>
+--reporter=cli json:<path_to_your_output_file/name_of_your_output_file.json>
+
+kkkkkkk

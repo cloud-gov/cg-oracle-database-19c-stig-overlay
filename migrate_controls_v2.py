@@ -148,20 +148,21 @@ def update_control_file(file_path_12c, control_19c, output_dir):
         content
     )
     
-    # Rename the old check tag to check_12c and create new check tag with 19c content
-    check_12c_content = escape_ruby_string(check_12c)
+    # Rename the old check tag to check_12c and add new check tag with 19c content
     check_19c_content = escape_ruby_string(control_19c['ruleCheckContent'])
     
-    # First, rename existing check tag to check_12c
-    content = re.sub(
-        r"(tag\s+['\"])check(['\"]:\s*['\"])(.+?)(['\"](?:\s*$|\s*tag\s))",
-        f'tag "check_12c"\\2\\3\\4',
-        content,
-        flags=re.DOTALL | re.MULTILINE
-    )
+    # First, find and rename the existing check tag to check_12c
+    # Match: tag "check": "content..." (with potential multiline content)
+    check_tag_pattern = r'(tag\s+["\'])check(["\']\s*:\s*["\'])(.+?)(["\'])'
+    
+    def replace_check_tag(match):
+        # Return the renamed check_12c tag preserving the original content
+        return f'{match.group(1)}check_12c{match.group(2)}{match.group(3)}{match.group(4)}'
+    
+    content = re.sub(check_tag_pattern, replace_check_tag, content, count=1, flags=re.DOTALL)
     
     # Then add the new check tag with 19c content right after check_12c
-    check_12c_tag_match = re.search(r'(tag\s+["\']check_12c["\']\s*:.*?"\s*\n)', content, re.DOTALL)
+    check_12c_tag_match = re.search(r'(tag\s+["\']check_12c["\']\s*:.*?["\']\s*\n)', content, re.DOTALL)
     if check_12c_tag_match:
         insert_pos = check_12c_tag_match.end()
         indent = '  '  # Standard 2-space indent
@@ -257,8 +258,12 @@ def main():
     no_match = []  # No matches found
     
     # Process each 19c control
+    target_group_ids = ['V-270589', 'V-270521'] # Only run for these specific controls
     for idx, control_19c in enumerate(controls_19c, 1):
         group_id = control_19c['groupId']
+        # Skip if not in target_group_ids
+        if group_id not in target_group_ids:
+            continue
         title_19c = control_19c['ruleTitle']
         
         print(f"[{idx}/{len(controls_19c)}] Processing {group_id}...")

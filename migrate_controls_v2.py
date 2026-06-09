@@ -85,7 +85,7 @@ def update_control_file(file_path_12c, control_19c, output_dir):
     # Extract existing tags
     existing_tags = extract_tags_section(content)
     
-    # Determine if check content has changed
+    # Preserve the 12c check content
     check_12c = existing_tags.get('check', '')
     check_19c = control_19c['ruleCheckContent']
     check_changed = check_12c.strip() != check_19c.strip()
@@ -148,24 +148,25 @@ def update_control_file(file_path_12c, control_19c, output_dir):
         content
     )
     
-    # Update check tag
-    check_content = escape_ruby_string(control_19c['ruleCheckContent'])
+    # Rename the old check tag to check_12c and create new check tag with 19c content
+    check_12c_content = escape_ruby_string(check_12c)
+    check_19c_content = escape_ruby_string(control_19c['ruleCheckContent'])
+    
+    # First, rename existing check tag to check_12c
     content = re.sub(
-        r"(tag\s+['\"]check['\"]:\s*['\"])(.+?)(['\"](?:\s*$|\s*tag\s))",
-        f'tag "check": "{check_content}"\\3',
+        r"(tag\s+['\"])check(['\"]:\s*['\"])(.+?)(['\"](?:\s*$|\s*tag\s))",
+        f'tag "check_12c"\\2\\3\\4',
         content,
         flags=re.DOTALL | re.MULTILINE
     )
     
-    # Add 19c_check_changes tag if check has changed
-    if check_changed:
-        # Find the position after the check tag
-        check_tag_match = re.search(r'(tag\s+["\']check["\']\s*:.*?"\s*\n)', content, re.DOTALL)
-        if check_tag_match:
-            insert_pos = check_tag_match.end()
-            indent = '  '  # Standard 2-space indent
-            new_tag = f'{indent}tag "19c_check_changes": "Check content has been updated from 12c to 19c"\n'
-            content = content[:insert_pos] + new_tag + content[insert_pos:]
+    # Then add the new check tag with 19c content right after check_12c
+    check_12c_tag_match = re.search(r'(tag\s+["\']check_12c["\']\s*:.*?"\s*\n)', content, re.DOTALL)
+    if check_12c_tag_match:
+        insert_pos = check_12c_tag_match.end()
+        indent = '  '  # Standard 2-space indent
+        new_check_tag = f'{indent}tag "check": "{check_19c_content}"\n'
+        content = content[:insert_pos] + new_check_tag + content[insert_pos:]
     
     # Update fix tag
     fix_content = escape_ruby_string(control_19c['ruleFixText'])
@@ -265,37 +266,29 @@ def main():
         # Find all matches
         matches = find_all_matches(title_19c, control_files_12c)
         
-        # Filter matches above threshold
-        high_matches = [m for m in matches if m['score'] >= 0.90]
-        medium_matches = [m for m in matches if 0.60 <= m['score'] < 0.90]
+        # Filter matches above threshold (60% or higher)
+        good_matches = [m for m in matches if m['score'] >= 0.60]
         
         selected_match = None
         match_type = None
         
-        if len(high_matches) >= 1:
-            # Auto-select first high-confidence match
-            selected_match = high_matches[0]
+        if len(good_matches) == 1:
+            # Auto-select single high-confidence match
+            selected_match = good_matches[0]
             match_type = 'auto'
             print(f"  ✓ Auto-matched to {selected_match['file'].name} (score: {selected_match['score']:.2f})")
             
-        elif len(medium_matches) > 2:
-            # Interactive selection for multiple medium-confidence matches
-            selected_match = interactive_select(control_19c, medium_matches[:5])  # Show top 5
+        elif len(good_matches) > 1:
+            # Interactive selection for multiple candidates
+            selected_match = interactive_select(control_19c, good_matches[:10])  # Show top 10
             match_type = 'interactive'
             if selected_match:
                 print(f"  ✓ Selected {selected_match['file'].name} (score: {selected_match['score']:.2f})")
             else:
                 print(f"  ✗ Skipped - no match")
         
-        elif len(medium_matches) > 0:
-            # If only 1-2 medium matches, show them but don't require interaction
-            print(f"  ? Found {len(medium_matches)} medium-confidence match(es):")
-            for m in medium_matches:
-                print(f"    - {m['file'].name} (score: {m['score']:.2f})")
-            print(f"  ✗ No high-confidence match - logging as no match")
-        
         else:
-            # No matches found
+            # No matches found above threshold
             print(f"  ✗ No matches found (best score: {matches[0]['score']:.2f} - {matches[0]['file'].name})")
         
         # Update control file if we have a match
@@ -331,9 +324,9 @@ def main():
     print("MIGRATION SUMMARY")
     print("="*80)
     print(f"Total 19c controls processed: {len(controls_19c)}")
-    print(f"Auto-matched (score >= 90%): {len(matched_auto)}")
-    print(f"Interactively matched: {len(matched_interactive)}")
-    print(f"No match found: {len(no_match)}")
+    print(f"Auto-matched (single match >= 60%): {len(matched_auto)}")
+    print(f"Interactively matched (multiple matches >= 60%): {len(matched_interactive)}")
+    print(f"No match found (< 60% threshold): {len(no_match)}")
     print(f"Output directory: {output_dir.absolute()}")
     
     # Count check changes
@@ -347,13 +340,13 @@ def main():
         f.write("Oracle 12c to 19c Control Migration Report (Version 2)\n")
         f.write("="*80 + "\n\n")
         
-        f.write("AUTO-MATCHED CONTROLS (score >= 90%)\n")
+        f.write("AUTO-MATCHED CONTROLS (single match >= 60%)\n")
         f.write("-"*80 + "\n")
         for m in matched_auto:
             status = " [CHECK CHANGED]" if m['check_changed'] else ""
             f.write(f"{m['group_id_19c']:15s} <- {m['file_12c']:30s} (score: {m['score']:.2f}){status}\n")
         
-        f.write("\n\nINTERACTIVELY MATCHED CONTROLS\n")
+        f.write("\n\nINTERACTIVELY MATCHED CONTROLS (multiple matches >= 60%)\n")
         f.write("-"*80 + "\n")
         for m in matched_interactive:
             status = " [CHECK CHANGED]" if m['check_changed'] else ""

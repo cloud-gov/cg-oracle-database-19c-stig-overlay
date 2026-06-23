@@ -113,7 +113,7 @@ https://cyber.trackr.live/stig/Oracle_Database_12c/1/1v
 
 https://cyber.trackr.live/stig/Oracle_Database_19c/1/5
 
-## Next steps
+## Next steps 2026-06-23
 
 - To migrate consistently from 12c to 19c, we need to create at least one test
   pair that exemplify what the migration should achieve.
@@ -127,8 +127,8 @@ desc  "Service names may be discovered by unauthenticated users. If the
 
 - V-270521 maps to V-61413
 
-- Since there are fewer 19c controls that 12c, need to process from each 19c
-  control, and find the nearest 12c
+- Since there are fewer 19c controls that 12c, need to processeach 19c control,
+  and find the nearest 12c
 
 - Need to determine "Impact" value
   - I don't see "Impact" in the original STIG

@@ -332,7 +332,7 @@ def main():
     )
     parser.add_argument(
         '--output-dir',
-        default='fixtures/19c_controls',
+        default='19c_controls',
         help='Directory to write generated 19c controls into.',
     )
     parser.add_argument(

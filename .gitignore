@@ -1,4 +1,6 @@
 # General Files
+12c_to_19c/19c_controls
+12c_to_19c/fixtures/19c_controls
 input.yml
 *.log
 *.tmp

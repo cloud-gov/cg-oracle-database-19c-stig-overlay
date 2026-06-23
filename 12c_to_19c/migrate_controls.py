@@ -1,18 +1,56 @@
 #!/usr/bin/env python3
 """
-Migrate Oracle 12c InSpec controls to Oracle 19c format (Version 2).
+Migrate Oracle 12c InSpec controls to Oracle 19c format (Version 3).
 
-This script iterates through 19c controls and finds matching 12c controls,
-with interactive selection for ambiguous matches.
+This script iterates through the 19c STIG controls (from a STIG JSON export)
+and, for each one:
+
+  1. Writes a new InSpec control to the output directory, named for the 19c
+     group ID (e.g. ``V-270521.rb``).
+  2. Populates the standard 19c ``tag`` elements from the STIG JSON.
+  3. Searches the 12c controls directory for the closest matching control
+     (by title similarity).
+  4. Copies the check logic (Ruby code) from the matched 12c control.
+  5. Records all matches above the threshold in the ``12c_matches`` tag and
+     copies the carry-over tags (nist, stig_id, etc.) from the primary match.
+
+The output control format mirrors ``fixtures/V-270521.rb`` (the gold fixture).
 """
 
+import argparse
 import json
-import os
 import re
+import textwrap
 from pathlib import Path
 from difflib import SequenceMatcher
-import shutil
-import textwrap
+
+
+# Threshold below which a 12c control is not considered a match.
+MATCH_THRESHOLD = 0.85
+
+# STIG severity -> InSpec impact mapping (see top-level README.md):
+#   high -> 0.7, medium -> 0.5, low -> 0.3, (non-applicable) -> 0.0
+SEVERITY_TO_IMPACT = {
+    'high': 0.7,
+    'medium': 0.5,
+    'low': 0.3,
+}
+
+# Carry-over tags pulled from the matched 12c control when present.
+CARRYOVER_TAGS = [
+    'stig_id',
+    'nist',
+    'false_negatives',
+    'false_positives',
+    'documentable',
+    'mitigations',
+    'severity_override_guidance',
+    'potential_impacts',
+    'third_party_tools',
+    'mitigation_controls',
+    'responsibility',
+    'ia_controls',
+]
 
 
 def similarity(a, b):
@@ -22,392 +60,340 @@ def similarity(a, b):
 
 def extract_title_from_rb(rb_content):
     """Extract the title field from a Ruby control file."""
-    # Look for: title "..." or title 'title "...'
     match = re.search(r"title\s+['\"](.+?)['\"]", rb_content, re.DOTALL)
     if match:
         return match.group(1).strip()
     return None
 
 
-def format_description(text, indent_spaces=6, wrap_width=80):
-    """Formats a multi-line description with word wrapping and indentation.
+def extract_tag_value(rb_content, tag_name):
+    """Extract the raw (verbatim) value of a single-line tag from a 12c control.
 
-    Paragraphs are denoted by double newlines (\n\n).
-    Each paragraph is indented and wrapped at wrap_width characters.
+    Returns the text exactly as it appears to the right of the colon (e.g.
+    ``['CM-6 b', 'Rev_4']`` or ``nil`` or ``false``), or ``None`` if the tag
+    is not present in the control.
     """
+    pattern = re.compile(
+        rf"^\s*tag\s+['\"]{re.escape(tag_name)}['\"]\s*:\s*(.+?)\s*$",
+        re.MULTILINE,
+    )
+    match = pattern.search(rb_content)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def extract_check_text(rb_content):
+    """Extract the verbatim body of the 12c ``check`` tag (without quotes)."""
+    match = re.search(
+        r'tag\s+["\']check["\']\s*:\s*"(.+?)"(?=\s*\n\s*(?:tag|sql|describe|\Z))',
+        rb_content,
+        re.DOTALL,
+    )
+    if match:
+        return match.group(1)
+    return ""
+
+
+def extract_ruby_code(rb_content):
+    """Extract the Ruby check logic (everything from ``sql =`` up to the final ``end``).
+
+    Returns the code block as a string, or ``None`` if no ``sql =`` line is found.
+    """
+    match = re.search(r'\n(\s*sql\s*=\s*oracledb_session.*?)\nend\s*\Z',
+                      rb_content, re.DOTALL)
+    if match:
+        return match.group(1).rstrip()
+    return None
+
+
+def escape_ruby_dq(text):
+    """Escape a string for use inside a Ruby double-quoted literal."""
     if text is None:
         return ""
-
-    # Split into paragraphs by double newlines
-    paragraphs = text.split('\n\n')
-    formatted_paragraphs = []
-    indent_str = ' ' * indent_spaces
-
-    for para in paragraphs:
-        # Remove any single newlines within the paragraph (treat as continuous text)
-        para = para.replace('\n', ' ').strip()
-
-        if not para:
-            # Empty paragraph - preserve spacing
-            formatted_paragraphs.append('')
-            continue
-
-        # Wrap the paragraph
-        wrapped_lines = textwrap.fill(
-            para,
-            width=wrap_width,
-            initial_indent=indent_str,
-            subsequent_indent=indent_str,
-            break_long_words=False,
-            break_on_hyphens=False
-        )
-
-        formatted_paragraphs.append(wrapped_lines)
-
-    # Join paragraphs with double newlines
-    return '\n\n'.join(formatted_paragraphs)
-
-
-def find_all_matches(title_19c, control_files_12c):
-    """Find all matching 12c controls for a 19c title."""
-    matches = []
-
-    for file_12c in control_files_12c:
-        with open(file_12c, 'r') as f:
-            content_12c = f.read()
-
-        title_12c = extract_title_from_rb(content_12c)
-        if title_12c:
-            score = similarity(title_19c, title_12c)
-            matches.append({
-                'file': file_12c,
-                'title': title_12c,
-                'score': score,
-                'content': content_12c
-            })
-
-    # Sort by score descending
-    matches.sort(key=lambda x: x['score'], reverse=True)
-    return matches
-
-
-def escape_ruby_string(text):
-    """Escape special characters in a string for Ruby."""
-    if text is None:
-        return ""
-    # Escape backslashes and quotes
     text = text.replace('\\', '\\\\')
     text = text.replace('"', '\\"')
     return text
 
 
-def extract_tags_section(rb_content):
-    """Extract all tag lines from the control file."""
-    tags = {}
-    tag_pattern = re.compile(r"^\s*tag\s+['\"](\w+)['\"]\s*:\s*(.+?)$", re.MULTILINE)
+def format_desc(text, wrap_width=80):
+    """Format the ``desc`` body to match the fixture style.
 
-    for match in tag_pattern.finditer(rb_content):
-        tag_name = match.group(1)
-        tag_value = match.group(2).strip()
-        tags[tag_name] = tag_value
-
-    return tags
-
-
-def update_control_file(file_path_12c, control_19c, output_dir):
-    """Update a 12c control file with 19c metadata and save to output directory."""
-    with open(file_path_12c, 'r') as f:
-        content = f.read()
-
-    # Extract the current title from 12c file
-    title_12c = extract_title_from_rb(content)
-
-    # Extract existing tags
-    existing_tags = extract_tags_section(content)
-
-    # Preserve the 12c check content
-    check_12c = existing_tags.get('check', '')
-    check_19c = control_19c['ruleCheckContent']
-    check_changed = check_12c.strip() != check_19c.strip()
-
-    # Update control ID at the top
-    old_control_id = re.search(r"control\s+['\"]([^'\"]+)['\"]", content)
-    if old_control_id:
-        new_control_id = control_19c['groupId']
-        content = content.replace(
-            f"control '{old_control_id.group(1)}'",
-            f"control '{new_control_id}'"
+    The first line begins on the same line as ``desc "`` (which contributes a
+    6-character prefix: 2-space indent + ``desc "``). Continuation lines are
+    indented 6 spaces, word-wrapped at ``wrap_width``. Paragraph breaks
+    (``\\n\\n``) are preserved.
+    """
+    if not text:
+        return ""
+    prefix_len = len('  desc "')
+    paragraphs = text.split('\n\n')
+    out_paras = []
+    for para in paragraphs:
+        para = para.replace('\n', ' ').strip()
+        # Account for the `  desc "` prefix on the first line by initially
+        # indenting that many spaces, then stripping them back off.
+        wrapped = textwrap.fill(
+            para,
+            width=wrap_width,
+            initial_indent=' ' * prefix_len,
+            subsequent_indent='      ',
+            break_long_words=False,
+            break_on_hyphens=False,
         )
+        wrapped = wrapped[prefix_len:]
+        out_paras.append(wrapped)
+    return '\n\n'.join(out_paras)
 
-    # Update title
-    title_19c = escape_ruby_string(control_19c['ruleTitle'])
-    content = re.sub(
-        r"(title\s+['\"])(.+?)(['\"])",
-        f"title \"{title_19c}\"",
-        content,
-        count=1,
-        flags=re.DOTALL
+
+def format_check_body(text):
+    """Format a multi-line check/12c_check body to match the fixture style.
+
+    The first line follows the opening quote directly; every subsequent
+    non-empty line is indented 2 spaces. Blank lines are preserved verbatim.
+    Original line breaks from the source are retained.
+    """
+    if not text:
+        return ""
+    lines = text.split('\n')
+    out = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if i == 0:
+            out.append(stripped)
+        elif stripped == '':
+            out.append('')
+        else:
+            out.append('  ' + stripped)
+    return '\n'.join(out)
+
+
+def find_all_matches(title_19c, control_files_12c):
+    """Find all 12c controls scored by title similarity, sorted descending."""
+    matches = []
+    for file_12c in control_files_12c:
+        content_12c = Path(file_12c).read_text()
+        title_12c = extract_title_from_rb(content_12c)
+        if title_12c:
+            matches.append({
+                'file': Path(file_12c),
+                'group_id': Path(file_12c).stem,
+                'title': title_12c,
+                'score': similarity(title_19c, title_12c),
+                'content': content_12c,
+            })
+    matches.sort(key=lambda x: x['score'], reverse=True)
+    return matches
+
+
+def severity_to_impact(severity):
+    """Map a STIG severity string to an InSpec impact value."""
+    return SEVERITY_TO_IMPACT.get((severity or '').lower(), 0.0)
+
+
+def ruby_list_literal(items):
+    """Render a Python list of strings as a Ruby array literal."""
+    return '[' + ', '.join(f'"{i}"' for i in items) + ']'
+
+
+def build_control(control_19c, primary, good_matches):
+    """Construct the full 19c InSpec control text.
+
+    ``primary`` is the selected 12c match dict (or ``None`` if no match).
+    ``good_matches`` is the list of all matches at/above threshold.
+    """
+    group_id = control_19c['groupId']
+    impact = severity_to_impact(control_19c.get('ruleSeverity'))
+
+    # rule_title with any trailing period stripped (matches fixture convention).
+    rule_title = control_19c['ruleTitle'].rstrip('.')
+
+    # Carry-over tags from the primary 12c match.
+    carryover = {}
+    if primary:
+        for name in CARRYOVER_TAGS:
+            val = extract_tag_value(primary['content'], name)
+            if val is not None:
+                carryover[name] = val
+
+    nist_val = carryover.get('nist', "['CM-6 b', 'Rev_4']")
+    stig_id_val = carryover.get('stig_id', "'O121-BP-021300'")
+
+    # All matches at/above threshold listed in 12c_matches.
+    matches_ids = [m['group_id'] for m in good_matches] if good_matches else []
+
+    # 12c check text and Ruby code from the primary match.
+    check_12c = extract_check_text(primary['content']) if primary else ""
+    ruby_code = extract_ruby_code(primary['content']) if primary else None
+
+    # Description: indented/wrapped vuln discussion (escape first, then layout).
+    desc = format_desc(escape_ruby_dq(control_19c.get('ruleVulnDiscussion', '')))
+
+    lines = []
+    lines.append(f"control '{group_id}' do")
+    lines.append(f'  title "{escape_ruby_dq(control_19c["ruleTitle"])}"')
+    lines.append(f'  desc "{desc}"')
+    lines.append(f'  impact {impact}')
+    lines.append(f"  tag 'benchmark_id': {control_19c.get('benchmarkId')}")
+    lines.append(f"  tag 'title': '{control_19c['title']}'")
+    lines.append(f"  tag 'rule_title': '{rule_title}'")
+    lines.append(f"  tag 'group_id': '{group_id}'")
+    lines.append(f"  tag 'rule_id': '{control_19c['ruleId']}'")
+    lines.append(f"  tag 'rule_weight': \"{control_19c.get('ruleWeight')}\"")
+    lines.append(f"  tag 'rule_severity': '{control_19c.get('ruleSeverity')}'")
+    lines.append(f'  tag "rule_version": "{control_19c.get("ruleVersion")}"')
+    lines.append(f'  tag "stig_id": {stig_id_val}')
+    lines.append(f"  tag 'fix_id': '{control_19c['ruleFixId']}'")
+    lines.append(f'  tag "rule_ident": [\'{control_19c.get("ruleIdent")}\']')
+    lines.append(f'  tag "nist": {nist_val} # from 12c control')
+    lines.append(f'  tag "false_negatives": {carryover.get("false_negatives", "nil")}')
+    lines.append(f'  tag "false_positives": {carryover.get("false_positives", "nil")}')
+    lines.append(f'  tag "documentable": {carryover.get("documentable", "false")}')
+    lines.append(f'  tag "mitigations": {carryover.get("mitigations", "nil")}')
+    lines.append(f'  tag "severity_override_guidance": {carryover.get("severity_override_guidance", "false")}')
+    lines.append(f'  tag "potential_impacts": {carryover.get("potential_impacts", "nil")}')
+    lines.append(f'  tag "third_party_tools": {carryover.get("third_party_tools", "nil")}')
+    lines.append(f'  tag "mitigation_controls": {carryover.get("mitigation_controls", "nil")}')
+    lines.append(f'  tag "responsibility": {carryover.get("responsibility", "nil")}')
+    lines.append(f'  tag "ia_controls": {carryover.get("ia_controls", "nil")}')
+    lines.append(f'  tag "rule_vuln_discussion": "{escape_ruby_dq(control_19c.get("ruleVulnDiscussion", ""))}"')
+    lines.append(f'  tag "fix": "{escape_ruby_dq(control_19c.get("ruleFixText", ""))}"')
+    lines.append(f'  tag "rule_fix_id": "{control_19c["ruleFixId"]}"')
+    lines.append(f'  tag "rule_check_system": "{control_19c.get("ruleCheckSystem", "")}"')
+    lines.append(f'  tag "12c_matches": {ruby_list_literal(matches_ids)}')
+    lines.append(f'  tag "12c_match_threshold": {MATCH_THRESHOLD}')
+    lines.append('')
+    lines.append(f'  tag "12c_check": "{format_check_body(check_12c)}"')
+    lines.append('')
+    lines.append(f'  tag "check": "{format_check_body(escape_ruby_dq(control_19c.get("ruleCheckContent", "")))}"')
+    lines.append('')
+    lines.append('')
+
+    # Note whether the check content changed from 12c to 19c.
+    check_changed = (
+        format_check_body(check_12c).strip()
+        != format_check_body(escape_ruby_dq(control_19c.get('ruleCheckContent', ''))).strip()
     )
-
-    # Update desc with formatted text (paragraphs indented and wrapped)
-    formatted_desc_19c = format_description(control_19c['ruleVulnDiscussion'], indent_spaces=6, wrap_width=80)
-    desc_19c = escape_ruby_string(formatted_desc_19c)
-    content = re.sub(
-        r"(desc\s+['\"])(.+?)(['\"])",
-        f"desc \"{desc_19c}\"",
-        content,
-        count=1,
-        flags=re.DOTALL
-    )
-
-    # Update tags
-    # gtitle
-    content = re.sub(
-        r"(tag\s+['\"]gtitle['\"]:\s*['\"])([^'\"]*?)(['\"])",
-        f"tag 'gtitle': '{control_19c['title']}'",
-        content
-    )
-
-    # gid
-    content = re.sub(
-        r"(tag\s+['\"]gid['\"]:\s*['\"])([^'\"]*?)(['\"])",
-        f"tag 'gid': '{control_19c['groupId']}'",
-        content
-    )
-
-    # rid
-    content = re.sub(
-        r"(tag\s+['\"]rid['\"]:\s*['\"])([^'\"]*?)(['\"])",
-        f"tag 'rid': '{control_19c['ruleId']}'",
-        content
-    )
-
-    # fix_id
-    content = re.sub(
-        r"(tag\s+['\"]fix_id['\"]:\s*['\"])([^'\"]*?)(['\"])",
-        f"tag 'fix_id': '{control_19c['ruleFixId']}'",
-        content
-    )
-
-    # Rename the old check tag to check_12c and add new check tag with 19c content
-    check_19c_content = escape_ruby_string(control_19c['ruleCheckContent'])
-
-    # First, find and rename the existing check tag to check_12c
-    # Match: tag "check": "content..." (with potential multiline content)
-    check_tag_pattern = r'(tag\s+["\'])check(["\']\s*:\s*["\'])(.+?)(["\'])'
-
-    def replace_check_tag(match):
-        # Return the renamed check_12c tag preserving the original content
-        return f'{match.group(1)}check_12c{match.group(2)}{match.group(3)}{match.group(4)}'
-
-    content = re.sub(check_tag_pattern, replace_check_tag, content, count=1, flags=re.DOTALL)
-
-    # Then add the new check tag with 19c content right after check_12c
-    check_12c_tag_match = re.search(r'(tag\s+["\']check_12c["\']\s*:.*?["\']\s*\n)', content, re.DOTALL)
-    if check_12c_tag_match:
-        insert_pos = check_12c_tag_match.end()
-        indent = '  '  # Standard 2-space indent
-        new_check_tag = f'{indent}tag "check": "{check_19c_content}"\n'
-        content = content[:insert_pos] + new_check_tag + content[insert_pos:]
-
-    # Update fix tag
-    fix_content = escape_ruby_string(control_19c['ruleFixText'])
-    content = re.sub(
-        r"(tag\s+['\"]fix['\"]:\s*['\"])(.+?)(['\"](?:\s*$|\s*sql\s*=))",
-        f'tag "fix": "{fix_content}"\\3',
-        content,
-        flags=re.DOTALL | re.MULTILINE
-    )
-
-    # Add comment about code changes if check has changed
     if check_changed:
-        # Find the Ruby code section (after all tags, before or at the sql = line)
-        sql_match = re.search(r'(\n\s*sql\s*=\s*oracledb_session)', content)
-        if sql_match:
-            insert_pos = sql_match.start() + 1
-            comment = "  # NOTE: Check content has changed from 12c to 19c - Ruby code may need to be updated\n"
-            content = content[:insert_pos] + comment + content[insert_pos:]
+        lines.append('  # NOTE: Check content has changed from 12c to 19c - Ruby code may need to be updated')
 
-    # Write to output directory with new filename
-    output_filename = f"{control_19c['groupId']}.rb"
-    output_path = os.path.join(output_dir, output_filename)
+    if ruby_code is not None:
+        lines.append(ruby_code)
+    else:
+        lines.append('  # NOTE: No matching 12c control found - check logic must be written manually')
+        lines.append('  describe \'Manual review required\' do')
+        lines.append('    skip \'No matching 12c control; implement check logic.\'')
+        lines.append('  end')
 
-    with open(output_path, 'w') as f:
-        f.write(content)
+    lines.append('')
+    lines.append('end')
+    lines.append('')
 
-    return output_path, check_changed
+    return '\n'.join(lines), check_changed
 
 
-def interactive_select(control_19c, matches):
-    """Prompt user to select from multiple matching 12c controls."""
-    print("\n" + "="*80)
-    print(f"19c Control: {control_19c['groupId']}")
-    print(f"19c Title: {control_19c['ruleTitle']}")
-    print("="*80)
-    print("\nMultiple possible matches found:")
-    print()
+def process_control(control_19c, control_files_12c, output_dir):
+    """Find matches, build, and write a single 19c control file."""
+    group_id = control_19c['groupId']
+    title_19c = control_19c['ruleTitle']
 
-    for idx, match in enumerate(matches, 1):
-        print(f"{idx}. Score: {match['score']:.2f} - {match['file'].name}")
-        print(f"   Title: {match['title'][:100]}...")
-        print()
+    matches = find_all_matches(title_19c, control_files_12c)
+    good_matches = [m for m in matches if m['score'] >= MATCH_THRESHOLD]
+    primary = good_matches[0] if good_matches else None
 
-    print(f"{len(matches) + 1}. SKIP - No match found")
-    print()
+    content, check_changed = build_control(control_19c, primary, good_matches)
 
-    while True:
-        try:
-            choice = input(f"Select option (1-{len(matches) + 1}): ").strip()
-            choice_num = int(choice)
-            if 1 <= choice_num <= len(matches) + 1:
-                if choice_num == len(matches) + 1:
-                    return None  # Skip
-                return matches[choice_num - 1]
-            else:
-                print(f"Please enter a number between 1 and {len(matches) + 1}")
-        except ValueError:
-            print("Please enter a valid number")
-        except KeyboardInterrupt:
-            print("\n\nAborted by user")
-            exit(1)
+    output_path = output_dir / f"{group_id}.rb"
+    output_path.write_text(content)
+
+    return {
+        'group_id': group_id,
+        'primary': primary['group_id'] if primary else None,
+        'primary_score': primary['score'] if primary else (matches[0]['score'] if matches else 0.0),
+        'all_matches': [m['group_id'] for m in good_matches],
+        'check_changed': check_changed,
+        'output_path': output_path,
+    }
 
 
 def main():
-    # Paths
-    controls_12c_dir = Path('./12c-controls')
-    controls_19c_json = Path('./oracle_database_19c_stig_controls.json')
-    output_dir = Path('./controls')
+    parser = argparse.ArgumentParser(
+        description='Migrate Oracle 12c InSpec controls to 19c format.'
+    )
+    parser.add_argument(
+        '--stig-json',
+        default='fixtures/19c_sample_stig.json',
+        help='Path to the 19c STIG JSON export (default: fixtures/19c_sample_stig.json).',
+    )
+    parser.add_argument(
+        '--controls-12c',
+        default='12c_controls',
+        help='Directory containing the 12c InSpec control .rb files.',
+    )
+    parser.add_argument(
+        '--output-dir',
+        default='fixtures/19c_controls',
+        help='Directory to write generated 19c controls into.',
+    )
+    parser.add_argument(
+        '--group-ids',
+        nargs='*',
+        default=None,
+        help='Optional list of 19c group IDs to limit processing to.',
+    )
+    args = parser.parse_args()
 
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(exist_ok=True)
+    stig_json = Path(args.stig_json)
+    controls_12c_dir = Path(args.controls_12c)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load 19c controls
-    with open(controls_19c_json) as f:
-        data_19c = json.load(f)
-        controls_19c = data_19c['groups']
+    data_19c = json.loads(stig_json.read_text())
+    controls_19c = data_19c['groups']
+    # Propagate the benchmark id onto each group for tag emission.
+    benchmark_id = data_19c.get('benchmarkId') or data_19c.get('id')
+    for g in controls_19c:
+        g.setdefault('benchmarkId', benchmark_id)
 
-    print(f"Loaded {len(controls_19c)} Oracle 19c controls")
+    if args.group_ids:
+        controls_19c = [g for g in controls_19c if g['groupId'] in args.group_ids]
 
-    # Load all 12c control files
     control_files_12c = sorted(controls_12c_dir.glob('*.rb'))
+
+    print(f"Loaded {len(controls_19c)} Oracle 19c control(s)")
     print(f"Found {len(control_files_12c)} Oracle 12c control files")
     print()
 
-    # Statistics
-    matched_auto = []  # Auto-matched (score >= 90%)
-    matched_interactive = []  # Interactively selected
-    no_match = []  # No matches found
+    matched = []
+    no_match = []
 
-    # Process each 19c control
-    target_group_ids = ['V-270589', 'V-270521'] # Only run for these specific controls
     for idx, control_19c in enumerate(controls_19c, 1):
         group_id = control_19c['groupId']
-        # Skip if not in target_group_ids
-        if group_id not in target_group_ids:
-            continue
-        title_19c = control_19c['ruleTitle']
-
         print(f"[{idx}/{len(controls_19c)}] Processing {group_id}...")
 
-        # Find all matches
-        matches = find_all_matches(title_19c, control_files_12c)
+        result = process_control(control_19c, control_files_12c, output_dir)
 
-        # Filter matches above threshold (60% or higher)
-        good_matches = [m for m in matches if m['score'] >= 0.60]
-
-        selected_match = None
-        match_type = None
-
-        if len(good_matches) == 1:
-            # Auto-select single high-confidence match
-            selected_match = good_matches[0]
-            match_type = 'auto'
-            print(f"  ✓ Auto-matched to {selected_match['file'].name} (score: {selected_match['score']:.2f})")
-
-        elif len(good_matches) > 1:
-            # Interactive selection for multiple candidates
-            selected_match = interactive_select(control_19c, good_matches[:10])  # Show top 10
-            match_type = 'interactive'
-            if selected_match:
-                print(f"  ✓ Selected {selected_match['file'].name} (score: {selected_match['score']:.2f})")
-            else:
-                print(f"  ✗ Skipped - no match")
-
+        if result['primary']:
+            extra = result['all_matches'][1:]
+            extra_note = f" (+{len(extra)} other match(es): {extra})" if extra else ""
+            changed = " [CHECK CHANGED]" if result['check_changed'] else ""
+            print(f"  ✓ Matched to {result['primary']} "
+                  f"(score: {result['primary_score']:.2f}){extra_note}{changed}")
+            matched.append(result)
         else:
-            # No matches found above threshold
-            print(f"  ✗ No matches found (best score: {matches[0]['score']:.2f} - {matches[0]['file'].name})")
+            print(f"  ✗ No match >= {MATCH_THRESHOLD:.2f} "
+                  f"(best: {result['primary_score']:.2f})")
+            no_match.append(result)
 
-        # Update control file if we have a match
-        if selected_match:
-            output_path, check_changed = update_control_file(
-                selected_match['file'],
-                control_19c,
-                output_dir
-            )
-
-            result = {
-                'group_id_19c': group_id,
-                'file_12c': selected_match['file'].name,
-                'score': selected_match['score'],
-                'check_changed': check_changed,
-                'match_type': match_type
-            }
-
-            if match_type == 'auto':
-                matched_auto.append(result)
-            else:
-                matched_interactive.append(result)
-        else:
-            no_match.append({
-                'group_id_19c': group_id,
-                'title_19c': title_19c,
-                'best_score': matches[0]['score'] if matches else 0.0,
-                'best_match': matches[0]['file'].name if matches else 'None'
-            })
-
-    # Summary
-    print("\n" + "="*80)
+    print()
+    print("=" * 80)
     print("MIGRATION SUMMARY")
-    print("="*80)
-    print(f"Total 19c controls processed: {len(controls_19c)}")
-    print(f"Auto-matched (single match >= 60%): {len(matched_auto)}")
-    print(f"Interactively matched (multiple matches >= 60%): {len(matched_interactive)}")
-    print(f"No match found (< 60% threshold): {len(no_match)}")
-    print(f"Output directory: {output_dir.absolute()}")
-
-    # Count check changes
-    total_matched = matched_auto + matched_interactive
-    check_changes = sum(1 for m in total_matched if m['check_changed'])
-    print(f"Controls with check changes: {check_changes}")
-
-    # Write detailed report
-    report_path = output_dir / 'migration_report_v2.txt'
-    with open(report_path, 'w') as f:
-        f.write("Oracle 12c to 19c Control Migration Report (Version 2)\n")
-        f.write("="*80 + "\n\n")
-
-        f.write("AUTO-MATCHED CONTROLS (single match >= 60%)\n")
-        f.write("-"*80 + "\n")
-        for m in matched_auto:
-            status = " [CHECK CHANGED]" if m['check_changed'] else ""
-            f.write(f"{m['group_id_19c']:15s} <- {m['file_12c']:30s} (score: {m['score']:.2f}){status}\n")
-
-        f.write("\n\nINTERACTIVELY MATCHED CONTROLS (multiple matches >= 60%)\n")
-        f.write("-"*80 + "\n")
-        for m in matched_interactive:
-            status = " [CHECK CHANGED]" if m['check_changed'] else ""
-            f.write(f"{m['group_id_19c']:15s} <- {m['file_12c']:30s} (score: {m['score']:.2f}){status}\n")
-
-        f.write("\n\nNO MATCH FOUND\n")
-        f.write("-"*80 + "\n")
-        for m in no_match:
-            f.write(f"{m['group_id_19c']:15s} - {m['title_19c'][:60]}\n")
-            f.write(f"  Best candidate: {m['best_match']} (score: {m['best_score']:.2f})\n\n")
-
-    print(f"\nDetailed report written to: {report_path.absolute()}")
-
-    if check_changes > 0:
-        print("\n⚠️  IMPORTANT: Review controls marked with [CHECK CHANGED] - Ruby code may need updates!")
+    print("=" * 80)
+    print(f"Total processed:   {len(controls_19c)}")
+    print(f"Matched:           {len(matched)}")
+    print(f"No match found:    {len(no_match)}")
+    print(f"Check content changed: {sum(1 for m in matched if m['check_changed'])}")
+    print(f"Output directory:  {output_dir.resolve()}")
 
 
 if __name__ == '__main__':

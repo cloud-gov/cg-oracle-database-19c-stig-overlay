@@ -15,7 +15,7 @@ control 'V-270521' do
   tag "stig_id": 'O121-BP-021300'
   tag 'fix_id': 'F-74455r1064840_fix'
   tag "rule_ident": ['CCI-000366']
-  tag "nist": ['CM-6 b', 'Rev_4']
+  tag "nist": ['CM-6 b', 'Rev_4'] # from 12c control
   tag "false_negatives": nil
   tag "false_positives": nil
   tag "documentable": false
@@ -27,11 +27,13 @@ control 'V-270521' do
   tag "responsibility": nil
   tag "ia_controls": nil
   tag "rule_vuln_discussion": "Service names may be discovered by unauthenticated users. If the service name includes version numbers or other database product information, a malicious user may use that information to develop a targeted attack."
-  tag "rule_fix_text": "Follow the instructions in Oracle MetaLink Note 15390.1 (and related documents) to change the SID for the database without recreating the database to a value that does not identify the Oracle version."
+  tag "fix": "Follow the instructions in Oracle MetaLink Note 15390.1 (and related documents) to change the SID for the database without recreating the database to a value that does not identify the Oracle version."
   tag "rule_fix_id": "F-74455r1064840_fix"
   tag "rule_check_system": "C-74554r1112466_chk"
+  tag "12c_matches": ["V-61413"]
+  tag "12c_match_threshold": 0.85
 
-  tag "check_12c": "From SQL*Plus:
+  tag "12c_check": "From SQL*Plus:
 
   select instance_name from v$instance;
   select version from v$instance;
@@ -70,7 +72,6 @@ control 'V-270521' do
 
   The database administrator (DBA) should be able to relate the significance of the presence of a digit in the SID."
 
-  tag "fix": "Follow the instructions in Oracle MetaLink Note 15390.1 (and related documents) to change the SID for the database without recreating the database to a value that does not identify the Oracle version."
 
   # NOTE: Check content has changed from 12c to 19c - Ruby code may need to be updated
   sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'))

@@ -1,0 +1,124 @@
+{
+  "id": 494,
+  "benchmarkId": "Oracle_Database_19c_STIG",
+  "slug": "oracle_database_19c",
+  "stigSlug": "oracle_database_19c",
+  "versionStatus": "current",
+  "status": "accepted",
+  "statusDate": "2026-02-25T00:00:00.000Z",
+  "title": "Oracle Database 19c Security Technical Implementation Guide",
+  "description": "This Security Technical Implementation Guide is published as a tool to improve the security of Department of Defense (DOD) information systems. The requirements are derived from the National Institute of Standards and Technology (NIST) 800-53 and related documents. Comments or proposed revisions to this document should be sent via email to the following address: disa.stig_spt@mail.mil.",
+  "version": "V1R5",
+  "vendor": null,
+  "createdAt": "2026-04-25T11:40:51.387Z",
+  "updatedAt": "2026-04-25T11:40:51.387Z",
+  "groups": [
+    {
+      "id": 29491,
+      "benchmarkId": 494,
+      "groupId": "V-270521",
+      "title": "SRG-APP-000516-DB-000363",
+      "description": "<GroupDescription></GroupDescription>",
+      "ruleId": "SV-270521r1112467_rule",
+      "ruleWeight": "10.0",
+      "ruleSeverity": "medium",
+      "ruleVersion": "O19C-00-008600",
+      "ruleTitle": "Oracle instance names must not contain Oracle version numbers.",
+      "ruleVulnDiscussion": "Service names may be discovered by unauthenticated users. If the service name includes version numbers or other database product information, a malicious user may use that information to develop a targeted attack.",
+      "ruleFalsePositives": "",
+      "ruleFalseNegatives": "",
+      "ruleDocumentable": "false",
+      "ruleMitigations": "",
+      "ruleIdent": "CCI-000366",
+      "ruleFixText": "Follow the instructions in Oracle MetaLink Note 15390.1 (and related documents) to change the SID for the database without recreating the database to a value that does not identify the Oracle version.",
+      "ruleFixId": "F-74455r1064840_fix",
+      "ruleCheckSystem": "C-74554r1112466_chk",
+      "ruleCheckContent": "If using a non-CDB database:\n\nFrom SQL*Plus:\n\nselect instance_name, version from v$instance;\n\nIf using a CDB database:\n\nTo check the container database (CDB):\n\nFrom SQL*Plus:\n\nselect instance_name, version from v$instance;\n\nTo check the pluggable databases (PDBs) within the CDB:\n\nselect name from v$pdbs;\n\nCheck Instance Name:\n\nIf the instance name returned references the Oracle release number, this is a finding.\n\nNumbers used that include version numbers by coincidence are not a finding.\n\nThe database administrator (DBA) should be able to relate the significance of the presence of a digit in the SID.",
+      "createdAt": "2026-04-25T11:40:51.441Z",
+      "updatedAt": "2026-04-25T11:40:51.441Z"
+    }
+  ],
+  "profiles": [
+    {
+      "id": 4379,
+      "benchmarkId": 494,
+      "profileId": "MAC-1_Classified",
+      "title": "I - Mission Critical Classified",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4380,
+      "benchmarkId": 494,
+      "profileId": "MAC-1_Public",
+      "title": "I - Mission Critical Public",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4381,
+      "benchmarkId": 494,
+      "profileId": "MAC-1_Sensitive",
+      "title": "I - Mission Critical Sensitive",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4382,
+      "benchmarkId": 494,
+      "profileId": "MAC-2_Classified",
+      "title": "II - Mission Support Classified",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4383,
+      "benchmarkId": 494,
+      "profileId": "MAC-2_Public",
+      "title": "II - Mission Support Public",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4384,
+      "benchmarkId": 494,
+      "profileId": "MAC-2_Sensitive",
+      "title": "II - Mission Support Sensitive",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4385,
+      "benchmarkId": 494,
+      "profileId": "MAC-3_Classified",
+      "title": "III - Administrative Classified",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4386,
+      "benchmarkId": 494,
+      "profileId": "MAC-3_Public",
+      "title": "III - Administrative Public",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    },
+    {
+      "id": 4387,
+      "benchmarkId": 494,
+      "profileId": "MAC-3_Sensitive",
+      "title": "III - Administrative Sensitive",
+      "description": "<ProfileDescription></ProfileDescription>",
+      "createdAt": "2026-04-25T11:40:51.543Z",
+      "updatedAt": "2026-04-25T11:40:51.543Z"
+    }
+  ]
+}

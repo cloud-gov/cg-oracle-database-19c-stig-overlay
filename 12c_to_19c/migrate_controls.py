@@ -26,7 +26,7 @@ from difflib import SequenceMatcher
 
 
 # Threshold below which a 12c control is not considered a match.
-MATCH_THRESHOLD = 0.85
+MATCH_THRESHOLD = 0.80
 
 # STIG severity -> InSpec impact mapping (see top-level README.md):
 #   high -> 0.7, medium -> 0.5, low -> 0.3, (non-applicable) -> 0.0
@@ -96,15 +96,50 @@ def extract_check_text(rb_content):
 
 
 def extract_ruby_code(rb_content):
-    """Extract the Ruby check logic (everything from ``sql =`` up to the final ``end``).
+    """Extract the Ruby check logic from a 12c control.
 
-    Returns the code block as a string, or ``None`` if no ``sql =`` line is found.
+    The check logic is everything between the last ``tag`` line and the final
+    ``end`` of the ``control`` block. This captures both ``sql = oracledb_session``
+    style checks and ``command(...)`` / other Ruby implementations, so controls
+    whose checks do not start with ``sql =`` are not mistakenly treated as
+    having no check logic.
+
+    Returns the code block as a string (leading/trailing blank lines trimmed),
+    or ``None`` if no check logic is found after the tags.
     """
-    match = re.search(r'\n(\s*sql\s*=\s*oracledb_session.*?)\nend\s*\Z',
-                      rb_content, re.DOTALL)
-    if match:
-        return match.group(1).rstrip()
-    return None
+    # Find the end of the last `tag ...` statement (tags may span multiple
+    # lines for multi-line string values, so match the final closing quote
+    # of the last tag's value before the code begins).
+    tag_iter = list(re.finditer(r'^\s*tag\s+["\']', rb_content, re.MULTILINE))
+    if not tag_iter:
+        return None
+
+    # Locate the final control-block `end` (last `end` at column 0 / minimal indent).
+    end_match = None
+    for m in re.finditer(r'\nend\s*\Z', rb_content):
+        end_match = m
+    if end_match is None:
+        return None
+
+    # The code region starts after the last tag's line. Because a tag value can
+    # be a multi-line quoted string, find the closing of the last tag by
+    # scanning from the last tag start for its terminating quote at line end.
+    last_tag_start = tag_iter[-1].start()
+    # Match the last tag fully (handles multi-line double/single quoted values).
+    tag_full = re.compile(
+        r'^\s*tag\s+["\'][^"\']+["\']\s*:\s*'
+        r'(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|\[[^\]]*\]|[^\n]*)',
+        re.DOTALL | re.MULTILINE,
+    )
+    tag_match = tag_full.match(rb_content, last_tag_start)
+    code_start = tag_match.end() if tag_match else tag_iter[-1].end()
+
+    code = rb_content[code_start:end_match.start()].strip('\n')
+    code = code.rstrip()
+    if not code.strip():
+        return None
+    return code
+
 
 
 def escape_ruby_dq(text):

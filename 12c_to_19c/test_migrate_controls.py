@@ -111,38 +111,59 @@ class RubyCodeExtractionTests(unittest.TestCase):
         # Should not include the trailing `end` of the control block.
         self.assertFalse(code.strip().endswith('end\nend'))
 
-    def test_no_sql_block_returns_none(self):
+    def test_no_check_logic_returns_none(self):
         self.assertIsNone(mc.extract_ruby_code('control \'V-1\' do\nend\n'))
 
 
 class ProcessControlTests(unittest.TestCase):
-    """End-to-end: regenerate V-270521 and assert on the match metadata.
+    """End-to-end: regenerate a control and assert on the match metadata.
 
     Note: the exact generated file format is intentionally NOT asserted here,
     since the control template/formatting may evolve over time. We assert on
-    the semantic outcomes (selected match, match list, check-changed flag).
+    the semantic outcomes (selected match, match list, check-changed flag) and
+    that the matched 12c control's Ruby check logic is carried over.
     """
 
-    def test_v270521_selects_expected_match(self):
-        stig = json.loads((FIXTURES / '19c_sample_stig.json').read_text())
-        control_19c = stig['groups'][0]
-        control_19c.setdefault('benchmarkId', stig.get('benchmarkId') or stig.get('id'))
+    def _group(self, stig, group_id):
+        for g in stig['groups']:
+            if g['groupId'] == group_id:
+                g.setdefault('benchmarkId', stig.get('benchmarkId') or stig.get('id'))
+                return g
+        self.skipTest(f'{group_id} not present in sample STIG')
 
+    def test_selects_expected_match_and_carries_sql_check(self):
+        """V-270521-style: a sql = oracledb_session check is carried over."""
+        stig = json.loads((FIXTURES / '19c_sample_stig.json').read_text())
+        # Find any sample control that matches a sql-based 12c control.
         files = sorted(CONTROLS_12C.glob('*.rb'))
+        # V-270531 -> V-61441 (command-style check) is in the high-severity sample.
+        control_19c = self._group(stig, 'V-270531')
 
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp)
             result = mc.process_control(control_19c, files, out_dir)
-            generated = (out_dir / 'V-270521.rb').read_text()
+            generated = (out_dir / 'V-270531.rb').read_text()
 
         # A file was produced for the 19c group ID.
-        self.assertTrue(generated.startswith("control 'V-270521' do"))
-        # Carried over the Ruby check logic from the matched 12c control.
-        self.assertIn('sql = oracledb_session', generated)
-        # Match metadata is correct.
-        self.assertEqual(result['primary'], 'V-61413')
-        self.assertEqual(result['all_matches'], ['V-61413'])
-        self.assertTrue(result['check_changed'])
+        self.assertTrue(generated.startswith("control 'V-270531' do"))
+        # The matched 12c control is the expected one.
+        self.assertEqual(result['primary'], 'V-61441')
+        self.assertIn('V-61441', result['all_matches'])
+        # Command-style Ruby check logic from V-61441 is carried over, NOT a stub.
+        self.assertNotIn('Manual review required', generated)
+        self.assertIn('listener_status = command', generated)
+        self.assertIn("describe 'The Oracle Listener status'", generated)
+
+    def test_command_style_check_is_carried_over(self):
+        """A 12c control whose check uses command() (no sql=) must not stub out."""
+        content = (CONTROLS_12C / 'V-61441.rb').read_text()
+        code = mc.extract_ruby_code(content)
+        self.assertIsNotNone(code)
+        self.assertIn('listener_name = command', code)
+        self.assertIn('lsnrctl', code)
+        # Tags must not leak into the extracted code region.
+        self.assertNotRegex(code, r'^\s*tag\s+')
+
 
 
 

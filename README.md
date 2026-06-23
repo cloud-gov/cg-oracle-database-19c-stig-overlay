@@ -105,3 +105,57 @@ npx @mitre/heimdall-lite &
 The Heimdall-Lite interface will be available at <http://localhost:8080>. From
 the Finder, you can then drag the `.json` results into the viewer to see if
 there are any variations from our standards.
+
+# Get the STIG
+
+https://cyber.trackr.live/stig/Oracle_Database_12c/2/9
+https://cyber.trackr.live/stig/Oracle_Database_12c/1/1v
+
+https://cyber.trackr.live/stig/Oracle_Database_19c/1/5
+
+## Next steps
+
+- To migrate consistently from 12c to 19c, we need to create at least one test
+  pair that exemplify what the migration should achieve.
+- This one is good because the SQL is really simple
+
+```
+desc  "Service names may be discovered by unauthenticated users. If the
+  service name includes version numbers or other database product information, a
+  malicious user may use that information to develop a targeted attack."
+```
+
+- V-270521 maps to V-61413
+
+- Since there are fewer 19c controls that 12c, need to process from each 19c
+  control, and find the nearest 12c
+
+- Need to determine "Impact" value
+  - I don't see "Impact" in the original STIG
+  - IN 19c this has a "ruleSeverity: medium"
+    - The 12c has: "Severity": "medium"
+    - The 12c is V2, release 9.
+
+```
+grep -h impact.0 ../12c-controls/* | sort | uniq -c
+  25     impact 0.0
+   8   impact 0.3
+ 180   impact 0.5
+  12   impact 0.7
+```
+
+225
+
+```
+❯ grep "Severity.:" 12c-v1-2-pretty.json| sort | uniq -c
+  12       "Severity": "high",
+  10       "Severity": "low",
+ 193       "Severity": "medium",
+```
+
+215
+
+In conclustion 12 "Severity": "high", -> 0.7 192 "Severity": "medium" -> 0.5 10
+"Severity": "low", -> 0.3
+
+---

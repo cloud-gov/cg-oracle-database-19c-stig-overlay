@@ -218,3 +218,6 @@ Thumbs.db
 # System and Miscellaneous
 $RECYCLE.BIN/
 $tf/
+
+# Oracle 19c STIG hardening SQL is tracked (not secret) — overlay #1 / aws-broker#519
+!hardening/sql/**/*.sql

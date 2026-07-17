@@ -1,0 +1,109 @@
+# control-layers.yml — Oracle 19c STIG control -> implementation-layer map.
+#
+# Filed from the aws-broker Oracle 19c epic (cloud-gov/aws-broker#519, WS12/13
+# #530); fills the overlay gap tracked in
+# cloud-gov/cg-oracle-database-19c-stig-overlay#1.
+#
+# PURPOSE: on managed AWS RDS, a large fraction of the Oracle 19c STIG is NOT a
+# SQL-level check — it is satisfied by the platform, by an RDS parameter/option
+# group, or is simply not applicable (no OS/listener access). Without this map the
+# InSpec profile fails or misleads on RDS (e.g. `ps -ef | grep tnslsnr`). This map
+# classifies each control so a brokered-RDS run can report inherited/NA/param-group
+# controls correctly instead of failing them, and so SQL-layer findings are
+# isolated for real remediation.
+#
+# LAYERS (see also the aws-broker validation contract):
+#   broker_infra            broker sets it at provision (encryption, private, backups)
+#   aws_rds_parameter_group broker parameter group sets it (audit_trail, etc.)
+#   aws_rds_option_group    broker option group sets it
+#   sql_hardening           remediated by hardening/sql/*
+#   sql_assessment_only     checkable in SQL, but change is detect-first (PUBLIC grants)
+#   aws_inherited           satisfied by the AWS/RDS platform (host/OS/patching)
+#   not_applicable_rds      cannot apply on managed RDS (no OS/listener access)
+#   manual_review           requires human/organizational review
+#   compensating_control    met by a documented compensating control
+#   blocked                 cannot be met on RDS; POA&M candidate
+#
+# STATUS: this is a STARTER map covering representative controls + a rule for the
+# ~33 OS/listener controls that must be not_applicable_rds. It is completed against
+# the full v1r5 control set during the dev proof (aws-broker#530/WS15). Every entry
+# should cite the RDS rationale. The `default_layer_rules` classify by pattern for
+# controls not yet individually mapped.
+
+metadata:
+  stig: "Oracle Database 19c STIG"
+  benchmark_version: "v1r5"
+  platform: "aws-rds-oracle-19c"
+  partition_note: "GovCloud (aws-us-gov); verify option/param availability per region."
+  source_epic: "https://github.com/cloud-gov/aws-broker/issues/519"
+
+# Pattern rules applied to controls not explicitly listed below. First match wins.
+# `check_contains` matches against the control's InSpec check text / describe block.
+default_layer_rules:
+  - when_check_contains: ["tnslsnr", "lsnrctl", "listener.ora", "ps -ef", "sqlnet.ora"]
+    layer: not_applicable_rds
+    rationale: >-
+      Listener/OS-level check. On managed RDS the tenant has no OS or listener
+      access; the listener is AWS-managed. Report as not applicable / inherited.
+  - when_check_contains: ["describe file(", "command(", "/etc/", "audit.rules", "$ORACLE_HOME"]
+    layer: aws_inherited
+    rationale: >-
+      OS/filesystem-level check. The underlying host is AWS-managed on RDS;
+      satisfied by the platform's inherited controls, not tenant-checkable.
+  - when_check_contains: ["oracledb_session"]
+    layer: sql_hardening
+    rationale: Default for SQL-connectable controls not otherwise classified.
+
+# Explicit per-control overrides (authoritative; extend during the dev proof).
+controls:
+  # --- broker parameter-group layer (set by aws-broker#525, not SQL) ---
+  - id_pattern: "audit_trail"
+    layer: aws_rds_parameter_group
+    rationale: audit_trail is an RDS Oracle parameter set by the broker parameter group.
+  - id_pattern: "sec_case_sensitive_logon"
+    layer: aws_rds_parameter_group
+    rationale: Set by the broker parameter group (born-hardened baseline).
+  - id_pattern: "remote_login_passwordfile"
+    layer: aws_rds_parameter_group
+    rationale: Set by the broker parameter group; remote OS auth disabled.
+  - id_pattern: "sql92_security"
+    layer: aws_rds_parameter_group
+    rationale: Set by the broker parameter group.
+
+  # --- broker infra layer (set at provision, not SQL) ---
+  - id_pattern: "tablespace encryption|encrypted|TDE|at rest"
+    layer: broker_infra
+    rationale: >-
+      Storage encryption at rest is enabled by the broker (encrypted:true, KMS) at
+      provision; validated from AWS metadata, not SQL.
+  - id_pattern: "audit trail data must be retained|retention"
+    layer: manual_review
+    rationale: >-
+      Log retention is an operational/CloudWatch policy decision; manual review
+      against the CloudWatch log-group retention config.
+
+  # --- SQL hardening layer (remediated by hardening/sql/*) ---
+  - id_pattern: "FAILED_LOGIN_ATTEMPTS|password.*lifetime|PASSWORD_LIFE_TIME|profile"
+    layer: sql_hardening
+    rationale: Profile limits enforced by hardening/sql/10_profiles.sql.
+  - id_pattern: "unified audit|audit policy|ORA_SECURECONFIG"
+    layer: sql_hardening
+    rationale: Unified audit policies enabled by hardening/sql/30_audit_policies.sql.
+
+  # --- detect-first (assessment only) ---
+  - id_pattern: "PUBLIC|granted to public"
+    layer: sql_assessment_only
+    rationale: >-
+      PUBLIC grants are detected (40_public_grants_assess.sql) but never
+      auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
+
+  # --- not applicable / inherited on RDS ---
+  - id_pattern: "instance name.*version|Oracle version numbers"
+    layer: sql_hardening
+    rationale: Instance-name check is SQL-connectable (V$INSTANCE).
+  - id_pattern: "listener|tnslsnr|lsnrctl"
+    layer: not_applicable_rds
+    rationale: Listener is AWS-managed on RDS; no tenant access.
+  - id_pattern: "operating system|OS |file permission|directory"
+    layer: aws_inherited
+    rationale: Host OS is AWS-managed on RDS; inherited control.

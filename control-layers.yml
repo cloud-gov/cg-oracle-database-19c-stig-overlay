@@ -4,106 +4,142 @@
 # #530); fills the overlay gap tracked in
 # cloud-gov/cg-oracle-database-19c-stig-overlay#1.
 #
-# PURPOSE: on managed AWS RDS, a large fraction of the Oracle 19c STIG is NOT a
-# SQL-level check — it is satisfied by the platform, by an RDS parameter/option
-# group, or is simply not applicable (no OS/listener access). Without this map the
-# InSpec profile fails or misleads on RDS (e.g. `ps -ef | grep tnslsnr`). This map
-# classifies each control so a brokered-RDS run can report inherited/NA/param-group
-# controls correctly instead of failing them, and so SQL-layer findings are
-# isolated for real remediation.
+# STATUS: DRAFT / STARTER MAP. There is not yet an in-repo InSpec `controls/`
+# directory or a consumer that reads this file; the `when_check_contains` patterns
+# are written against the expected upstream control text and MUST be validated
+# against the actual profile controls before this file is authoritative. Do not
+# treat classifications here as final until a test asserts each control resolves to
+# exactly one (set_by, verified_by) pair. See #1.
 #
-# LAYERS (see also the aws-broker validation contract):
+# PURPOSE: on managed AWS RDS, a large fraction of the Oracle 19c STIG is NOT a
+# SQL-remediation — it is satisfied by the platform, by an RDS parameter/option
+# group, or is simply not applicable (no OS/listener access). Without this map the
+# InSpec profile fails or misleads on RDS (e.g. `ps -ef | grep tnslsnr`).
+#
+# TWO-AXIS MODEL (important): a control has a `set_by` (who APPLIES it) and a
+# `verified_by` (who can CHECK it). These are NOT the same. audit_trail is SET BY
+# the RDS parameter group but is still VERIFIED BY SQL (V$PARAMETER). Classifying a
+# control's set_by as parameter-group must NEVER suppress a SQL verification that
+# is possible — otherwise a real, detectable drift would be silently dropped.
+#
+# set_by / verified_by values:
 #   broker_infra            broker sets it at provision (encryption, private, backups)
 #   aws_rds_parameter_group broker parameter group sets it (audit_trail, etc.)
 #   aws_rds_option_group    broker option group sets it
 #   sql_hardening           remediated by hardening/sql/*
+#   sql                     verifiable via SQL (oracledb_session) even if set elsewhere
 #   sql_assessment_only     checkable in SQL, but change is detect-first (PUBLIC grants)
 #   aws_inherited           satisfied by the AWS/RDS platform (host/OS/patching)
-#   not_applicable_rds      cannot apply on managed RDS (no OS/listener access)
+#   not_applicable_rds      cannot apply/verify on managed RDS (no OS/listener access)
 #   manual_review           requires human/organizational review
 #   compensating_control    met by a documented compensating control
 #   blocked                 cannot be met on RDS; POA&M candidate
 #
-# STATUS: this is a STARTER map covering representative controls + a rule for the
-# ~33 OS/listener controls that must be not_applicable_rds. It is completed against
-# the full v1r5 control set during the dev proof (aws-broker#530/WS15). Every entry
-# should cite the RDS rationale. The `default_layer_rules` classify by pattern for
-# controls not yet individually mapped.
+# RULE PRECEDENCE (explicit): an entry in `controls:` (matched by id_pattern OR
+# text_pattern) ALWAYS overrides `default_layer_rules`. Among `default_layer_rules`,
+# first match wins in listed order. A control that matches nothing defaults to
+# set_by=unknown, verified_by=sql (fail-safe: keep checking it in SQL).
 
 metadata:
+  status: draft
   stig: "Oracle Database 19c STIG"
-  benchmark_version: "v1r5"
+  # NOTE: benchmark_version is UNVERIFIED against a specific DISA release artifact.
+  # Confirm the exact DISA Oracle Database 19c STIG version + release date and cite
+  # the benchmark filename before treating this as authoritative (#1).
+  benchmark_version: "unverified"
+  benchmark_citation_needed: true
   platform: "aws-rds-oracle-19c"
   partition_note: "GovCloud (aws-us-gov); verify option/param availability per region."
   source_epic: "https://github.com/cloud-gov/aws-broker/issues/519"
 
 # Pattern rules applied to controls not explicitly listed below. First match wins.
-# `check_contains` matches against the control's InSpec check text / describe block.
+# `when_check_contains` matches against the control's InSpec check text / describe
+# block. Patterns constrained to reduce false matches (e.g. `command(`/`file(`
+# alone are too broad and are intentionally NOT used as sole triggers).
 default_layer_rules:
-  - when_check_contains: ["tnslsnr", "lsnrctl", "listener.ora", "ps -ef", "sqlnet.ora"]
-    layer: not_applicable_rds
+  - when_check_contains: ["tnslsnr", "lsnrctl", "listener.ora", "sqlnet.ora"]
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
     rationale: >-
-      Listener/OS-level check. On managed RDS the tenant has no OS or listener
-      access; the listener is AWS-managed. Report as not applicable / inherited.
-  - when_check_contains: ["describe file(", "command(", "/etc/", "audit.rules", "$ORACLE_HOME"]
-    layer: aws_inherited
+      Listener/sqlnet-level. On managed RDS the tenant has no OS or listener
+      access; the listener is AWS-managed. Neither settable nor SQL-verifiable by
+      the tenant → report not applicable / inherited.
+  - when_check_contains: ["ps -ef", "/etc/oratab", "$ORACLE_HOME/", "audit.rules", "chmod", "chown"]
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
     rationale: >-
-      OS/filesystem-level check. The underlying host is AWS-managed on RDS;
-      satisfied by the platform's inherited controls, not tenant-checkable.
+      OS/filesystem-level check requiring host access. The underlying host is
+      AWS-managed on RDS; satisfied by inherited controls, not tenant-checkable.
   - when_check_contains: ["oracledb_session"]
-    layer: sql_hardening
+    set_by: sql_hardening
+    verified_by: sql
     rationale: Default for SQL-connectable controls not otherwise classified.
 
-# Explicit per-control overrides (authoritative; extend during the dev proof).
+# Explicit per-control overrides (authoritative over default rules; extend during
+# the dev proof). Each has set_by (who applies) + verified_by (who can check).
 controls:
-  # --- broker parameter-group layer (set by aws-broker#525, not SQL) ---
-  - id_pattern: "audit_trail"
-    layer: aws_rds_parameter_group
-    rationale: audit_trail is an RDS Oracle parameter set by the broker parameter group.
-  - id_pattern: "sec_case_sensitive_logon"
-    layer: aws_rds_parameter_group
-    rationale: Set by the broker parameter group (born-hardened baseline).
-  - id_pattern: "remote_login_passwordfile"
-    layer: aws_rds_parameter_group
-    rationale: Set by the broker parameter group; remote OS auth disabled.
-  - id_pattern: "sql92_security"
-    layer: aws_rds_parameter_group
-    rationale: Set by the broker parameter group.
+  # --- parameter-group SET, but SQL VERIFIABLE (do NOT drop the check) ---
+  - text_pattern: "audit_trail"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: >-
+      audit_trail is applied by the broker parameter group but is readable via
+      SELECT value FROM v$parameter — keep verifying it in SQL to detect drift.
+  - text_pattern: "sec_case_sensitive_logon"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: Set by parameter group; verifiable in V$PARAMETER.
+  - text_pattern: "remote_login_passwordfile"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: Set by parameter group; verifiable in V$PARAMETER.
+  - text_pattern: "sql92_security"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: Set by parameter group; verifiable in V$PARAMETER.
 
-  # --- broker infra layer (set at provision, not SQL) ---
-  - id_pattern: "tablespace encryption|encrypted|TDE|at rest"
-    layer: broker_infra
+  # --- broker infra SET, verified from AWS metadata (not SQL) ---
+  - text_pattern: "tablespace encryption|encrypted|TDE|at rest"
+    set_by: broker_infra
+    verified_by: aws_inherited
     rationale: >-
       Storage encryption at rest is enabled by the broker (encrypted:true, KMS) at
       provision; validated from AWS metadata, not SQL.
-  - id_pattern: "audit trail data must be retained|retention"
-    layer: manual_review
+  - text_pattern: "audit trail data must be retained|retention"
+    set_by: manual_review
+    verified_by: manual_review
     rationale: >-
       Log retention is an operational/CloudWatch policy decision; manual review
       against the CloudWatch log-group retention config.
 
-  # --- SQL hardening layer (remediated by hardening/sql/*) ---
-  - id_pattern: "FAILED_LOGIN_ATTEMPTS|password.*lifetime|PASSWORD_LIFE_TIME|profile"
-    layer: sql_hardening
+  # --- SQL hardening layer (remediated + verified in SQL) ---
+  - text_pattern: "FAILED_LOGIN_ATTEMPTS|PASSWORD_LIFE_TIME|password.*lifetime|profile limit"
+    set_by: sql_hardening
+    verified_by: sql
     rationale: Profile limits enforced by hardening/sql/10_profiles.sql.
-  - id_pattern: "unified audit|audit policy|ORA_SECURECONFIG"
-    layer: sql_hardening
+  - text_pattern: "unified audit|audit policy|ORA_SECURECONFIG|ORA_LOGON_FAILURES"
+    set_by: sql_hardening
+    verified_by: sql
     rationale: Unified audit policies enabled by hardening/sql/30_audit_policies.sql.
+  - text_pattern: "instance name.*version|Oracle version number|V\\$INSTANCE"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: Version is AWS-managed but readable via V$INSTANCE/V$VERSION.
 
-  # --- detect-first (assessment only) ---
-  - id_pattern: "PUBLIC|granted to public"
-    layer: sql_assessment_only
+  # --- detect-first (assessment only; never auto-remediated) ---
+  - text_pattern: "granted to PUBLIC|PUBLIC grant|revoke.*public"
+    set_by: sql_assessment_only
+    verified_by: sql
     rationale: >-
       PUBLIC grants are detected (40_public_grants_assess.sql) but never
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
 
   # --- not applicable / inherited on RDS ---
-  - id_pattern: "instance name.*version|Oracle version numbers"
-    layer: sql_hardening
-    rationale: Instance-name check is SQL-connectable (V$INSTANCE).
-  - id_pattern: "listener|tnslsnr|lsnrctl"
-    layer: not_applicable_rds
+  - text_pattern: "listener|tnslsnr|lsnrctl"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
     rationale: Listener is AWS-managed on RDS; no tenant access.
-  - id_pattern: "operating system|OS |file permission|directory"
-    layer: aws_inherited
+  - text_pattern: "operating system|OS file|file permission|directory permission"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
     rationale: Host OS is AWS-managed on RDS; inherited control.

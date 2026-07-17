@@ -11,9 +11,10 @@ PROMPT === parameters relevant to network security (read-only view) ===
 SELECT NAME, VALUE
 FROM   V$PARAMETER
 WHERE  NAME IN ('sec_case_sensitive_logon','remote_login_passwordfile',
-                'sec_protocol_error_further_action','sec_max_failed_login_attempts',
-                'sqlnet.allowed_logon_version_server')
+                'sec_protocol_error_further_action','sec_max_failed_login_attempts')
 ORDER  BY NAME;
 
-PROMPT NOTE: listener/TDE/native-network-encryption on RDS are platform/option-group
-PROMPT       managed and validated as AWS-inherited, not set by SQL here.
+PROMPT NOTE: sqlnet.ora settings (e.g. sqlnet.allowed_logon_version_server), the
+PROMPT       listener, TDE, and native network encryption are NOT in V$PARAMETER
+PROMPT       and are platform/option-group managed on RDS — validated as
+PROMPT       AWS-inherited (control-layers.yml), not SQL-checkable here.

@@ -14,17 +14,27 @@ here (see `../control-layers.yml`).
 ## Principles
 
 - **Assessment-first.** `*_assess.sql` and `01_inventory.sql` only *read* state.
-- **Idempotent.** Re-running hardening changes nothing on an already-hardened DB.
+- **Idempotent (mostly).** Re-running `10`/`30` changes nothing on an
+  already-hardened DB. **`20` is idempotent only against accounts it left locked**
+  — if an operator deliberately unlocks a sample account, re-running `20` will
+  re-lock it (it acts on OPEN / expired-unlocked accounts). Document that intent
+  before scheduling `20` on a live system.
 - **Detect-first for destructive change.** PUBLIC-grant revocations and any
   destructive change are **detected and reported**, never applied automatically —
   they require an explicit operator allowlist (app/vendor breakage risk).
 - **Non-SYS.** Scripts assume the RDS **master user**, not `SYS`/`SYSDBA`.
-  RDS-incompatible commands skip with a printed reason.
+  RDS-incompatible commands skip with a reason.
+- **Fail loud, not silent.** `20`/`30` count failures and `RAISE_APPLICATION_ERROR`
+  if any operation errored, so an automated run cannot record a false PASS when
+  every statement was rejected.
+- **Only touch sample schemas.** `20` locks/expires **Oracle-provided sample
+  schemas only** (HR/OE/PM/IX/SH/BI/SCOTT) — never option/security schemas
+  (DVSYS/Database Vault, LBACSYS, AUDSYS): locking those can break a live RDS
+  option.
 - **RDS layering.** Controls satisfied by an RDS **parameter group** (e.g.
-  `audit_trail`, `sec_case_sensitive_logon`) are set by the broker
-  ([aws-broker#525](https://github.com/cloud-gov/aws-broker/issues/525)), NOT here;
-  this layer covers profiles, users/roles/privileges, audit policies, and PUBLIC
-  grants that live in SQL.
+  `audit_trail`, `sec_case_sensitive_logon`) are *set* by the broker
+  ([aws-broker#525](https://github.com/cloud-gov/aws-broker/issues/525)) but remain
+  **SQL-verifiable** — see `control-layers.yml` (`set_by` ≠ `verified_by`).
 
 ## Script groups
 
@@ -33,12 +43,26 @@ here (see `../control-layers.yml`).
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout profile limits |
-| `20_users_roles_privileges.sql` | harden | lock/expire default accounts, tighten roles |
+| `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
 | `30_audit_policies.sql` | harden | enable/verify unified audit policies |
-| `40_public_grants_assess.sql` | assess | **detect** excessive PUBLIC grants (no revoke) |
-| `50_network_related_assess.sql` | assess | report network/encryption-related settings |
+| `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
+| `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
 | `90_validate.sql` | assess | post-hardening validation summary |
-| `rollback/` | — | inverse of each hardening script |
+| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `30`; `20` is only partially reversible — see below) |
+
+> **`20` naming/scope:** the filename says `users_roles_privileges` but the script
+> currently only **locks/expires sample accounts**. Role/privilege tightening is a
+> planned addition, not yet implemented — do not assume it runs today.
+
+## Rollback coverage
+
+- `rollback/10_profiles_rollback.sql` — resets DEFAULT profile to Oracle **19c
+  vendor defaults** (not this DB's pre-hardening values; capture those from
+  `01_inventory` first for a true restore).
+- `rollback/20_users_rollback.sql` — **unlocks** the sample accounts, but
+  **cannot un-expire** a password (Oracle limitation); owner must reset it.
+- `rollback/30_audit_policies_rollback.sql` — `NOAUDIT` the two policies (reduces
+  posture; deliberate action only).
 
 ## RDS caveats
 

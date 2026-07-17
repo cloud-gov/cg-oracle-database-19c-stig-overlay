@@ -3,6 +3,7 @@
 -- them can break applications/vendor packages. This script REPORTS them so an
 -- operator can build an explicit allowlist before any revoke (see rollback/ and
 -- the README's detect-first principle). It performs NO changes.
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

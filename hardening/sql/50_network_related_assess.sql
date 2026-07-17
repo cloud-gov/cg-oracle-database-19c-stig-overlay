@@ -3,6 +3,7 @@
 -- network encryption, TLS termination) are AWS-inherited/managed and configured via
 -- option groups or the platform, NOT via SQL — those are validated as inherited by
 -- the InSpec profile (control-layers.yml), not remediated here.
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

@@ -3,6 +3,7 @@
 -- pattern). audit_trail itself is a PARAMETER set by the broker's RDS parameter
 -- group (aws-broker#525), NOT here.
 SET SERVEROUTPUT ON
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

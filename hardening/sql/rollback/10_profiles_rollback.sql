@@ -1,6 +1,7 @@
 -- rollback/10_profiles_rollback.sql — reverts 10_profiles.sql to DEFAULT profile
 -- Oracle defaults. Use only in local/dev; on a real system, changing profile
 -- limits affects all users on the DEFAULT profile.
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

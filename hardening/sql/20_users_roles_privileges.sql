@@ -2,6 +2,7 @@
 -- Locks/expires well-known sample/default accounts if present and open. Does NOT
 -- drop users or revoke PUBLIC grants (that is detect-first, see 40_*).
 SET SERVEROUTPUT ON
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

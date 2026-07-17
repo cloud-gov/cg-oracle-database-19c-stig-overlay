@@ -2,6 +2,7 @@
 -- PASS/REVIEW line per SQL-layer control so the before/after diff is legible.
 -- This is development/operator signal; authoritative pass/fail is the InSpec run.
 SET SERVEROUTPUT ON
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

@@ -1,4 +1,5 @@
 -- 01_inventory.sql — assessment-only (assess). Reads state for the evidence loop.
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

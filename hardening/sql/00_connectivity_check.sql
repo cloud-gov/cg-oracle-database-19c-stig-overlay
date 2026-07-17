@@ -2,6 +2,7 @@
 -- Verifies the connection and reports the effective user + whether we have the
 -- expected RDS-master-like privileges (NOT SYS). Never mutates state.
 SET SERVEROUTPUT ON
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

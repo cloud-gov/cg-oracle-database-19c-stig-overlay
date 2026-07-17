@@ -2,6 +2,7 @@
 -- on the DEFAULT profile. Uses ALTER PROFILE (permitted for the RDS master user).
 -- Values align with the overlay inputs (failed_logon_attempts=3,
 -- password_life_time=35, account_inactivity_age=35).
+SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR CONTINUE
 

@@ -105,6 +105,26 @@ controls:
     rationale: >-
       Storage encryption at rest is enabled by the broker (encrypted:true, KMS) at
       provision; validated from AWS metadata, not SQL.
+
+  # --- encryption IN TRANSIT (SC-8 / SC-8(1) / SC-13) — broker SSL option group ---
+  # RDS Oracle TLS is a TCPS listener (port 2484) provisioned via the SSL option
+  # group (TLS 1.2, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, FIPS.SSLFIPS_140=TRUE).
+  # These live in sqlnet.ora / fips.ora, which are AWS-managed on RDS and NOT
+  # tenant-SQL-visible — evidence is the option-group config + AWS metadata, plus a
+  # client-side TCPS handshake, not a SQL query. See aws-broker#538 / options.yml.
+  # NOTE: the SSL-only posture also depends on the platform security group allowing
+  # 2484 and denying 1521 (aws-broker#541); until then the cleartext path remains.
+  - text_pattern: "during transmission|SSLFIPS_140|SQLNET.SSL_VERSION|TCPS|SSL_SERVER_DN_MATCH|encrypt.*transmission|transmission.*encrypt"
+    set_by: aws_rds_option_group
+    verified_by: not_applicable_rds
+    rationale: >-
+      SC-8/SC-8(1) (in transit) + SC-13 (FIPS crypto) satisfied by the broker SSL
+      option group — TLS 1.2, FedRAMP+FIPS cipher, FIPS.SSLFIPS_140=TRUE on a TCPS
+      2484 listener. sqlnet.ora/fips.ora are AWS-managed on RDS (not SQL-visible);
+      evidenced by option-group config + a client TCPS handshake. DISA Oracle 19c
+      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depends on platform SG (2484
+      open / 1521 denied) for a true TLS-only posture (aws-broker#541).
+
   - text_pattern: "audit trail data must be retained|retention"
     set_by: manual_review
     verified_by: manual_review

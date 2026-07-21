@@ -69,5 +69,6 @@ here (see `../control-layers.yml`).
 - No `SYS`/`SYSDBA`; some `V$`/`DBA_` views and `ALTER SYSTEM` are restricted — the
   scripts guard these and skip with a reason rather than error.
 - Parameter-level controls belong to the broker's RDS parameter group, not here.
-- Local runs (aws-broker `local/`) are **development signal only**
-  ([aws-broker ADR-0005](https://github.com/cloud-gov/aws-broker/blob/main/docs/decisions/ADR-0005-local-testing-is-development-signal-only.md)).
+- Local runs (aws-broker `local/`) are **development signal only** — never
+  compliance evidence. Authoritative evidence requires a run against a real
+  brokered GovCloud RDS instance.

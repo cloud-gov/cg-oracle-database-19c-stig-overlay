@@ -1,0 +1,44 @@
+name: cg-oracle-19c-stig-validation
+
+# Local STIG-profile VALIDATION harness (#7). Brings up Oracle 23ai Free (gvenzl)
+# and runs the vendored MITRE profile through the CINC Auditor runner to produce
+# a per-control pass/fail/skip/error report.
+#
+# FIDELITY: this targets Oracle 23ai Free, NOT 19c / SE2 / RDS. It validates that
+# the check LOGIC executes and is coherent. RDS- and version-specific behavior is
+# deferred to the live proof (aws-broker#558). NOT compliance evidence.
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    environment:
+      ORACLE_PASSWORD: devpw_ChangeMe1
+      APP_USER: stig
+      APP_USER_PASSWORD: devpw_ChangeMe1
+    ports:
+      # loopback only — local dev DB with a known password must not be on the LAN
+      - "127.0.0.1:1521:1521"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  runner:
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    depends_on:
+      oracle:
+        condition: service_healthy
+    environment:
+      # gvenzl exposes the pluggable DB service as FREEPDB1; SYSTEM is DBA-class
+      # (analogous to the RDS master user the real scan will use).
+      DB_USER: system
+      DB_PASSWORD: devpw_ChangeMe1
+      DB_HOST: oracle
+      DB_SERVICE: FREEPDB1
+      DB_PORT: "1521"
+      OUT_DIR: /out
+    volumes:
+      - ./out:/out

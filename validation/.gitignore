@@ -1,0 +1,4 @@
+# local-only: corporate TLS-inspection CA staged for behind-proxy builds (never commit a corp CA)
+runner/corp-ca.pem
+# local validation output
+out/

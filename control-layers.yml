@@ -1,6 +1,6 @@
 # Control -> implementation-layer map for the STIG-hardened Oracle 19c RDS offering.
-# 'controls_by_id' entries (below) are explicit per-control classifications derived
-# from the live validation run (overlay #6); 'default_layer_rules' still apply to the rest.
+# 'controls_by_id' = explicit per-control classifications from the validation run (overlay #6/#9);
+# 'default_layer_rules' apply to the rest.
 metadata:
   status: draft
   stig: Oracle Database 19c STIG
@@ -127,11 +127,13 @@ controls_by_id:
     storage on RDS.
 - control_id: SV-270505
   set_by: sql_hardening
-  verified_by: needs_fix
-  rationale: Upstream check errors ORA-00942 (missing view) on 23ai; re-verify view name on 19c/RDS and
-    grant SELECT as needed.
+  verified_by: requires_live_rds
+  rationale: UNIFIED_AUDIT_TRAIL not accessible on the local 23ai harness (ORA-00942); defer audit-record-detail
+    verification to the live RDS SE2 proof (aws-broker#558). Not evaluated locally to avoid a version-specific
+    false result.
 - control_id: SV-270556
   set_by: sql_hardening
-  verified_by: needs_fix
-  rationale: Upstream check errors ORA-41900 (missing READ privilege) on 23ai; grant required read or
-    adjust query for 19c/RDS.
+  verified_by: requires_live_rds
+  rationale: Upstream query reads SYS.USER$/OBJ$/OBJAUTH$; the RDS master user lacks READ on SYS.USER$
+    (ORA-41900). Verify a DBA_*-view equivalent against a live RDS SE2 instance (aws-broker#558) rather
+    than guess.

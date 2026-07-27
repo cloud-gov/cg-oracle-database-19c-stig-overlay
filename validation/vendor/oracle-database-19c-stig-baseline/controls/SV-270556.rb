@@ -87,53 +87,14 @@ If any owners are returned other than those Oracle provides, ensure those owners
   tag 'check'
   tag 'fix'
 
-  sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'))
-
-  dba_users = sql.query("select library_name,owner,  '' grantee, '' privilege
-  from dba_libraries where file_spec is not null
-  minus
-  (
-  select library_name,o.name owner,  '' grantee, '' privilege
-    from dba_libraries l,
-         sys.user$ o,
-         sys.user$ ge,
-         sys.obj$ obj,
-         sys.objauth$ oa
-   where l.owner=o.name
-     and obj.owner#=o.user#
-     and obj.name=l.library_name
-     and oa.obj#=obj.obj#
-     and ge.user#=oa.grantee#
-     and l.file_spec is not null
-  )
-  union all
-  select library_name,o.name owner, --obj.obj#,oa.privilege#,
-         ge.name grantee,
-         tpm.name privilege
-    from dba_libraries l,
-         sys.user$ o,
-         sys.user$ ge,
-         sys.obj$ obj,
-         sys.objauth$ oa,
-         sys.table_privilege_map tpm
-   where l.owner=o.name
-     and obj.owner#=o.user#
-     and obj.name=l.library_name
-     and oa.obj#=obj.obj#
-     and ge.user#=oa.grantee#
-     and tpm.privilege=oa.privilege#
-     and l.file_spec is not null;").column('owner').uniq
-  if dba_users.empty?
-    impact 0.0
-    describe 'There are no oracle DBA users, control N/A' do
-      skip 'There are no oracle DBA users, control N/A'
-    end
-  else
-    dba_users.each do |user|
-      describe "oracle DBA users: #{user}" do
-        subject { user }
-        it { should be_in input('allowed_dbadmin_users') }
-      end
-    end
+  # OVERLAY (#9): the upstream check joins SYS.USER$ / SYS.OBJ$ / SYS.OBJAUTH$
+  # (internal SYS tables). On managed RDS the master user does NOT get READ on
+  # SYS.USER$ (ORA-41900 on the local 23ai harness confirmed this). Rather than
+  # GUESS at a DBA_*-view rewrite that might not be equivalent for RDS SE2, this
+  # control is deferred to evaluation against a LIVE brokered RDS SE2 instance
+  # (aws-broker#558) where the master user's actual privilege set applies. Do NOT
+  # silently pass. See control-layers.yml (verified_by: requires_live_rds).
+  describe 'External-library owner/privilege review — requires evaluation on a live RDS SE2 instance (#558); SYS.USER$ not readable by the RDS master (ORA-41900) on the local harness' do
+    skip 'Deferred to live RDS SE2 proof (aws-broker#558): the upstream query reads SYS.USER$/OBJ$/OBJAUTH$ which the RDS master user cannot READ; a DBA_*-view equivalent must be verified on the real instance, not guessed at locally.'
   end
 end

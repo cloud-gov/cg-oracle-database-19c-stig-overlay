@@ -66,21 +66,32 @@ Then, disable all accounts that have not logged in within 35 days."
   tag 'check'
   tag 'fix'
 
-  sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+  # FIXED (overlay #9): upstream queried PASSWORD_LIFE_TIME, but this control (and
+  # its own check text) requires INACTIVE_ACCOUNT_TIME <= 35. Also treat the
+  # UNLIMITED default as a finding (a bare `cmp <=` can't catch UNLIMITED).
+  sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'), sqlcl_bin: input('sqlcl_bin'))
 
   query = %{
     SELECT PROFILE, RESOURCE_NAME, LIMIT FROM DBA_PROFILES WHERE PROFILE =
-  '%<profile>s' AND RESOURCE_NAME = 'PASSWORD_LIFE_TIME'
+  '%<profile>s' AND RESOURCE_NAME = 'INACTIVE_ACCOUNT_TIME'
   }
 
   user_profiles = sql.query('SELECT profile FROM dba_users;').column('profile').uniq
 
   user_profiles.each do |profile|
-    password_life_time = sql.query(format(query, profile: profile)).column('limit')
+    inactive_account_time = sql.query(format(query, profile: profile)).column('limit').first.to_s.upcase
 
-    describe "The oracle database account password life time for profile: #{profile}" do
-      subject { password_life_time }
-      it { should cmp <= input('account_inactivity_age') }
+    describe "INACTIVE_ACCOUNT_TIME for profile: #{profile} (must be set, <= #{input('account_inactivity_age')}, not UNLIMITED)" do
+      subject { inactive_account_time }
+      it { should_not eq 'UNLIMITED' }
+      it { should_not eq 'DEFAULT' }
+      it { should_not eq '' }
+    end
+    unless %w[UNLIMITED DEFAULT].include?(inactive_account_time) || inactive_account_time.empty?
+      describe "INACTIVE_ACCOUNT_TIME value for profile: #{profile}" do
+        subject { inactive_account_time.to_i }
+        it { should cmp <= input('account_inactivity_age') }
+      end
     end
   end
   if user_profiles.empty?

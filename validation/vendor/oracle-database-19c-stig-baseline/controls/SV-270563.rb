@@ -62,7 +62,7 @@ Where a password lifetime longer than 60 is needed, document the reasons and obt
   tag 'check'
   tag 'fix'
 
-  sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+  sql = oracledb_session(user: input('user'), password: input('password'), host: input('host'), service: input('service'), sqlplus_bin: input('sqlplus_bin'), sqlcl_bin: input('sqlcl_bin'))
 
   get_effective_life_time = sql.query("SELECT p1.profile,
   CASE p1.limit WHEN 'UNLIMITED' THEN 'UNLIMITED' ELSE
@@ -85,11 +85,20 @@ Where a password lifetime longer than 60 is needed, document the reasons and obt
   AND p4.resource_name='PASSWORD_GRACE_TIME' -- from DEFAULT profile
   order by 1;").column('effective_life_time')
 
+  # FIXED (overlay #9): the assertion was inverted (`should cmp >= 60`), which
+  # PASSES the exact over-60 condition DISA flags and FAILS compliant short
+  # lifetimes. DISA: EFFECTIVE_LIFE_TIME > 60 OR UNLIMITED is a finding. So each
+  # profile must be NOT UNLIMITED and <= 60.
   get_effective_life_time.each do |effective_life_time|
-
-    describe 'The oracle database account effective life time limit' do
-      subject { effective_life_time }
-      it { should cmp >= 60 }
+    describe "Oracle password EFFECTIVE_LIFE_TIME (must be <= 60 and not UNLIMITED): #{effective_life_time}" do
+      subject { effective_life_time.to_s.upcase }
+      it { should_not eq 'UNLIMITED' }
+    end
+    unless effective_life_time.to_s.upcase == 'UNLIMITED'
+      describe "Oracle password EFFECTIVE_LIFE_TIME value: #{effective_life_time}" do
+        subject { effective_life_time.to_i }
+        it { should cmp <= 60 }
+      end
     end
   end
   describe get_effective_life_time do

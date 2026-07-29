@@ -7,7 +7,5 @@
 
 # EXAMPLES, uncomment to use one
 #* @cloud-gov/platform-ops @cloud-gov/pages-ops @cloud-gov/studio
-#* @cloud-gov/platform-ops @cloud-gov/customer-success-squad 
-#* @cloud-gov/platform-ops @cloud-gov/pages-ops 
-* @cloud-gov/cloud-gov-team
-
+* @cloud-gov/platform-ops @cloud-gov/customer-success-squad
+#* @cloud-gov/platform-ops @cloud-gov/pages-ops

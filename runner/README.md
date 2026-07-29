@@ -33,8 +33,9 @@ The only prerequisite is **Docker** (with `docker compose`). From the repository
 root, use the top-level `Makefile`:
 
 ```bash
-make verify   # profile loads + runner image builds — no database needed
+make verify   # profile loads + oraquery unit tests + runner image builds — no database needed
 make run      # full end-to-end: start Oracle 23ai Free and exec the profile
+make test-go  # oraquery unit tests only (go test in a Go container)
 make clean    # tear down and remove local results/image
 make help     # list all targets
 ```
@@ -53,7 +54,7 @@ docker compose -f runner/docker-compose.yml up --build --abort-on-container-exit
 
 | Path | Purpose |
 |------|---------|
-| `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits the clean CSV `oracledb_session` expects; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). |
+| `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits the clean CSV `oracledb_session` expects; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
 | `run-validation.sh` | Runs the profile, emits per-control status + summary. |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |

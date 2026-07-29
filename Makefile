@@ -15,6 +15,8 @@
 AUDITOR_IMAGE ?= cincproject/auditor:6
 RUNNER_IMAGE  ?= cg-stig-runner:local
 COMPOSE_FILE  ?= runner/docker-compose.yml
+# Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
+GO_IMAGE      ?= golang:1.22-bookworm
 # Mount the repo root into the auditor container as /share.
 DOCKER_RUN    := docker run --rm -v "$(CURDIR)":/share -w /share \
                  --entrypoint cinc-auditor $(AUDITOR_IMAGE)
@@ -48,10 +50,15 @@ check: deps ## Static profile validation (cinc-auditor check) — no DB needed
 build: deps ## Build the runner image (builds oraquery from source; no committed binary)
 	docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .
 
+.PHONY: test-go
+test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)
+	docker run --rm -v "$(CURDIR)/runner/oraquery":/src -w /src $(GO_IMAGE) \
+	  go test -v ./...
+
 .PHONY: verify
-verify: check build ## One-command verify: profile loads + runner image builds (no DB)
+verify: check test-go build ## One-command verify: profile loads + oraquery tests pass + runner image builds (no DB)
 	@echo ""
-	@echo "verify OK: profile is valid and the runner image builds."
+	@echo "verify OK: profile is valid, oraquery unit tests pass, and the runner image builds."
 	@echo "Next: 'make run' to execute the profile against a live Oracle 23ai Free DB."
 
 .PHONY: run

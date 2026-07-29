@@ -6,11 +6,18 @@ STIG-hardened Oracle 19c offering brokered by
 [cloud-gov/aws-broker#519](https://github.com/cloud-gov/aws-broker/issues/519)).
 
 > **Status: work in progress — not a compliance attestation.**
-> This repo currently contains a **draft** control→layer map and a set of SQL
-> hardening/assessment scripts. There is **no committed InSpec/CINC profile yet**
-> (see [#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3)),
+> This repo currently contains a **draft** control→layer map, a set of SQL
+> hardening/assessment scripts, and a **minimal MVP InSpec profile** (a single
+> `require_controls` proof; see
+> [#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3)),
 > and **no STIG evidence has been generated against a live brokered instance.**
 > Do not read anything here as "STIG compliant."
+>
+> **Pre-production cleanup:** much of the in-repo PR/issue references and
+> development scaffolding will be **removed before this repo goes to production**,
+> and the ADRs under `docs/adr/` may be **consolidated to drop decisions that are
+> no longer relevant**. Development-phase tracking links here are not intended to
+> be permanent fixtures.
 
 ## What this is (and is not)
 
@@ -25,12 +32,19 @@ InSpec/CINC against itself (separation of duties).
 - `hardening/sql/` — assessment-first, mostly-idempotent SQL for the database layer,
   plus rollback scripts.
 
+- A **minimal InSpec profile** (`inspec.yml` + `controls/`) that `depends` on the
+  cloud-gov fork of the MITRE baseline and, as an MVP, `require_controls` a single
+  control (SV-270495) to validate the `depends → overlay → SQL-verify` path end to
+  end. The dependency approach is recorded in
+  [`docs/adr/0001-consume-mitre-baseline-via-fork-depends.md`](docs/adr/0001-consume-mitre-baseline-via-fork-depends.md).
+
 **Not yet committed (planned / tracked):**
 
-- An InSpec/CINC profile (`oracledb_session`-based) and the runnable 19c controls,
-  and a `port` input — tracked in
+- The full set of runnable 19c overlay controls and a `port` input — tracked in
   [#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3).
 - A consumer that reads `control-layers.yml` to classify a live run.
+- A CINC-Auditor validation/runner container — tracked in
+  [#7](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/7).
 - Any live-instance validation run (compliance evidence).
 
 ## Layout
@@ -40,7 +54,8 @@ InSpec/CINC against itself (separation of duties).
 | `control-layers.yml` | **Draft** control → implementation-layer map (`set_by` / `verified_by`). On managed RDS many controls are AWS-inherited, set by an RDS parameter/option group, or OS/listener-level (not applicable). This classifies controls so a future brokered-RDS run can report inherited / not-applicable / parameter-group controls correctly instead of failing them. Currently **13 explicitly-mapped controls plus 3 pattern-based default rules**; `status: draft` and `benchmark_version: unverified` pending a cited DISA release. No consumer reads it yet. |
 | `hardening/sql/` | Assessment-first, mostly-idempotent, **non-SYS** (RDS master-user model) SQL: connectivity, inventory, profile limits, **sample-account** lockout, unified audit policies, plus detect-first PUBLIC-grant and network assessments and a validation summary. Parameter-level controls (e.g. `audit_trail`) are set by the broker's RDS parameter group, **not** by these scripts (they remain SQL-*verifiable*). See [`hardening/sql/README.md`](hardening/sql/README.md) for per-script scope and caveats. |
 | `hardening/sql/rollback/` | Reversal for the reversible hardening scripts (`10`, `30`; `20` is only partially reversible). |
-| `profile/` | Placeholder for the InSpec/CINC profile — **not yet implemented** (#3). |
+| `profile/` | Placeholder for additional InSpec/CINC profile material — the runnable overlay controls are still being dispositioned (#3). |
+| `docs/adr/` | Architecture Decision Records (MADR). See [ADR-0001](docs/adr/0001-consume-mitre-baseline-via-fork-depends.md) for the baseline-dependency strategy. |
 
 ## Scope on managed RDS (honest limits)
 

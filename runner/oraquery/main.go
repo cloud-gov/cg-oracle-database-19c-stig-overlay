@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	go_ora "github.com/sijms/go-ora/v2"
@@ -181,12 +182,9 @@ func toStr(v any) string {
 }
 
 func mustAtoi(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			fail("bad port: " + s)
-		}
-		n = n*10 + int(c-'0')
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		fail("bad port: " + s)
 	}
 	return n
 }

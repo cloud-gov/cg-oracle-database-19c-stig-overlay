@@ -1,0 +1,48 @@
+name: cg-oracle-database-19c-stig-overlay
+title: Cloud.gov Oracle Database 19c STIG Overlay
+maintainer: cloud.gov
+copyright: cloud.gov
+copyright_email: cloud-gov-support@gsa.gov
+license: Apache-2.0
+summary: >-
+  Cloud.gov overlay for the DISA Oracle Database 19c STIG. Depends on the
+  cloud-gov fork of the MITRE baseline and (during MVP) requires only a single
+  control end to end to validate the depends -> overlay -> SQL-verify path.
+version: 0.1.0
+inspec_version: ">= 4.0"
+
+# Consume the cloud-gov fork's `cloudgov` branch (the upstream MITRE profile does
+# not load: a mismatched-quote syntax error blocks it before any control runs --
+# mitre/oracle-database-19c-stig-baseline#1). We do NOT vendor the baseline.
+depends:
+  - name: oracle-database-19c-stig-baseline
+    git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git
+    branch: cloudgov
+
+# MVP: only SV-270495 is pulled in from the depended-on profile, via a
+# `require_controls` block in controls/SV-270495.rb. This overlay defines no
+# other controls yet (#3).
+
+# Inputs consumed by SV-270495 via oracledb_session. Values are supplied at scan
+# time (CLI/attributes/env), never committed. Defaults are empty and non-sensitive
+# metadata only.
+inputs:
+  - name: user
+    description: 'Oracle DB username (RDS master user; not SYS)'
+    value: ''
+    sensitive: true
+  - name: password
+    description: 'Oracle DB password'
+    value: ''
+    sensitive: true
+  - name: host
+    description: 'Oracle DB hostname (RDS endpoint)'
+    value: ''
+    sensitive: true
+  - name: service
+    description: 'Oracle DB service name'
+    value: ''
+  - name: sqlplus_bin
+    description: 'Path to the query client binary (sqlplus / go-ora shim)'
+    value: ''
+    sensitive: true

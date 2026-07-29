@@ -204,6 +204,7 @@ Thumbs.db
 /x64/
 /x86/
 *.lock
+!inspec.lock
 *.DS_Store
 *.tgz
 /.terraform/

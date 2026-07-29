@@ -1,0 +1,8 @@
+---
+lockfile_version: 1
+depends:
+- name: oracle-database-19c-stig-baseline
+  resolved_source:
+    git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git
+    ref: 192121b03d91c2bd1cdccff79029dac9f8b2f173
+  version_constraints: []

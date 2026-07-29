@@ -2,8 +2,8 @@
 
 Executes the Cloud.gov Oracle 19c STIG **overlay** InSpec profile against an Oracle
 database using **CINC Auditor** (Apache-2.0 FOSS distribution of InSpec) and a
-purpose-built pure-Go query client (**oraquery**), and reports **pass/fail/skip/error
-per control**. As controls are dispositioned
+purpose-built pure-Go query client (**oraquery**). The runner uses concise CINC
+CLI output and CINC's normal exit codes. As controls are dispositioned
 ([#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3)),
 this run produces the coverage report referenced by
 [#6](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/6) —
@@ -40,14 +40,16 @@ make clean    # tear down and remove local results/image
 make help     # list all targets
 ```
 
-`make run` writes `runner/out/results.json` plus a per-control summary in the log.
+`make run` returns non-zero when CINC Auditor reports findings (GNU Make reports a
+failed recipe as exit 2; the raw compose command returns CINC's exit, such as 100).
+That can be the expected result of a real STIG finding against the unhardened local
+23ai DB, not a runner failure. Use the CLI output to distinguish findings from
+infrastructure errors.
 
 Equivalent raw commands (what the Makefile runs), from the repository root:
 
 ```bash
-mkdir -p runner/out
 docker compose -f runner/docker-compose.yml up --build --abort-on-container-exit
-# results in runner/out/results.json + a per-control summary in the runner log
 ```
 
 ## What's here
@@ -56,7 +58,7 @@ docker compose -f runner/docker-compose.yml up --build --abort-on-container-exit
 |------|---------|
 | `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits the clean CSV `oracledb_session` expects; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
-| `run-validation.sh` | Runs the profile, emits per-control status + summary. |
+| `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |
 
 ## Client binary / supply chain
@@ -70,6 +72,13 @@ The MITRE baseline profile is consumed via git `depends` + a committed `inspec.l
 (pinned fork ref), vendored at build time with `cinc-auditor vendor` — **not** a
 committed `vendor/` tree. See
 [ADR-0001](../docs/adr/0001-consume-mitre-baseline-via-fork-depends.md).
+
+## JSON output
+
+The runner intentionally does **not** emit JSON by default. Pipelines should use
+CINC Auditor's established CLI output and exit status. JSON reporting can be added
+later as an explicit option when iterating on controls or generating coverage
+matrices.
 
 ## Credentials
 

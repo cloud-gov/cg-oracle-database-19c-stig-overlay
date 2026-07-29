@@ -62,15 +62,10 @@ verify: check test-go build ## One-command verify: profile loads + oraquery test
 	@echo "Next: 'make run' to execute the profile against a live Oracle 23ai Free DB."
 
 .PHONY: run
-run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile, write results
-	@mkdir -p runner/out
+run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile
 	docker compose -f $(COMPOSE_FILE) up --build --abort-on-container-exit
-	@echo ""
-	@echo "run complete. Per-control report: runner/out/results.json"
-	@echo "NOTE: a local 23ai run proves check LOGIC only — NOT compliance evidence."
 
 .PHONY: clean
 clean: ## Tear down compose + remove local results and built image
 	-docker compose -f $(COMPOSE_FILE) down --volumes --remove-orphans
-	-rm -rf runner/out
 	-docker image rm $(RUNNER_IMAGE) 2>/dev/null || true

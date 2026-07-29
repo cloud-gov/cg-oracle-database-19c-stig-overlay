@@ -1,8 +1,7 @@
-name: cg-oracle-19c-stig-validation
+name: cg-oracle-19c-stig-runner
 
-# Local STIG-profile VALIDATION harness (#7). Brings up Oracle 23ai Free (gvenzl)
-# and runs the overlay profile through the CINC Auditor runner to produce a
-# per-control pass/fail/skip/error report.
+# Local STIG-profile runner (#7). Brings up Oracle 23ai Free (gvenzl) and runs
+# the overlay profile through CINC Auditor.
 #
 # FIDELITY: this targets Oracle 23ai Free, NOT 19c / SE2 / RDS. It validates that
 # the check LOGIC executes and is coherent. RDS- and version-specific behavior is
@@ -44,6 +43,3 @@ services:
       DB_HOST: oracle
       DB_SERVICE: FREEPDB1
       DB_PORT: "1521"
-      OUT_DIR: /out
-    volumes:
-      - ./out:/out

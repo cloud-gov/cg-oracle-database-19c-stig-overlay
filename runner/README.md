@@ -29,8 +29,19 @@ differently on 23ai than on 19c/SE2 — those are tagged
 
 ## Run
 
-Run from the **repository root** (the runner build context needs `inspec.yml`,
-`inspec.lock`, and `controls/`):
+The only prerequisite is **Docker** (with `docker compose`). From the repository
+root, use the top-level `Makefile`:
+
+```bash
+make verify   # profile loads + runner image builds — no database needed
+make run      # full end-to-end: start Oracle 23ai Free and exec the profile
+make clean    # tear down and remove local results/image
+make help     # list all targets
+```
+
+`make run` writes `runner/out/results.json` plus a per-control summary in the log.
+
+Equivalent raw commands (what the Makefile runs), from the repository root:
 
 ```bash
 mkdir -p runner/out

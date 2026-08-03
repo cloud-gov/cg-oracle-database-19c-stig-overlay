@@ -12,35 +12,35 @@ import (
 // the regex splits on the LAST '@' and the FIRST ':'/'/' of the host section.
 func TestConnRe(t *testing.T) {
 	cases := []struct {
-		name                                string
-		in                                  string
-		match                               bool
-		user, pass, host, port, service     string
+		name                            string
+		in                              string
+		match                           bool
+		user, pass, host, port, service string
 	}{
 		{
-			name:    "simple",
-			in:      "system/devpw@oracle:1521/FREEPDB1",
-			match:   true,
-			user:    "system", pass: "devpw", host: "oracle", port: "1521", service: "FREEPDB1",
+			name:  "simple",
+			in:    "system/devpw@oracle:1521/FREEPDB1",
+			match: true,
+			user:  "system", pass: "devpw", host: "oracle", port: "1521", service: "FREEPDB1",
 		},
 		{
-			name:    "tcps port",
-			in:      "master/s3cr3t@db.example.gov:2484/ORCL",
-			match:   true,
-			user:    "master", pass: "s3cr3t", host: "db.example.gov", port: "2484", service: "ORCL",
+			name:  "tcps port",
+			in:    "master/s3cr3t@db.example.gov:2484/ORCL",
+			match: true,
+			user:  "master", pass: "s3cr3t", host: "db.example.gov", port: "2484", service: "ORCL",
 		},
 		{
-			name:    "password with slash",
-			in:      "u/p/w@h:1521/s",
-			match:   true,
+			name:  "password with slash",
+			in:    "u/p/w@h:1521/s",
+			match: true,
 			// user is non-greedy up to first '/', pass is greedy to last '@'.
 			user: "u", pass: "p/w", host: "h", port: "1521", service: "s",
 		},
 		{
-			name:    "service with slash-like suffix",
-			in:      "u/p@h:1521/PDB1.sub.vcn",
-			match:   true,
-			user:    "u", pass: "p", host: "h", port: "1521", service: "PDB1.sub.vcn",
+			name:  "service with slash-like suffix",
+			in:    "u/p@h:1521/PDB1.sub.vcn",
+			match: true,
+			user:  "u", pass: "p", host: "h", port: "1521", service: "PDB1.sub.vcn",
 		},
 		{name: "missing port", in: "u/p@h/s", match: false},
 		{name: "non-numeric port", in: "u/p@h:abc/s", match: false},
@@ -166,4 +166,68 @@ func TestMustAtoi(t *testing.T) {
 			t.Errorf("mustAtoi(%q) = %d, want %d", c.in, got, c.want)
 		}
 	}
+}
+
+// TestBuildConnOptions covers the explicit-intent TLS logic (#16 / #20): the
+// default is verified TLS, verify-ca fails closed without a wallet, and the
+// insecure paths are opt-in only. TLS is never inferred from the port.
+func TestBuildConnOptions(t *testing.T) {
+	t.Run("default (empty) is verify-ca and fails closed without wallet", func(t *testing.T) {
+		_, err := buildConnOptions("", "")
+		if err == nil {
+			t.Fatal("expected fail-closed error when defaulting to verify-ca with no wallet, got nil")
+		}
+		if !strings.Contains(err.Error(), "ORAQUERY_WALLET") {
+			t.Errorf("error should mention the missing wallet, got: %v", err)
+		}
+	})
+
+	t.Run("verify-ca with wallet sets SSL + verify + wallet", func(t *testing.T) {
+		opts, err := buildConnOptions("verify-ca", "/etc/oracle/rds-ca")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if opts["SSL"] != "true" || opts["SSL VERIFY"] != "true" || opts["WALLET"] != "/etc/oracle/rds-ca" {
+			t.Errorf("verify-ca opts = %v, want SSL=true SSL VERIFY=true WALLET=/etc/oracle/rds-ca", opts)
+		}
+	})
+
+	t.Run("case-insensitive + trimmed mode", func(t *testing.T) {
+		opts, err := buildConnOptions("  Verify-CA  ", "/w")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if opts["SSL VERIFY"] != "true" {
+			t.Errorf("expected verified TLS for mixed-case/whitespace mode, got %v", opts)
+		}
+	})
+
+	t.Run("require = encrypt-only, verification explicitly off", func(t *testing.T) {
+		opts, err := buildConnOptions("require", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if opts["SSL"] != "true" || opts["SSL VERIFY"] != "false" {
+			t.Errorf("require opts = %v, want SSL=true SSL VERIFY=false", opts)
+		}
+		if _, ok := opts["WALLET"]; ok {
+			t.Errorf("require without a wallet must not set WALLET, got %v", opts)
+		}
+	})
+
+	t.Run("disable = plaintext, no SSL options at all", func(t *testing.T) {
+		opts, err := buildConnOptions("disable", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(opts) != 0 {
+			t.Errorf("disable must emit no TLS options, got %v", opts)
+		}
+	})
+
+	t.Run("unknown mode fails closed", func(t *testing.T) {
+		if _, err := buildConnOptions("sortof", "/w"); err == nil {
+			t.Fatal("expected error for unknown TLS mode, got nil")
+		}
+	})
 }

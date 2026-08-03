@@ -17,6 +17,16 @@
 // field contains a comma/quote/newline (encoding/csv defaults). No banners.
 // On error: non-zero exit + message on stderr (the resource treats non-zero /
 // a leading "error" as a failed query).
+//
+// TLS is controlled by explicit environment intent, never inferred from the port
+// (#16 / #20):
+//
+//	ORAQUERY_TLS=verify-ca (default) — TLS + server-cert verification; requires
+//	    ORAQUERY_WALLET (CA/wallet path). Fails closed if the wallet is missing.
+//	ORAQUERY_TLS=require            — TLS without verification (encrypt-only; not
+//	    MITM-safe; not compliance evidence).
+//	ORAQUERY_TLS=disable           — plaintext (local dev DB only; credential is
+//	    sent in the clear).
 package main
 
 import (
@@ -103,13 +113,16 @@ func main() {
 	m := connRe.FindStringSubmatch(connArg)
 	user, pass, host, port, service := m[1], m[2], m[3], m[4], m[5]
 
-	// TCPS (2484) → SSL on; else plain TCP. The resource passes the port; the
-	// caller selects 2484 for TLS. urlOptions lets us flip SSL by port.
-	opts := map[string]string{}
-	if port == "2484" {
-		opts["SSL"] = "true"
-		// server-cert verification is enforced by the CA/DN in the real (RDS)
-		// run via wallet/urlOptions; local 23ai uses plain TCP (1521).
+	// TLS is driven by explicit intent (ORAQUERY_TLS), NOT by the port number.
+	// This is the fix for #16/#20: a plaintext connection (which sends the DB
+	// credential in the clear) must never happen implicitly just because the
+	// port isn't 2484 — it requires an explicit, documented opt-in.
+	opts, err := buildConnOptions(
+		os.Getenv("ORAQUERY_TLS"),
+		os.Getenv("ORAQUERY_WALLET"),
+	)
+	if err != nil {
+		fail(err.Error())
 	}
 	url := go_ora.BuildUrl(host, mustAtoi(port), service, user, pass, opts)
 
@@ -187,4 +200,59 @@ func mustAtoi(s string) int {
 		fail("bad port: " + s)
 	}
 	return n
+}
+
+// buildConnOptions turns the explicit TLS intent (ORAQUERY_TLS) into go-ora
+// url options, failing closed rather than ever silently downgrading to a
+// plaintext connection (#16 / #20).
+//
+// Modes (case-insensitive):
+//
+//	verify-ca (DEFAULT) — TLS with server-certificate verification. Requires a
+//	    wallet/CA trust source (ORAQUERY_WALLET), because go-ora's default
+//	    "SSL VERIFY=true" against a private CA (e.g. the GovCloud RDS CA) will
+//	    fail the handshake with no trust anchor. Fail closed if no wallet is set.
+//	require — TLS WITHOUT server-cert verification (SSL VERIFY=false). Encrypts
+//	    the credential on the wire but does NOT authenticate the server, so it is
+//	    NOT MITM-safe and NOT compliance evidence. Allowed only when explicitly
+//	    requested.
+//	disable — plaintext. Sends the DB credential in the clear. Must be requested
+//	    explicitly; intended only for a local dev DB (e.g. gvenzl 23ai on 1521).
+//
+// An empty ORAQUERY_TLS defaults to verify-ca so the safe path is the default
+// and the insecure paths are opt-in.
+func buildConnOptions(tlsMode, wallet string) (map[string]string, error) {
+	opts := map[string]string{}
+
+	mode := strings.ToLower(strings.TrimSpace(tlsMode))
+	if mode == "" {
+		mode = "verify-ca"
+	}
+
+	switch mode {
+	case "verify-ca":
+		if strings.TrimSpace(wallet) == "" {
+			return nil, fmt.Errorf(
+				"ORAQUERY_TLS=verify-ca requires ORAQUERY_WALLET (path to the CA/wallet trust source); " +
+					"refusing to connect without server-certificate verification " +
+					"(set ORAQUERY_TLS=require to skip verification, or ORAQUERY_TLS=disable for a local plaintext dev DB)")
+		}
+		opts["SSL"] = "true"
+		opts["SSL VERIFY"] = "true"
+		opts["WALLET"] = wallet
+	case "require":
+		// Encrypt-only: server identity is NOT verified. Insecure against MITM;
+		// never valid as compliance evidence. Explicit opt-in only.
+		opts["SSL"] = "true"
+		opts["SSL VERIFY"] = "false"
+		if strings.TrimSpace(wallet) != "" {
+			opts["WALLET"] = wallet
+		}
+	case "disable":
+		// Plaintext — credential travels in the clear. Local dev only.
+	default:
+		return nil, fmt.Errorf("unknown ORAQUERY_TLS mode %q (want: verify-ca, require, or disable)", tlsMode)
+	}
+
+	return opts, nil
 }

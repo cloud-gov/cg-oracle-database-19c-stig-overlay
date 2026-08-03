@@ -83,5 +83,26 @@ matrices.
 ## Credentials
 
 Injected at runtime via env (`DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_SERVICE`/`DB_PORT`),
-never baked into the image. For the live-RDS Concourse run, use the master cred from
-the secret store and TCPS port 2484 with enforced cert validation.
+never baked into the image.
+
+## TLS (encryption in transit) — `ORAQUERY_TLS`
+
+`oraquery` decides TLS from **explicit intent**, never from the port number, and
+**fails closed** rather than silently sending the DB credential in cleartext
+(#16 / #20). Set `ORAQUERY_TLS`:
+
+| `ORAQUERY_TLS` | Behavior | Use for |
+| --- | --- | --- |
+| `verify-ca` (**default**) | TLS **with** server-certificate verification. Requires `ORAQUERY_WALLET=<CA/wallet path>`; fails closed if unset. | Real brokered RDS. The only mode valid toward compliance evidence. |
+| `require` | TLS **without** verification (encrypt-only). NOT MITM-safe; NOT compliance evidence. | Narrow debugging only. |
+| `disable` | Plaintext — credential sent in the clear. | A **local** dev DB only (e.g. gvenzl 23ai on 1521). |
+
+For the live-RDS Concourse / Cloud.gov run, use the master cred from the secret
+store, connect over **TCPS 2484**, and set `ORAQUERY_TLS=verify-ca` with
+`ORAQUERY_WALLET` pointing at the GovCloud RDS CA bundle. A plaintext/unverified
+connection to live RDS is refused by default.
+
+`run-validation.sh` auto-selects `ORAQUERY_TLS=disable` **only** when the target
+host is loopback/local and no mode was set, so the local `make run` path keeps
+working out of the box; any non-local target inherits the fail-closed
+`verify-ca` default.

@@ -22,6 +22,42 @@
 
 set -euo pipefail
 
+export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
+RUBY_BIN=/opt/cinc-auditor/embedded/bin/ruby
+[ -x "$RUBY_BIN" ] || RUBY_BIN=ruby
+ORAQUERY_BIN=/usr/local/bin/oraquery
+
+if [ -n "${VCAP_SERVICES:-}" ]; then
+    command -v "$RUBY_BIN" >/dev/null 2>&1 || {
+        echo "run-validation: VCAP_SERVICES provided, but ${RUBY_BIN} is not available to parse it" >&2
+        exit 1
+    }
+
+    echo "run-validation: parsing VCAP_SERVICES with ${RUBY_BIN}"
+    vcap_values="$($RUBY_BIN <<'RUBY'
+require 'json'
+
+services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
+credentials = services.fetch('aws-rds').first.fetch('credentials')
+
+puts [
+  credentials.fetch('username', ''),
+  credentials.fetch('password', ''),
+  credentials.fetch('host', ''),
+  credentials['db_name'] || credentials.fetch('name', ''),
+  credentials.fetch('port', ''),
+].join("\t")
+RUBY
+)"
+    IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port <<<"$vcap_values"
+
+    DB_USER="${DB_USER:-$vcap_user}"
+    DB_PASSWORD="${DB_PASSWORD:-$vcap_password}"
+    DB_HOST="${DB_HOST:-$vcap_host}"
+    DB_SERVICE="${DB_SERVICE:-$vcap_service}"
+    DB_PORT="${DB_PORT:-$vcap_port}"
+fi
+
 : "${DB_USER:?DB_USER required}"
 : "${DB_PASSWORD:?DB_PASSWORD required}"
 : "${DB_HOST:?DB_HOST required}"
@@ -47,14 +83,14 @@ echo "run-validation: CINC Auditor $(cinc-auditor version 2>/dev/null || inspec 
 echo "run-validation: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (TLS mode: ${ORAQUERY_TLS:-verify-ca})"
 
 # Inputs the overlay/baseline profile expects. oracledb_session shells out to the
-# pure-Go wrapper via sqlplus_bin=oraquery.
+# pure-Go wrapper via sqlplus_bin.
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
 host: '${DB_HOST}'
 service: '${DB_SERVICE}'
 port: ${DB_PORT}
-sqlplus_bin: 'oraquery'
+sqlplus_bin: '${ORAQUERY_BIN}'
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

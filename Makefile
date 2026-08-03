@@ -13,7 +13,13 @@
 # (runner/Dockerfile uses cincproject/auditor:6). Override on the CLI, e.g.
 #   make check AUDITOR_IMAGE=cincproject/auditor:7
 AUDITOR_IMAGE ?= cincproject/auditor:6
-RUNNER_IMAGE  ?= cg-stig-runner:local
+RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
+CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
+CLOUDGOV_PLATFORM ?= linux/amd64
+DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
+CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
+CF_IDLE_COMMAND ?= sleep infinity
+CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
 COMPOSE_FILE  ?= runner/docker-compose.yml
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
@@ -46,9 +52,28 @@ vendor: deps ## Resolve the profile's git dependency (pinned by inspec.lock)
 check: deps ## Static profile validation (cinc-auditor check) — no DB needed
 	$(DOCKER_RUN) check /share
 
-.PHONY: build
-build: deps ## Build the runner image (builds oraquery from source; no committed binary)
+.PHONY: build build-local
+build: build-local ## Build the runner image for local testing
+
+build-local: deps ## Build the runner image for local testing
 	docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .
+
+.PHONY: build-cloudgov
+build-cloudgov: deps ## Build the runner image for Cloud.gov (linux/amd64) and load it locally
+	docker buildx build --platform $(CLOUDGOV_PLATFORM) \
+	  -f runner/Dockerfile \
+	  -t $(CLOUDGOV_IMAGE) \
+	  --load \
+	  .
+
+.PHONY: push-dockerhub
+push-dockerhub: build-cloudgov ## Build and push the Cloud.gov linux/amd64 image to Docker Hub
+	docker push $(DOCKERHUB_IMAGE)
+
+.PHONY: push-cloudgov
+push-cloudgov: push-dockerhub ## Push an idle Docker image app to Cloud.gov for cf ssh validation runs
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	cf push $(CLOUDGOV_APP) --docker-image $(DOCKERHUB_IMAGE) $(CF_PUSH_FLAGS)
 
 .PHONY: test-go
 test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)

@@ -36,6 +36,15 @@ Equivalent raw commands (what the Makefile runs), from the repository root:
 docker compose -f runner/docker-compose.yml up --build --abort-on-container-exit
 ```
 
+For a real brokered RDS instance on Cloud.gov, push the idle validation app, bind the Oracle service, restage so `VCAP_SERVICES` is available, then run validation over SSH:
+
+```bash
+make push-cloudgov
+cf bind-service cg-cinc-audit-oracle-runner <oracle-db>
+cf restage cg-cinc-audit-oracle-runner
+cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
+```
+
 ## What's here
 
 | Path | Purpose |

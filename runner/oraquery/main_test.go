@@ -2,9 +2,18 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestConnRe covers the connect-string regex the resource passes as
@@ -168,66 +177,130 @@ func TestMustAtoi(t *testing.T) {
 	}
 }
 
-// TestBuildConnOptions covers the explicit-intent TLS logic (#16 / #20): the
-// default is verified TLS, verify-ca fails closed without a wallet, and the
-// insecure paths are opt-in only. TLS is never inferred from the port.
-func TestBuildConnOptions(t *testing.T) {
-	t.Run("default (empty) is verify-ca and fails closed without wallet", func(t *testing.T) {
-		_, err := buildConnOptions("", "")
+// TestPlanTLS covers the explicit-intent TLS logic (#16 / #20): the default is
+// verified TLS, verify-ca fails closed without a CA bundle, the insecure paths
+// are opt-in only, and TLS is never inferred from the port. It uses a self-signed
+// fixture PEM written to a temp file (no real RDS CA is required for the unit test).
+func TestPlanTLS(t *testing.T) {
+	caPath := writeTestCABundle(t)
+
+	t.Run("default (empty) is verify-ca and fails closed without a CA bundle", func(t *testing.T) {
+		_, err := planTLS("", "")
 		if err == nil {
-			t.Fatal("expected fail-closed error when defaulting to verify-ca with no wallet, got nil")
+			t.Fatal("expected fail-closed error when defaulting to verify-ca with no CA bundle, got nil")
 		}
-		if !strings.Contains(err.Error(), "ORAQUERY_WALLET") {
-			t.Errorf("error should mention the missing wallet, got: %v", err)
+		if !strings.Contains(err.Error(), "ORAQUERY_CA_BUNDLE") {
+			t.Errorf("error should mention the missing CA bundle, got: %v", err)
 		}
 	})
 
-	t.Run("verify-ca with wallet sets SSL + verify + wallet", func(t *testing.T) {
-		opts, err := buildConnOptions("verify-ca", "/etc/oracle/rds-ca")
+	t.Run("verify-ca with a valid PEM bundle sets verified TLS + builds a RootCAs pool", func(t *testing.T) {
+		plan, err := planTLS("verify-ca", caPath)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if opts["SSL"] != "true" || opts["SSL VERIFY"] != "true" || opts["WALLET"] != "/etc/oracle/rds-ca" {
-			t.Errorf("verify-ca opts = %v, want SSL=true SSL VERIFY=true WALLET=/etc/oracle/rds-ca", opts)
+		if plan.urlOptions["SSL"] != "true" || plan.urlOptions["SSL VERIFY"] != "true" {
+			t.Errorf("verify-ca url options = %v, want SSL=true SSL VERIFY=true", plan.urlOptions)
+		}
+		if _, ok := plan.urlOptions["WALLET"]; ok {
+			t.Errorf("must NOT set go-ora WALLET option for a PEM bundle, got %v", plan.urlOptions)
+		}
+		if plan.tlsConfig == nil {
+			t.Fatal("verify-ca must build a *tls.Config, got nil")
+		}
+		if plan.tlsConfig.InsecureSkipVerify {
+			t.Error("verify-ca must NOT set InsecureSkipVerify")
+		}
+		if plan.tlsConfig.RootCAs == nil {
+			t.Error("verify-ca must populate RootCAs from the PEM bundle")
+		}
+	})
+
+	t.Run("verify-ca fails closed on a missing CA file", func(t *testing.T) {
+		if _, err := planTLS("verify-ca", filepath.Join(t.TempDir(), "does-not-exist.pem")); err == nil {
+			t.Fatal("expected fail-closed error for a missing CA bundle file, got nil")
+		}
+	})
+
+	t.Run("verify-ca fails closed on a non-PEM / empty file", func(t *testing.T) {
+		bogus := filepath.Join(t.TempDir(), "notpem.txt")
+		if err := os.WriteFile(bogus, []byte("this is not a certificate\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := planTLS("verify-ca", bogus); err == nil {
+			t.Fatal("expected fail-closed error for a file with no PEM certs, got nil")
 		}
 	})
 
 	t.Run("case-insensitive + trimmed mode", func(t *testing.T) {
-		opts, err := buildConnOptions("  Verify-CA  ", "/w")
+		plan, err := planTLS("  Verify-CA  ", caPath)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if opts["SSL VERIFY"] != "true" {
-			t.Errorf("expected verified TLS for mixed-case/whitespace mode, got %v", opts)
+		if plan.urlOptions["SSL VERIFY"] != "true" || plan.tlsConfig == nil {
+			t.Errorf("expected verified TLS for mixed-case/whitespace mode, got %v", plan.urlOptions)
 		}
 	})
 
-	t.Run("require = encrypt-only, verification explicitly off", func(t *testing.T) {
-		opts, err := buildConnOptions("require", "")
+	t.Run("require = encrypt-only, verification explicitly off, no pool, no CA needed", func(t *testing.T) {
+		plan, err := planTLS("require", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if opts["SSL"] != "true" || opts["SSL VERIFY"] != "false" {
-			t.Errorf("require opts = %v, want SSL=true SSL VERIFY=false", opts)
+		if plan.urlOptions["SSL"] != "true" || plan.urlOptions["SSL VERIFY"] != "false" {
+			t.Errorf("require url options = %v, want SSL=true SSL VERIFY=false", plan.urlOptions)
 		}
-		if _, ok := opts["WALLET"]; ok {
-			t.Errorf("require without a wallet must not set WALLET, got %v", opts)
+		if plan.tlsConfig != nil {
+			t.Errorf("require must not build a verifying tls.Config, got %v", plan.tlsConfig)
 		}
 	})
 
-	t.Run("disable = plaintext, no SSL options at all", func(t *testing.T) {
-		opts, err := buildConnOptions("disable", "")
+	t.Run("disable = plaintext, no SSL options, no pool", func(t *testing.T) {
+		plan, err := planTLS("disable", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(opts) != 0 {
-			t.Errorf("disable must emit no TLS options, got %v", opts)
+		if len(plan.urlOptions) != 0 {
+			t.Errorf("disable must emit no TLS url options, got %v", plan.urlOptions)
+		}
+		if plan.tlsConfig != nil {
+			t.Errorf("disable must not build a tls.Config, got %v", plan.tlsConfig)
 		}
 	})
 
 	t.Run("unknown mode fails closed", func(t *testing.T) {
-		if _, err := buildConnOptions("sortof", "/w"); err == nil {
+		if _, err := planTLS("sortof", caPath); err == nil {
 			t.Fatal("expected error for unknown TLS mode, got nil")
 		}
 	})
+}
+
+// writeTestCABundle generates a throwaway self-signed CA cert, writes it as PEM to
+// a temp file, and returns the path. This lets the verify-ca path be unit-tested
+// without a real AWS RDS CA bundle.
+func writeTestCABundle(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "oraquery-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "test-ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
+		t.Fatalf("write pem: %v", err)
+	}
+	return path
 }

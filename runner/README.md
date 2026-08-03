@@ -82,10 +82,16 @@ matrices.
 
 ## Credentials
 
-Injected at runtime via env (`DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_SERVICE`/`DB_PORT`),
-never baked into the image.
+Connection coordinates are injected at runtime, never baked into the image.
 
-## TLS (encryption in transit) — `ORAQUERY_TLS`
+- **Local / ad hoc runs:** provide `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_SERVICE`
+  (and optionally `DB_PORT`, default `1521`) as environment variables.
+- **Cloud.gov live-RDS runs:** bind the app to the brokered RDS service and read the
+  coordinates from `VCAP_SERVICES` (label `aws-rds`): `host`, `port`, `username`,
+  `password`, `db_name`. There is no separate secret store — the bound service *is*
+  the source. The binding does **not** carry a TLS CA cert (see below).
+
+## TLS (encryption in transit) — `ORAQUERY_TLS` + `ORAQUERY_CA_BUNDLE`
 
 `oraquery` decides TLS from **explicit intent**, never from the port number, and
 **fails closed** rather than silently sending the DB credential in cleartext
@@ -93,14 +99,22 @@ never baked into the image.
 
 | `ORAQUERY_TLS` | Behavior | Use for |
 | --- | --- | --- |
-| `verify-ca` (**default**) | TLS **with** server-certificate verification. Requires `ORAQUERY_WALLET=<CA/wallet path>`; fails closed if unset. | Real brokered RDS. The only mode valid toward compliance evidence. |
+| `verify-ca` (**default**) | TLS **with** server-certificate verification. Requires `ORAQUERY_CA_BUNDLE=<PEM path>`; fails closed if unset/empty/invalid. | Real brokered RDS. The only mode valid toward compliance evidence. |
 | `require` | TLS **without** verification (encrypt-only). NOT MITM-safe; NOT compliance evidence. | Narrow debugging only. |
 | `disable` | Plaintext — credential sent in the clear. | A **local** dev DB only (e.g. gvenzl 23ai on 1521). |
 
-For the live-RDS Concourse / Cloud.gov run, use the master cred from the secret
-store, connect over **TCPS 2484**, and set `ORAQUERY_TLS=verify-ca` with
-`ORAQUERY_WALLET` pointing at the GovCloud RDS CA bundle. A plaintext/unverified
-connection to live RDS is refused by default.
+`ORAQUERY_CA_BUNDLE` is a **PEM CA bundle** (the naming matches `AWS_CA_BUNDLE` /
+`SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE`). `oraquery` loads it into an x509 pool and
+injects it via go-ora's `WithTLSConfig`. Note this is **not** go-ora's `WALLET`
+option: that expects an Oracle wallet directory (`cwallet.sso`/`ewallet.p12`) and
+rejects a PEM. AWS RDS publishes its root CA only as a PEM.
+
+For the live-RDS Cloud.gov run: connect over **TCPS 2484**, set
+`ORAQUERY_TLS=verify-ca`, and point `ORAQUERY_CA_BUNDLE` at the AWS GovCloud RDS
+root CA bundle. That bundle is a public (non-secret) trust anchor baked into the
+runner image at build time (checksum-pinned) — tracked in #23 — because the
+`aws-rds` binding does not provide it. A plaintext/unverified connection to live
+RDS is refused by default.
 
 `run-validation.sh` auto-selects `ORAQUERY_TLS=disable` **only** when the target
 host is loopback/local and no mode was set, so the local `make run` path keeps

@@ -21,16 +21,23 @@
 // TLS is controlled by explicit environment intent, never inferred from the port
 // (#16 / #20):
 //
-//	ORAQUERY_TLS=verify-ca (default) — TLS + server-cert verification; requires
-//	    ORAQUERY_WALLET (CA/wallet path). Fails closed if the wallet is missing.
+//	ORAQUERY_TLS=verify-ca (default) — TLS + server-certificate verification.
+//	    Requires ORAQUERY_CA_BUNDLE (a PEM CA bundle, e.g. the AWS GovCloud RDS
+//	    root CA). Fails closed if the bundle is missing/empty/invalid.
 //	ORAQUERY_TLS=require            — TLS without verification (encrypt-only; not
 //	    MITM-safe; not compliance evidence).
 //	ORAQUERY_TLS=disable           — plaintext (local dev DB only; credential is
 //	    sent in the clear).
+//
+// The PEM is loaded into an x509 pool and injected via OracleConnector.WithTLSConfig
+// — NOT go-ora's "WALLET" url-option, which requires an Oracle wallet directory
+// (cwallet.sso/ewallet.p12) and rejects a PEM bundle.
 package main
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
@@ -117,16 +124,16 @@ func main() {
 	// This is the fix for #16/#20: a plaintext connection (which sends the DB
 	// credential in the clear) must never happen implicitly just because the
 	// port isn't 2484 — it requires an explicit, documented opt-in.
-	opts, err := buildConnOptions(
+	plan, err := planTLS(
 		os.Getenv("ORAQUERY_TLS"),
-		os.Getenv("ORAQUERY_WALLET"),
+		os.Getenv("ORAQUERY_CA_BUNDLE"),
 	)
 	if err != nil {
 		fail(err.Error())
 	}
-	url := go_ora.BuildUrl(host, mustAtoi(port), service, user, pass, opts)
+	url := go_ora.BuildUrl(host, mustAtoi(port), service, user, pass, plan.urlOptions)
 
-	db, err := sql.Open("oracle", url)
+	db, err := openDB(url, host, plan)
 	if err != nil {
 		fail("open: " + err.Error())
 	}
@@ -194,24 +201,26 @@ func toStr(v any) string {
 	}
 }
 
-func mustAtoi(s string) int {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		fail("bad port: " + s)
-	}
-	return n
+// tlsPlan is the outcome of resolving ORAQUERY_TLS: the go-ora url options plus,
+// for the verifying path, a *tls.Config carrying the PEM-loaded root pool that
+// must be injected via OracleConnector.WithTLSConfig (go-ora's WALLET option
+// cannot consume a PEM — see planTLS).
+type tlsPlan struct {
+	urlOptions map[string]string
+	tlsConfig  *tls.Config // nil unless a verified-TLS pool was built
 }
 
-// buildConnOptions turns the explicit TLS intent (ORAQUERY_TLS) into go-ora
-// url options, failing closed rather than ever silently downgrading to a
-// plaintext connection (#16 / #20).
+// planTLS turns the explicit TLS intent (ORAQUERY_TLS) into a connection plan,
+// failing closed rather than ever silently downgrading to a plaintext
+// connection (#16 / #20).
 //
 // Modes (case-insensitive):
 //
 //	verify-ca (DEFAULT) — TLS with server-certificate verification. Requires a
-//	    wallet/CA trust source (ORAQUERY_WALLET), because go-ora's default
-//	    "SSL VERIFY=true" against a private CA (e.g. the GovCloud RDS CA) will
-//	    fail the handshake with no trust anchor. Fail closed if no wallet is set.
+//	    PEM CA bundle (ORAQUERY_CA_BUNDLE), e.g. the AWS GovCloud RDS root CA.
+//	    The PEM is loaded into an x509 pool and returned as a *tls.Config for
+//	    WithTLSConfig. Fails closed if the bundle is missing, unreadable, or
+//	    contains no usable certificate.
 //	require — TLS WITHOUT server-cert verification (SSL VERIFY=false). Encrypts
 //	    the credential on the wire but does NOT authenticate the server, so it is
 //	    NOT MITM-safe and NOT compliance evidence. Allowed only when explicitly
@@ -221,8 +230,13 @@ func mustAtoi(s string) int {
 //
 // An empty ORAQUERY_TLS defaults to verify-ca so the safe path is the default
 // and the insecure paths are opt-in.
-func buildConnOptions(tlsMode, wallet string) (map[string]string, error) {
-	opts := map[string]string{}
+//
+// NOTE on go-ora: the WALLET url-option is NOT used. It expects an Oracle wallet
+// directory (cwallet.sso/ewallet.p12, magic-byte validated) and rejects a PEM.
+// AWS RDS publishes its root CA only as a PEM, so we trust it via a *tls.Config
+// RootCAs pool injected through WithTLSConfig instead.
+func planTLS(tlsMode, caBundlePath string) (tlsPlan, error) {
+	plan := tlsPlan{urlOptions: map[string]string{}}
 
 	mode := strings.ToLower(strings.TrimSpace(tlsMode))
 	if mode == "" {
@@ -231,28 +245,74 @@ func buildConnOptions(tlsMode, wallet string) (map[string]string, error) {
 
 	switch mode {
 	case "verify-ca":
-		if strings.TrimSpace(wallet) == "" {
-			return nil, fmt.Errorf(
-				"ORAQUERY_TLS=verify-ca requires ORAQUERY_WALLET (path to the CA/wallet trust source); " +
-					"refusing to connect without server-certificate verification " +
-					"(set ORAQUERY_TLS=require to skip verification, or ORAQUERY_TLS=disable for a local plaintext dev DB)")
+		if strings.TrimSpace(caBundlePath) == "" {
+			return tlsPlan{}, fmt.Errorf(
+				"ORAQUERY_TLS=verify-ca requires ORAQUERY_CA_BUNDLE (path to a PEM CA bundle, " +
+					"e.g. the AWS GovCloud RDS root CA); refusing to connect without server-certificate " +
+					"verification (set ORAQUERY_TLS=require to skip verification, or " +
+					"ORAQUERY_TLS=disable for a local plaintext dev DB)")
 		}
-		opts["SSL"] = "true"
-		opts["SSL VERIFY"] = "true"
-		opts["WALLET"] = wallet
+		pool, err := loadCABundle(caBundlePath)
+		if err != nil {
+			return tlsPlan{}, err
+		}
+		plan.urlOptions["SSL"] = "true"
+		// SSL VERIFY defaults to true in go-ora; set it explicitly so intent is clear.
+		plan.urlOptions["SSL VERIFY"] = "true"
+		// ServerName is set to the connect host at openDB time (we don't have it here).
+		plan.tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    pool,
+			// InsecureSkipVerify stays false — the whole point of verify-ca.
+		}
 	case "require":
 		// Encrypt-only: server identity is NOT verified. Insecure against MITM;
 		// never valid as compliance evidence. Explicit opt-in only.
-		opts["SSL"] = "true"
-		opts["SSL VERIFY"] = "false"
-		if strings.TrimSpace(wallet) != "" {
-			opts["WALLET"] = wallet
-		}
+		plan.urlOptions["SSL"] = "true"
+		plan.urlOptions["SSL VERIFY"] = "false"
 	case "disable":
 		// Plaintext — credential travels in the clear. Local dev only.
 	default:
-		return nil, fmt.Errorf("unknown ORAQUERY_TLS mode %q (want: verify-ca, require, or disable)", tlsMode)
+		return tlsPlan{}, fmt.Errorf("unknown ORAQUERY_TLS mode %q (want: verify-ca, require, or disable)", tlsMode)
 	}
 
-	return opts, nil
+	return plan, nil
+}
+
+// loadCABundle reads a PEM CA bundle from disk into an x509 pool, failing closed
+// if the file is unreadable or contains no usable certificate (so a truncated or
+// wrong-format bundle can never silently produce an empty, everything-fails —
+// or worse, everything-passes — trust set).
+func loadCABundle(path string) (*x509.CertPool, error) {
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("ORAQUERY_CA_BUNDLE %q: %v", path, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("ORAQUERY_CA_BUNDLE %q: no PEM certificates found (expected a CA bundle)", path)
+	}
+	return pool, nil
+}
+
+// openDB opens the go-ora connection, injecting the verified-TLS config (with the
+// server name pinned to the connect host) when planTLS built one; otherwise it
+// opens with the url options alone (require/disable paths).
+func openDB(url, host string, plan tlsPlan) (*sql.DB, error) {
+	if plan.tlsConfig == nil {
+		return sql.Open("oracle", url)
+	}
+	cfg := plan.tlsConfig.Clone()
+	cfg.ServerName = host
+	connector := go_ora.NewConnector(url).(*go_ora.OracleConnector)
+	connector.WithTLSConfig(cfg)
+	return sql.OpenDB(connector), nil
+}
+
+func mustAtoi(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		fail("bad port: " + s)
+	}
+	return n
 }

@@ -42,6 +42,9 @@ inputs:
   - name: service
     description: 'Oracle DB service name'
     value: ''
+  - name: port
+    description: 'Oracle DB port (1521 plaintext; 2484 TCPS/TLS)'
+    value: 1521
   - name: sqlplus_bin
     description: 'Path to the query client binary (sqlplus / go-ora shim)'
     value: ''

@@ -138,7 +138,7 @@ func main() {
 	}
 	url := go_ora.BuildUrl(host, mustAtoi(port), service, user, pass, plan.urlOptions)
 
-	db, err := openDB(url, host, plan)
+	db, err := openDB(url, plan)
 	if err != nil {
 		fail("open: " + err.Error())
 	}
@@ -304,7 +304,7 @@ func planTLS(tlsMode, caBundlePath, host, port string) (tlsPlan, error) {
 		plan.urlOptions["SSL"] = "true"
 		// SSL VERIFY defaults to true in go-ora; set it explicitly so intent is clear.
 		plan.urlOptions["SSL VERIFY"] = "true"
-		// ServerName is set to the connect host at openDB time (we don't have it here).
+		// ServerName is left unset: go-ora's negotiate() pins it to the connect host.
 		plan.tlsConfig = &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    pool,
@@ -356,17 +356,17 @@ func loadCABundle(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// openDB opens the go-ora connection, injecting the verified-TLS config (with the
-// server name pinned to the connect host) when planTLS built one; otherwise it
-// opens with the url options alone (require/disable paths).
-func openDB(url, host string, plan tlsPlan) (*sql.DB, error) {
+// openDB opens the go-ora connection, injecting the verified-TLS config when
+// planTLS built one; otherwise it opens with the url options alone
+// (require/disable paths). We intentionally do NOT set tls.Config.ServerName:
+// go-ora's negotiate() sets it to the connect host itself, so setting it here is
+// redundant (both resolve to the same host; no verification-bypass risk).
+func openDB(url string, plan tlsPlan) (*sql.DB, error) {
 	if plan.tlsConfig == nil {
 		return sql.Open("oracle", url)
 	}
-	cfg := plan.tlsConfig.Clone()
-	cfg.ServerName = host
 	connector := go_ora.NewConnector(url).(*go_ora.OracleConnector)
-	connector.WithTLSConfig(cfg)
+	connector.WithTLSConfig(plan.tlsConfig.Clone())
 	return sql.OpenDB(connector), nil
 }
 

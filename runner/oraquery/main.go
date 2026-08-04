@@ -127,9 +127,14 @@ func main() {
 	plan, err := planTLS(
 		os.Getenv("ORAQUERY_TLS"),
 		os.Getenv("ORAQUERY_CA_BUNDLE"),
+		host,
+		port,
 	)
 	if err != nil {
 		fail(err.Error())
+	}
+	for _, w := range plan.warnings {
+		fmt.Fprintln(os.Stderr, "warning: "+w)
 	}
 	url := go_ora.BuildUrl(host, mustAtoi(port), service, user, pass, plan.urlOptions)
 
@@ -204,10 +209,34 @@ func toStr(v any) string {
 // tlsPlan is the outcome of resolving ORAQUERY_TLS: the go-ora url options plus,
 // for the verifying path, a *tls.Config carrying the PEM-loaded root pool that
 // must be injected via OracleConnector.WithTLSConfig (go-ora's WALLET option
-// cannot consume a PEM — see planTLS).
+// cannot consume a PEM — see planTLS). warnings are non-fatal advisories the
+// caller prints to stderr (e.g. an encrypt-only/plaintext mode against a remote
+// host).
 type tlsPlan struct {
 	urlOptions map[string]string
 	tlsConfig  *tls.Config // nil unless a verified-TLS pool was built
+	warnings   []string
+}
+
+// oraclePlaintextPort is the default Oracle listener port (cleartext TNS).
+// Verified/encrypted TLS is served on TCPS 2484; attempting TLS at 1521 hits the
+// plaintext listener and fails, so we guard against that footgun (Finding #2).
+const (
+	oraclePlaintextPort = "1521"
+	oracleTCPSPort      = "2484"
+)
+
+// isLocalHost reports whether host is an unmistakably local target, for which a
+// plaintext dev DB is acceptable. NOTE: this is a deliberately small allowlist;
+// docker-compose services under other names (e.g. "oracle-db", "db") are treated
+// as remote and inherit the fail-closed verify-ca default (Finding #4).
+func isLocalHost(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "oracle":
+		return true
+	default:
+		return false
+	}
 }
 
 // planTLS turns the explicit TLS intent (ORAQUERY_TLS) into a connection plan,
@@ -231,11 +260,19 @@ type tlsPlan struct {
 // An empty ORAQUERY_TLS defaults to verify-ca so the safe path is the default
 // and the insecure paths are opt-in.
 //
+// host/port drive two safety checks:
+//   - Finding #2: a TLS mode (verify-ca/require) aimed at the plaintext port
+//     1521 is refused (fail closed) — TLS at the cleartext listener can only
+//     fail, and allowing it invites the inverse of the #20 footgun. Live RDS
+//     must target TCPS 2484.
+//   - Finding #3: an insecure mode (require/disable) against a non-local host
+//     yields a loud warning so it is visible in CI logs.
+//
 // NOTE on go-ora: the WALLET url-option is NOT used. It expects an Oracle wallet
 // directory (cwallet.sso/ewallet.p12, magic-byte validated) and rejects a PEM.
 // AWS RDS publishes its root CA only as a PEM, so we trust it via a *tls.Config
 // RootCAs pool injected through WithTLSConfig instead.
-func planTLS(tlsMode, caBundlePath string) (tlsPlan, error) {
+func planTLS(tlsMode, caBundlePath, host, port string) (tlsPlan, error) {
 	plan := tlsPlan{urlOptions: map[string]string{}}
 
 	mode := strings.ToLower(strings.TrimSpace(tlsMode))
@@ -243,8 +280,16 @@ func planTLS(tlsMode, caBundlePath string) (tlsPlan, error) {
 		mode = "verify-ca"
 	}
 
+	local := isLocalHost(host)
+
 	switch mode {
 	case "verify-ca":
+		if port == oraclePlaintextPort {
+			return tlsPlan{}, fmt.Errorf(
+				"ORAQUERY_TLS=verify-ca cannot connect to the plaintext Oracle port %s — verified TLS is "+
+					"served on TCPS %s; point the target at %s (or set ORAQUERY_TLS=disable for a local "+
+					"plaintext dev DB)", oraclePlaintextPort, oracleTCPSPort, oracleTCPSPort)
+		}
 		if strings.TrimSpace(caBundlePath) == "" {
 			return tlsPlan{}, fmt.Errorf(
 				"ORAQUERY_TLS=verify-ca requires ORAQUERY_CA_BUNDLE (path to a PEM CA bundle, " +
@@ -268,10 +313,26 @@ func planTLS(tlsMode, caBundlePath string) (tlsPlan, error) {
 	case "require":
 		// Encrypt-only: server identity is NOT verified. Insecure against MITM;
 		// never valid as compliance evidence. Explicit opt-in only.
+		if port == oraclePlaintextPort {
+			return tlsPlan{}, fmt.Errorf(
+				"ORAQUERY_TLS=require cannot connect to the plaintext Oracle port %s — TLS is served on "+
+					"TCPS %s; point the target at %s (or set ORAQUERY_TLS=disable for plaintext)",
+				oraclePlaintextPort, oracleTCPSPort, oracleTCPSPort)
+		}
 		plan.urlOptions["SSL"] = "true"
 		plan.urlOptions["SSL VERIFY"] = "false"
+		if !local {
+			plan.warnings = append(plan.warnings,
+				"ORAQUERY_TLS=require: connection is encrypted but the server certificate is NOT verified "+
+					"(not MITM-safe, not compliance evidence) against remote host "+host)
+		}
 	case "disable":
 		// Plaintext — credential travels in the clear. Local dev only.
+		if !local {
+			plan.warnings = append(plan.warnings,
+				"ORAQUERY_TLS=disable: sending the DB credential in PLAINTEXT to non-local host "+host+
+					" — dev/testing only, never compliance evidence")
+		}
 	default:
 		return tlsPlan{}, fmt.Errorf("unknown ORAQUERY_TLS mode %q (want: verify-ca, require, or disable)", tlsMode)
 	}

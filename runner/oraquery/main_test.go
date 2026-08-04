@@ -181,11 +181,14 @@ func TestMustAtoi(t *testing.T) {
 // verified TLS, verify-ca fails closed without a CA bundle, the insecure paths
 // are opt-in only, and TLS is never inferred from the port. It uses a self-signed
 // fixture PEM written to a temp file (no real RDS CA is required for the unit test).
+// A remote (non-local) TCPS host is used so port/host guards don't interfere.
 func TestPlanTLS(t *testing.T) {
 	caPath := writeTestCABundle(t)
+	const remote = "db.example.gov" // non-local
+	const tcps = "2484"
 
 	t.Run("default (empty) is verify-ca and fails closed without a CA bundle", func(t *testing.T) {
-		_, err := planTLS("", "")
+		_, err := planTLS("", "", remote, tcps)
 		if err == nil {
 			t.Fatal("expected fail-closed error when defaulting to verify-ca with no CA bundle, got nil")
 		}
@@ -195,7 +198,7 @@ func TestPlanTLS(t *testing.T) {
 	})
 
 	t.Run("verify-ca with a valid PEM bundle sets verified TLS + builds a RootCAs pool", func(t *testing.T) {
-		plan, err := planTLS("verify-ca", caPath)
+		plan, err := planTLS("verify-ca", caPath, remote, tcps)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -214,10 +217,13 @@ func TestPlanTLS(t *testing.T) {
 		if plan.tlsConfig.RootCAs == nil {
 			t.Error("verify-ca must populate RootCAs from the PEM bundle")
 		}
+		if len(plan.warnings) != 0 {
+			t.Errorf("verify-ca to a TCPS host should not warn, got %v", plan.warnings)
+		}
 	})
 
 	t.Run("verify-ca fails closed on a missing CA file", func(t *testing.T) {
-		if _, err := planTLS("verify-ca", filepath.Join(t.TempDir(), "does-not-exist.pem")); err == nil {
+		if _, err := planTLS("verify-ca", filepath.Join(t.TempDir(), "does-not-exist.pem"), remote, tcps); err == nil {
 			t.Fatal("expected fail-closed error for a missing CA bundle file, got nil")
 		}
 	})
@@ -227,13 +233,31 @@ func TestPlanTLS(t *testing.T) {
 		if err := os.WriteFile(bogus, []byte("this is not a certificate\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := planTLS("verify-ca", bogus); err == nil {
+		if _, err := planTLS("verify-ca", bogus, remote, tcps); err == nil {
 			t.Fatal("expected fail-closed error for a file with no PEM certs, got nil")
 		}
 	})
 
+	// Finding #2: a TLS mode aimed at the plaintext port 1521 must fail closed,
+	// and must do so BEFORE requiring the CA bundle (the port is the fundamental problem).
+	t.Run("verify-ca against plaintext port 1521 fails closed (before CA check)", func(t *testing.T) {
+		_, err := planTLS("verify-ca", caPath, remote, "1521")
+		if err == nil {
+			t.Fatal("expected fail-closed error for verify-ca against port 1521, got nil")
+		}
+		if !strings.Contains(err.Error(), "2484") {
+			t.Errorf("error should point the operator at TCPS 2484, got: %v", err)
+		}
+	})
+
+	t.Run("require against plaintext port 1521 fails closed", func(t *testing.T) {
+		if _, err := planTLS("require", "", remote, "1521"); err == nil {
+			t.Fatal("expected fail-closed error for require against port 1521, got nil")
+		}
+	})
+
 	t.Run("case-insensitive + trimmed mode", func(t *testing.T) {
-		plan, err := planTLS("  Verify-CA  ", caPath)
+		plan, err := planTLS("  Verify-CA  ", caPath, remote, tcps)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -242,8 +266,9 @@ func TestPlanTLS(t *testing.T) {
 		}
 	})
 
-	t.Run("require = encrypt-only, verification explicitly off, no pool, no CA needed", func(t *testing.T) {
-		plan, err := planTLS("require", "")
+	// Finding #3: insecure modes against a remote host must warn loudly.
+	t.Run("require = encrypt-only, verification off, warns on remote host", func(t *testing.T) {
+		plan, err := planTLS("require", "", remote, tcps)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -253,10 +278,13 @@ func TestPlanTLS(t *testing.T) {
 		if plan.tlsConfig != nil {
 			t.Errorf("require must not build a verifying tls.Config, got %v", plan.tlsConfig)
 		}
+		if len(plan.warnings) == 0 {
+			t.Error("require against a remote host must emit a warning")
+		}
 	})
 
-	t.Run("disable = plaintext, no SSL options, no pool", func(t *testing.T) {
-		plan, err := planTLS("disable", "")
+	t.Run("disable = plaintext, no SSL options, warns on remote host", func(t *testing.T) {
+		plan, err := planTLS("disable", "", remote, "1521")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -266,13 +294,41 @@ func TestPlanTLS(t *testing.T) {
 		if plan.tlsConfig != nil {
 			t.Errorf("disable must not build a tls.Config, got %v", plan.tlsConfig)
 		}
+		if len(plan.warnings) == 0 {
+			t.Error("disable against a remote host must emit a warning")
+		}
+	})
+
+	t.Run("disable against a local host does not warn", func(t *testing.T) {
+		plan, err := planTLS("disable", "", "localhost", "1521")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(plan.warnings) != 0 {
+			t.Errorf("disable against localhost should not warn, got %v", plan.warnings)
+		}
 	})
 
 	t.Run("unknown mode fails closed", func(t *testing.T) {
-		if _, err := planTLS("sortof", caPath); err == nil {
+		if _, err := planTLS("sortof", caPath, remote, tcps); err == nil {
 			t.Fatal("expected error for unknown TLS mode, got nil")
 		}
 	})
+}
+
+// TestIsLocalHost documents the deliberately-small local allowlist (Finding #4):
+// compose services under other names are treated as remote (fail-closed).
+func TestIsLocalHost(t *testing.T) {
+	for _, h := range []string{"localhost", "127.0.0.1", "::1", "oracle"} {
+		if !isLocalHost(h) {
+			t.Errorf("isLocalHost(%q) = false, want true", h)
+		}
+	}
+	for _, h := range []string{"oracle-db", "db", "rds.example.gov", ""} {
+		if isLocalHost(h) {
+			t.Errorf("isLocalHost(%q) = true, want false", h)
+		}
+	}
 }
 
 // writeTestCABundle generates a throwaway self-signed CA cert, writes it as PEM to

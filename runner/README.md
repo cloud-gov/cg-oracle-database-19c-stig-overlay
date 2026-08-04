@@ -116,7 +116,18 @@ runner image at build time (checksum-pinned) — tracked in #23 — because the
 `aws-rds` binding does not provide it. A plaintext/unverified connection to live
 RDS is refused by default.
 
+A TLS mode (`verify-ca`/`require`) aimed at the plaintext port **1521** is refused
+(fail closed): verified TLS is served on **2484**, so a live run must target 2484.
+An insecure mode (`require`/`disable`) against a non-local host emits a loud stderr
+warning so it is visible in CI logs.
+
 `run-validation.sh` auto-selects `ORAQUERY_TLS=disable` **only** when the target
 host is loopback/local and no mode was set, so the local `make run` path keeps
 working out of the box; any non-local target inherits the fail-closed
 `verify-ca` default.
+
+> **Local-dev note:** the "local host" allowlist is deliberately small —
+> `localhost`, `127.0.0.1`, `::1`, and the compose service name `oracle`. A
+> docker-compose Oracle service under a *different* name (e.g. `oracle-db` or
+> `db`) is treated as remote and will inherit the fail-closed `verify-ca` default;
+> set `ORAQUERY_TLS=disable` explicitly for such a local service.

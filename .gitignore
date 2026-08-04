@@ -216,6 +216,10 @@ Thumbs.db
 *.pem
 *.pfx
 
+# Exception: the AWS GovCloud RDS CA bundle is a public, non-secret trust anchor
+# intentionally committed (see runner/certs/README.md).
+!runner/certs/rds-govcloud-global-bundle.crt.bundle
+
 # System and Miscellaneous
 $RECYCLE.BIN/
 $tf/

@@ -9,12 +9,12 @@
 #
 # TLS (see oraquery; #16 / #20): oraquery drives TLS from ORAQUERY_TLS, NOT from
 # the port, and defaults to verified TLS (verify-ca), failing closed without a
-# PEM CA bundle (ORAQUERY_CA_BUNDLE). To keep the LOCAL dev DB (gvenzl 23ai on
-# plain 1521) working out of the box, this script defaults ORAQUERY_TLS=disable
-# ONLY when it is unset AND the target is loopback/local; any other target keeps
-# oraquery's safe default. For a real brokered RDS target you MUST set
-# ORAQUERY_TLS=verify-ca and ORAQUERY_CA_BUNDLE=<PEM path> (the GovCloud RDS root
-# CA, baked into the image — see #23) — plaintext against live RDS is refused.
+# PEM CA bundle (ORAQUERY_CA_BUNDLE). The runner image bakes the AWS GovCloud RDS
+# root CA and defaults ORAQUERY_CA_BUNDLE to it (#23), so verified TLS to a live
+# brokered RDS works out of the box on TCPS 2484. To keep the LOCAL dev DB (gvenzl
+# 23ai on plain 1521) working, this script defaults ORAQUERY_TLS=disable ONLY when
+# it is unset AND the target is loopback/local; any other target keeps oraquery's
+# fail-closed verify-ca default. A TLS mode aimed at plaintext port 1521 is refused.
 #
 # Fidelity: local runs target Oracle 23ai Free (gvenzl) — NOT 19c/SE2/RDS. This
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the

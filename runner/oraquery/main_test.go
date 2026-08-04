@@ -2,9 +2,18 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestConnRe covers the connect-string regex the resource passes as
@@ -12,35 +21,35 @@ import (
 // the regex splits on the LAST '@' and the FIRST ':'/'/' of the host section.
 func TestConnRe(t *testing.T) {
 	cases := []struct {
-		name                                string
-		in                                  string
-		match                               bool
-		user, pass, host, port, service     string
+		name                            string
+		in                              string
+		match                           bool
+		user, pass, host, port, service string
 	}{
 		{
-			name:    "simple",
-			in:      "system/devpw@oracle:1521/FREEPDB1",
-			match:   true,
-			user:    "system", pass: "devpw", host: "oracle", port: "1521", service: "FREEPDB1",
+			name:  "simple",
+			in:    "system/devpw@oracle:1521/FREEPDB1",
+			match: true,
+			user:  "system", pass: "devpw", host: "oracle", port: "1521", service: "FREEPDB1",
 		},
 		{
-			name:    "tcps port",
-			in:      "master/s3cr3t@db.example.gov:2484/ORCL",
-			match:   true,
-			user:    "master", pass: "s3cr3t", host: "db.example.gov", port: "2484", service: "ORCL",
+			name:  "tcps port",
+			in:    "master/s3cr3t@db.example.gov:2484/ORCL",
+			match: true,
+			user:  "master", pass: "s3cr3t", host: "db.example.gov", port: "2484", service: "ORCL",
 		},
 		{
-			name:    "password with slash",
-			in:      "u/p/w@h:1521/s",
-			match:   true,
+			name:  "password with slash",
+			in:    "u/p/w@h:1521/s",
+			match: true,
 			// user is non-greedy up to first '/', pass is greedy to last '@'.
 			user: "u", pass: "p/w", host: "h", port: "1521", service: "s",
 		},
 		{
-			name:    "service with slash-like suffix",
-			in:      "u/p@h:1521/PDB1.sub.vcn",
-			match:   true,
-			user:    "u", pass: "p", host: "h", port: "1521", service: "PDB1.sub.vcn",
+			name:  "service with slash-like suffix",
+			in:    "u/p@h:1521/PDB1.sub.vcn",
+			match: true,
+			user:  "u", pass: "p", host: "h", port: "1521", service: "PDB1.sub.vcn",
 		},
 		{name: "missing port", in: "u/p@h/s", match: false},
 		{name: "non-numeric port", in: "u/p@h:abc/s", match: false},
@@ -166,4 +175,188 @@ func TestMustAtoi(t *testing.T) {
 			t.Errorf("mustAtoi(%q) = %d, want %d", c.in, got, c.want)
 		}
 	}
+}
+
+// TestPlanTLS covers the explicit-intent TLS logic (#16 / #20): the default is
+// verified TLS, verify-ca fails closed without a CA bundle, the insecure paths
+// are opt-in only, and TLS is never inferred from the port. It uses a self-signed
+// fixture PEM written to a temp file (no real RDS CA is required for the unit test).
+// A remote (non-local) TCPS host is used so port/host guards don't interfere.
+func TestPlanTLS(t *testing.T) {
+	caPath := writeTestCABundle(t)
+	const remote = "db.example.gov" // non-local
+	const tcps = "2484"
+
+	t.Run("default (empty) is verify-ca and fails closed without a CA bundle", func(t *testing.T) {
+		_, err := planTLS("", "", remote, tcps)
+		if err == nil {
+			t.Fatal("expected fail-closed error when defaulting to verify-ca with no CA bundle, got nil")
+		}
+		if !strings.Contains(err.Error(), "ORAQUERY_CA_BUNDLE") {
+			t.Errorf("error should mention the missing CA bundle, got: %v", err)
+		}
+	})
+
+	t.Run("verify-ca with a valid PEM bundle sets verified TLS + builds a RootCAs pool", func(t *testing.T) {
+		plan, err := planTLS("verify-ca", caPath, remote, tcps)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if plan.urlOptions["SSL"] != "true" || plan.urlOptions["SSL VERIFY"] != "true" {
+			t.Errorf("verify-ca url options = %v, want SSL=true SSL VERIFY=true", plan.urlOptions)
+		}
+		if _, ok := plan.urlOptions["WALLET"]; ok {
+			t.Errorf("must NOT set go-ora WALLET option for a PEM bundle, got %v", plan.urlOptions)
+		}
+		if plan.tlsConfig == nil {
+			t.Fatal("verify-ca must build a *tls.Config, got nil")
+		}
+		if plan.tlsConfig.InsecureSkipVerify {
+			t.Error("verify-ca must NOT set InsecureSkipVerify")
+		}
+		if plan.tlsConfig.RootCAs == nil {
+			t.Error("verify-ca must populate RootCAs from the PEM bundle")
+		}
+		if len(plan.warnings) != 0 {
+			t.Errorf("verify-ca to a TCPS host should not warn, got %v", plan.warnings)
+		}
+	})
+
+	t.Run("verify-ca fails closed on a missing CA file", func(t *testing.T) {
+		if _, err := planTLS("verify-ca", filepath.Join(t.TempDir(), "does-not-exist.pem"), remote, tcps); err == nil {
+			t.Fatal("expected fail-closed error for a missing CA bundle file, got nil")
+		}
+	})
+
+	t.Run("verify-ca fails closed on a non-PEM / empty file", func(t *testing.T) {
+		bogus := filepath.Join(t.TempDir(), "notpem.txt")
+		if err := os.WriteFile(bogus, []byte("this is not a certificate\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := planTLS("verify-ca", bogus, remote, tcps); err == nil {
+			t.Fatal("expected fail-closed error for a file with no PEM certs, got nil")
+		}
+	})
+
+	// Finding #2: a TLS mode aimed at the plaintext port 1521 must fail closed,
+	// and must do so BEFORE requiring the CA bundle (the port is the fundamental problem).
+	t.Run("verify-ca against plaintext port 1521 fails closed (before CA check)", func(t *testing.T) {
+		_, err := planTLS("verify-ca", caPath, remote, "1521")
+		if err == nil {
+			t.Fatal("expected fail-closed error for verify-ca against port 1521, got nil")
+		}
+		if !strings.Contains(err.Error(), "2484") {
+			t.Errorf("error should point the operator at TCPS 2484, got: %v", err)
+		}
+	})
+
+	t.Run("require against plaintext port 1521 fails closed", func(t *testing.T) {
+		if _, err := planTLS("require", "", remote, "1521"); err == nil {
+			t.Fatal("expected fail-closed error for require against port 1521, got nil")
+		}
+	})
+
+	t.Run("case-insensitive + trimmed mode", func(t *testing.T) {
+		plan, err := planTLS("  Verify-CA  ", caPath, remote, tcps)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if plan.urlOptions["SSL VERIFY"] != "true" || plan.tlsConfig == nil {
+			t.Errorf("expected verified TLS for mixed-case/whitespace mode, got %v", plan.urlOptions)
+		}
+	})
+
+	// Finding #3: insecure modes against a remote host must warn loudly.
+	t.Run("require = encrypt-only, verification off, warns on remote host", func(t *testing.T) {
+		plan, err := planTLS("require", "", remote, tcps)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if plan.urlOptions["SSL"] != "true" || plan.urlOptions["SSL VERIFY"] != "false" {
+			t.Errorf("require url options = %v, want SSL=true SSL VERIFY=false", plan.urlOptions)
+		}
+		if plan.tlsConfig != nil {
+			t.Errorf("require must not build a verifying tls.Config, got %v", plan.tlsConfig)
+		}
+		if len(plan.warnings) == 0 {
+			t.Error("require against a remote host must emit a warning")
+		}
+	})
+
+	t.Run("disable = plaintext, no SSL options, warns on remote host", func(t *testing.T) {
+		plan, err := planTLS("disable", "", remote, "1521")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(plan.urlOptions) != 0 {
+			t.Errorf("disable must emit no TLS url options, got %v", plan.urlOptions)
+		}
+		if plan.tlsConfig != nil {
+			t.Errorf("disable must not build a tls.Config, got %v", plan.tlsConfig)
+		}
+		if len(plan.warnings) == 0 {
+			t.Error("disable against a remote host must emit a warning")
+		}
+	})
+
+	t.Run("disable against a local host does not warn", func(t *testing.T) {
+		plan, err := planTLS("disable", "", "localhost", "1521")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(plan.warnings) != 0 {
+			t.Errorf("disable against localhost should not warn, got %v", plan.warnings)
+		}
+	})
+
+	t.Run("unknown mode fails closed", func(t *testing.T) {
+		if _, err := planTLS("sortof", caPath, remote, tcps); err == nil {
+			t.Fatal("expected error for unknown TLS mode, got nil")
+		}
+	})
+}
+
+// TestIsLocalHost documents the deliberately-small local allowlist (Finding #4):
+// compose services under other names are treated as remote (fail-closed).
+func TestIsLocalHost(t *testing.T) {
+	for _, h := range []string{"localhost", "127.0.0.1", "::1", "oracle"} {
+		if !isLocalHost(h) {
+			t.Errorf("isLocalHost(%q) = false, want true", h)
+		}
+	}
+	for _, h := range []string{"oracle-db", "db", "rds.example.gov", ""} {
+		if isLocalHost(h) {
+			t.Errorf("isLocalHost(%q) = true, want false", h)
+		}
+	}
+}
+
+// writeTestCABundle generates a throwaway self-signed CA cert, writes it as PEM to
+// a temp file, and returns the path. This lets the verify-ca path be unit-tested
+// without a real AWS RDS CA bundle.
+func writeTestCABundle(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "oraquery-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "test-ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
+		t.Fatalf("write pem: %v", err)
+	}
+	return path
 }

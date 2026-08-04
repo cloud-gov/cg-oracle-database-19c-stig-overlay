@@ -82,6 +82,52 @@ matrices.
 
 ## Credentials
 
-Injected at runtime via env (`DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_SERVICE`/`DB_PORT`),
-never baked into the image. For the live-RDS Concourse run, use the master cred from
-the secret store and TCPS port 2484 with enforced cert validation.
+Connection coordinates are injected at runtime, never baked into the image.
+
+- **Local / ad hoc runs:** provide `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_SERVICE`
+  (and optionally `DB_PORT`, default `1521`) as environment variables.
+- **Cloud.gov live-RDS runs:** bind the app to the brokered RDS service and read the
+  coordinates from `VCAP_SERVICES` (label `aws-rds`): `host`, `port`, `username`,
+  `password`, `db_name`. There is no separate secret store — the bound service *is*
+  the source. The binding does **not** carry a TLS CA cert (see below).
+
+## TLS (encryption in transit) — `ORAQUERY_TLS` + `ORAQUERY_CA_BUNDLE`
+
+`oraquery` decides TLS from **explicit intent**, never from the port number, and
+**fails closed** rather than silently sending the DB credential in cleartext
+(#16 / #20). Set `ORAQUERY_TLS`:
+
+| `ORAQUERY_TLS` | Behavior | Use for |
+| --- | --- | --- |
+| `verify-ca` (**default**) | TLS **with** server-certificate verification. Requires `ORAQUERY_CA_BUNDLE=<PEM path>`; fails closed if unset/empty/invalid. | Real brokered RDS. The only mode valid toward compliance evidence. |
+| `require` | TLS **without** verification (encrypt-only). NOT MITM-safe; NOT compliance evidence. | Narrow debugging only. |
+| `disable` | Plaintext — credential sent in the clear. | A **local** dev DB only (e.g. gvenzl 23ai on 1521). |
+
+`ORAQUERY_CA_BUNDLE` is a **PEM CA bundle** (the naming matches `AWS_CA_BUNDLE` /
+`SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE`). `oraquery` loads it into an x509 pool and
+injects it via go-ora's `WithTLSConfig`. Note this is **not** go-ora's `WALLET`
+option: that expects an Oracle wallet directory (`cwallet.sso`/`ewallet.p12`) and
+rejects a PEM. AWS RDS publishes its root CA only as a PEM.
+
+For the live-RDS Cloud.gov run: connect over **TCPS 2484**, set
+`ORAQUERY_TLS=verify-ca`, and point `ORAQUERY_CA_BUNDLE` at the AWS GovCloud RDS
+root CA bundle. That bundle is a public (non-secret) trust anchor baked into the
+runner image at build time (checksum-pinned) — tracked in #23 — because the
+`aws-rds` binding does not provide it. A plaintext/unverified connection to live
+RDS is refused by default.
+
+A TLS mode (`verify-ca`/`require`) aimed at the plaintext port **1521** is refused
+(fail closed): verified TLS is served on **2484**, so a live run must target 2484.
+An insecure mode (`require`/`disable`) against a non-local host emits a loud stderr
+warning so it is visible in CI logs.
+
+`run-validation.sh` auto-selects `ORAQUERY_TLS=disable` **only** when the target
+host is loopback/local and no mode was set, so the local `make run` path keeps
+working out of the box; any non-local target inherits the fail-closed
+`verify-ca` default.
+
+> **Local-dev note:** the "local host" allowlist is deliberately small —
+> `localhost`, `127.0.0.1`, `::1`, and the compose service name `oracle`. A
+> docker-compose Oracle service under a *different* name (e.g. `oracle-db` or
+> `db`) is treated as remote and will inherit the fail-closed `verify-ca` default;
+> set `ORAQUERY_TLS=disable` explicitly for such a local service.

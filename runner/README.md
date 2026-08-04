@@ -109,12 +109,20 @@ injects it via go-ora's `WithTLSConfig`. Note this is **not** go-ora's `WALLET`
 option: that expects an Oracle wallet directory (`cwallet.sso`/`ewallet.p12`) and
 rejects a PEM. AWS RDS publishes its root CA only as a PEM.
 
-For the live-RDS Cloud.gov run: connect over **TCPS 2484**, set
-`ORAQUERY_TLS=verify-ca`, and point `ORAQUERY_CA_BUNDLE` at the AWS GovCloud RDS
-root CA bundle. That bundle is a public (non-secret) trust anchor baked into the
-runner image at build time (checksum-pinned) — tracked in #23 — because the
-`aws-rds` binding does not provide it. A plaintext/unverified connection to live
-RDS is refused by default.
+For the live-RDS Cloud.gov run: connect over **TCPS 2484** and set
+`ORAQUERY_TLS=verify-ca`. The runner image **bakes** the AWS GovCloud RDS root CA
+bundle at `/opt/certs/rds-govcloud-global-bundle.pem` (source committed at
+`runner/certs/rds-govcloud-global-bundle.crt.bundle`, checksum-verified in the
+Dockerfile) and defaults `ORAQUERY_CA_BUNDLE` to it, so verified TLS works without
+extra configuration. That bundle is a public (non-secret) trust anchor baked in
+because the `aws-rds` binding does not carry it. A plaintext/unverified connection
+to live RDS is refused by default.
+
+> **CA bundle rotation:** the pinned bundle URL + SHA-256 live in the Dockerfile
+> (`RDS_CA_BUNDLE_URL` / `RDS_CA_BUNDLE_SHA256`). AWS rotates RDS *server* certs
+> automatically, but the *root* bundle is long-lived; refresh the pinned SHA-256
+> on the normal base-image rebuild cadence. To update: download the URL,
+> `sha256sum` it, and replace the pinned value.
 
 A TLS mode (`verify-ca`/`require`) aimed at the plaintext port **1521** is refused
 (fail closed): verified TLS is served on **2484**, so a live run must target 2484.

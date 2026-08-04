@@ -216,10 +216,8 @@ Thumbs.db
 *.pem
 *.pfx
 
-# Exception: the AWS GovCloud RDS root CA bundle is a PUBLIC, non-secret trust
-# anchor intentionally committed + checksum-verified in runner/Dockerfile (#23).
-# It uses the .crt.bundle extension so the forbidden-files guard (blocks *.pem)
-# permits it — it contains only public CA certs, never a private key.
+# Exception: the AWS GovCloud RDS CA bundle is a public, non-secret trust anchor
+# intentionally committed (see runner/certs/README.md).
 !runner/certs/rds-govcloud-global-bundle.crt.bundle
 
 # System and Miscellaneous

@@ -7,6 +7,11 @@
 # Optional:
 #   DB_PORT (default 1521; use 2484 for TCPS)
 #
+# When VCAP_SERVICES is present, the first aws-rds binding whose credentials
+# db_name (or name) is "ORCL" is used to fill any unset DB_* values; explicit
+# DB_* env vars still take precedence. If no ORCL binding exists, the script
+# fails closed rather than guessing another database.
+#
 # TLS (see oraquery; #16 / #20): oraquery drives TLS from ORAQUERY_TLS, NOT from
 # the port, and defaults to verified TLS (verify-ca), failing closed without a
 # PEM CA bundle (ORAQUERY_CA_BUNDLE). The runner image bakes the AWS GovCloud RDS
@@ -38,7 +43,21 @@ if [ -n "${VCAP_SERVICES:-}" ]; then
 require 'json'
 
 services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
-credentials = services.fetch('aws-rds').first.fetch('credentials')
+bindings = services.fetch('aws-rds')
+
+# Select the first aws-rds binding whose credentials db_name (or name) is ORCL,
+# rather than blindly taking the first binding.
+binding = bindings.find do |b|
+  creds = b.fetch('credentials')
+  (creds['db_name'] || creds['name']) == 'ORCL'
+end
+
+if binding.nil?
+  STDERR.puts 'run-validation: no aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
+  exit 1
+end
+
+credentials = binding.fetch('credentials')
 
 puts [
   credentials.fetch('username', ''),

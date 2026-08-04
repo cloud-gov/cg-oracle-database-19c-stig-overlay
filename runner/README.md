@@ -74,10 +74,12 @@ Connection coordinates are injected at runtime, never baked into the image.
   coordinates from `VCAP_SERVICES` (label `aws-rds`): `host`, `port`, `username`,
   `password`, `db_name`. There is no separate secret store — the bound service *is*
   the source. The binding does **not** carry a TLS CA cert (see below). When
-  `VCAP_SERVICES` is present, `run-validation.sh` parses the first `aws-rds` binding
-  with CINC's embedded Ruby and fills missing `DB_*` values from
-  `credentials.username`, `credentials.password`, `credentials.host`,
-  `credentials.db_name`/`credentials.name`, and `credentials.port`. Explicit `DB_*`
+  `VCAP_SERVICES` is present, `run-validation.sh` selects the first `aws-rds`
+  binding whose credentials `db_name` (or `name`) is `ORCL` and fills missing
+  `DB_*` values from `credentials.username`, `credentials.password`,
+  `credentials.host`, `credentials.db_name`/`credentials.name`, and
+  `credentials.port` (parsed with CINC's embedded Ruby). If no `ORCL` binding
+  exists it fails closed rather than guessing another database. Explicit `DB_*`
   values still take precedence.
 
 The runner passes `/usr/local/bin/oraquery` to the InSpec profile and prepends

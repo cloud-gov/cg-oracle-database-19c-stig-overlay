@@ -51,7 +51,7 @@ cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
 | --- | --- |
 | `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits the clean CSV `oracledb_session` expects; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
-| `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. |
+| `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. Pass `--json` to also write a timestamped JSON report to `OUT_DIR` (default `/out`) — see [JSON output](#json-output). |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |
 
 ## Client binary / supply chain
@@ -62,7 +62,36 @@ The MITRE baseline profile is consumed via git `depends` + a committed `inspec.l
 
 ## JSON output
 
-The runner intentionally does **not** emit JSON by default. Pipelines should use CINC Auditor's established CLI output and exit status. JSON reporting can be added later as an explicit option when iterating on controls or generating coverage matrices.
+By default the runner emits only the CINC Auditor CLI report and CINC's exit
+status (`100` when any control fails, `101` when any is skipped). Pass `--json`
+(or set `JSON_OUTPUT=1`) to **additionally** write a machine-readable JSON report
+for iteration or coverage analysis. The CLI report is still printed, and the exit
+status is unchanged.
+
+The JSON report is written to a common output directory using a timestamped,
+labeled filename so multiple runs are distinguishable:
+
+```
+${OUT_DIR:-/out}/validation-<label>-<UTC-timestamp>.json
+# e.g. /out/validation-ORCL-20260805T210830Z.json
+```
+
+- `OUT_DIR` — output directory (default `/out`, created and owned by the non-root
+  `scanner` user in the image).
+- `RUN_LABEL` — label token (default: the DB service name, e.g. `ORCL`); sanitized
+  to `[A-Za-z0-9._-]`.
+
+Retrieve it from a live Cloud.gov run with a second `cf ssh` that reads the file
+(the runner echoes the exact path to stderr on the first run):
+
+```bash
+cf ssh cg-cinc-audit-oracle-runner -c "/usr/local/bin/run-validation.sh --json"
+# note the "JSON report → /out/validation-ORCL-<ts>.json" line, then:
+cf ssh cg-cinc-audit-oracle-runner -c "cat /out/validation-ORCL-<ts>.json" > local-report.json
+```
+
+> Both `cf ssh` invocations must reach the **same** app instance — with more than
+> one instance, target it explicitly (`cf ssh -i <index> …`).
 
 ## Credentials
 

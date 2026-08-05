@@ -29,8 +29,38 @@
 # at scan time (PROFILE_GIT @ PROFILE_BRANCH, default this repo @
 # feat/iterate-controls) so control changes only need a git push, not an image
 # rebuild/push. Set PROFILE_SOURCE=/profile to use the copy baked into the image.
+#
+# Output (#18): by default the runner prints the CINC CLI report to stdout. Pass
+# --json (or set JSON_OUTPUT=1) to ALSO write a JSON report to a common output
+# directory (OUT_DIR, default /out) using a timestamped, labeled filename:
+#   ${OUT_DIR}/validation-<label>-<UTC-timestamp>.json
+# The label defaults to the DB service name (e.g. ORCL); override with RUN_LABEL.
+# The written path is echoed to stderr. Retrieve it with a second cf ssh, e.g.:
+#   cf ssh cg-cinc-audit-oracle-runner -c "/usr/local/bin/run-validation.sh --json"
+#   cf ssh cg-cinc-audit-oracle-runner -c "cat /out/validation-ORCL-<ts>.json" > local.json
+# (both cf ssh calls must hit the same app instance; use -i N with multiple
+# instances). CINC's own exit codes (100/101 for failed/skipped controls) are
+# preserved regardless of reporter.
 
 set -euo pipefail
+
+# --- CLI args --------------------------------------------------------------
+JSON_OUTPUT="${JSON_OUTPUT:-}"
+for arg in "$@"; do
+    case "$arg" in
+        --json)
+            JSON_OUTPUT=1
+            ;;
+        -h | --help)
+            sed -n '2,43p' "$0"
+            exit 0
+            ;;
+        *)
+            echo "run-validation: unknown argument '${arg}'" >&2
+            exit 2
+            ;;
+    esac
+done
 
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
 RUBY_BIN=/opt/cinc-auditor/embedded/bin/ruby
@@ -144,6 +174,30 @@ fi
 
 echo "run-validation: profile ${PROFILE_SOURCE}"
 
+# Reporters (#18): always emit the human-readable CLI report to stdout. When JSON
+# output is requested, additionally write a timestamped, labeled JSON report to a
+# common output directory so it can be retrieved (e.g. via a second `cf ssh cat`)
+# for analysis. CINC exit status is unaffected by the added reporter.
+reporter_args=(--reporter cli)
+
+if [ -n "$JSON_OUTPUT" ]; then
+    OUT_DIR="${OUT_DIR:-/out}"
+    # Label the run so multiple reports in the shared dir are distinguishable.
+    # Default to the DB service name; sanitize to a filename-safe token.
+    RUN_LABEL="${RUN_LABEL:-$DB_SERVICE}"
+    RUN_LABEL="$(printf '%s' "$RUN_LABEL" | tr -c 'A-Za-z0-9._-' '_')"
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    JSON_PATH="${OUT_DIR}/validation-${RUN_LABEL}-${timestamp}.json"
+
+    mkdir -p "$OUT_DIR" || {
+        echo "run-validation: cannot create OUT_DIR ${OUT_DIR}" >&2
+        exit 1
+    }
+
+    reporter_args+=(json:"$JSON_PATH")
+    echo "run-validation: JSON report → ${JSON_PATH}" >&2
+fi
+
 "$AUDITOR" exec "$PROFILE_SOURCE" \
     --input-file /tmp/inputs.yml \
-    --reporter cli
+    "${reporter_args[@]}"

@@ -93,7 +93,7 @@ if [ -z "${ORAQUERY_TLS:-}" ]; then
             echo "run-validation: local target ${DB_HOST} → ORAQUERY_TLS=disable (plaintext, dev only)" >&2
             ;;
         *)
-            : # leave unset → oraquery defaults to verify-ca (fails closed w/o wallet)
+            : # leave unset → oraquery defaults to verify-ca (fails closed w/o a PEM CA bundle)
             ;;
     esac
 fi

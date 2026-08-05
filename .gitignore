@@ -204,7 +204,10 @@ Thumbs.db
 /x64/
 /x86/
 *.lock
-!inspec.lock
+# inspec.lock intentionally NOT committed on the control-iteration branch: the
+# baseline dependency is branch-pinned (cloudgov) so CINC re-resolves it each run.
+# Re-add "!inspec.lock" and re-vendor to restore SHA-pinned reproducibility for
+# production. TODO(#25): re-pin baseline to SHA + restore lockfile before prod.
 *.DS_Store
 *.tgz
 /.terraform/

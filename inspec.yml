@@ -14,6 +14,12 @@ inspec_version: ">= 4.0"
 # Consume the cloud-gov fork's `cloudgov` branch (the upstream MITRE profile does
 # not load: a mismatched-quote syntax error blocks it before any control runs --
 # mitre/oracle-database-19c-stig-baseline#1). We do NOT vendor the baseline.
+#
+# Branch-pinned (not SHA-pinned) so control iteration on the baseline's `cloudgov`
+# branch is picked up without re-vendoring. inspec.lock is intentionally NOT
+# committed on this branch so CINC re-resolves the branch tip on each run. This is
+# a DEV-ITERATION posture; re-pin to an immutable SHA (and restore the lockfile)
+# before production. TODO(#25): re-pin baseline to SHA for production.
 depends:
   - name: oracle-database-19c-stig-baseline
     git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git

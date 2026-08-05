@@ -33,8 +33,13 @@ ENV ORAQUERY_CA_BUNDLE=/opt/certs/rds-govcloud-global-bundle.pem
 # --------------------------------------------------------------------------
 # --------------------------------------------------------------------------
 
-# Copy the overlay profile and vendor its pinned git dependency at build time.
-COPY inspec.yml inspec.lock /profile/
+# Copy the overlay profile and vendor its git dependency at build time. This
+# baked-in copy at /profile is now a FALLBACK: run-validation.sh defaults to
+# fetching the overlay from GitHub at scan time (PROFILE_SOURCE) so controls can
+# iterate without an image rebuild. There is no committed inspec.lock (removed for
+# branch-based iteration; see TODO to re-pin for production), so vendoring here
+# re-resolves the baseline `cloudgov` branch tip at build time.
+COPY inspec.yml /profile/
 COPY controls /profile/controls
 RUN cinc-auditor vendor /profile --overwrite
 

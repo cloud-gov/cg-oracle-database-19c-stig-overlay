@@ -24,6 +24,11 @@
 # Fidelity: local runs target Oracle 23ai Free (gvenzl) — NOT 19c/SE2/RDS. This
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the
 # live proof (aws-broker#558). Do not treat this output as compliance evidence.
+#
+# Profile source (control iteration): the overlay profile is fetched from GitHub
+# at scan time (PROFILE_GIT @ PROFILE_BRANCH, default this repo @
+# feat/iterate-controls) so control changes only need a git push, not an image
+# rebuild/push. Set PROFILE_SOURCE=/profile to use the copy baked into the image.
 
 set -euo pipefail
 
@@ -116,6 +121,29 @@ EOF
 AUDITOR=cinc-auditor
 command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 
-"$AUDITOR" exec /profile \
+# Profile source (#iterate-controls): to iterate on controls without rebuilding
+# and re-pushing the image, fetch the overlay from GitHub at scan time instead of
+# running the copy baked into the image at /profile. `cinc-auditor exec` does NOT
+# honor a `repo.git#branch` fragment (the git fetcher only reads branch/tag/ref
+# from a `depends:` entry, not from the exec target), so we clone the requested
+# branch ourselves and exec the checkout directory. CINC then resolves the
+# baseline `depends` (branch-pinned in the overlay's inspec.yml) transitively.
+#
+# Set PROFILE_SOURCE=/profile to use the copy baked into the image instead.
+PROFILE_GIT="${PROFILE_GIT:-https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay.git}"
+PROFILE_BRANCH="${PROFILE_BRANCH:-feat/iterate-controls}"
+PROFILE_SOURCE="${PROFILE_SOURCE:-}"
+
+if [ -z "$PROFILE_SOURCE" ]; then
+    PROFILE_DIR="$(mktemp -d)"
+    trap 'rm -rf "$PROFILE_DIR"' EXIT
+    echo "run-validation: cloning ${PROFILE_GIT}@${PROFILE_BRANCH}"
+    git clone --branch "$PROFILE_BRANCH" --depth 1 "$PROFILE_GIT" "$PROFILE_DIR"
+    PROFILE_SOURCE="$PROFILE_DIR"
+fi
+
+echo "run-validation: profile ${PROFILE_SOURCE}"
+
+"$AUDITOR" exec "$PROFILE_SOURCE" \
     --input-file /tmp/inputs.yml \
     --reporter cli

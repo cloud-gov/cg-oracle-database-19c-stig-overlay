@@ -11,7 +11,7 @@ RUN go mod download
 COPY runner/oraquery/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /oraquery .
 
-FROM cincproject/auditor:6
+FROM cincproject/auditor:7
 
 USER root
 

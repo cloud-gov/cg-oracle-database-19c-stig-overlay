@@ -10,9 +10,9 @@
 # evidence).
 
 # Pinned so `make` behaviour matches the runner image's CINC Auditor major
-# (runner/Dockerfile uses cincproject/auditor:6). Override on the CLI, e.g.
-#   make check AUDITOR_IMAGE=cincproject/auditor:7
-AUDITOR_IMAGE ?= cincproject/auditor:6
+# (runner/Dockerfile uses cincproject/auditor:7). Override on the CLI, e.g.
+#   make check AUDITOR_IMAGE=cincproject/auditor:6
+AUDITOR_IMAGE ?= cincproject/auditor:7
 RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
 CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
 CLOUDGOV_PLATFORM ?= linux/amd64

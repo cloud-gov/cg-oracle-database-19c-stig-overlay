@@ -25,23 +25,13 @@
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the
 # live proof (aws-broker#558). Do not treat this output as compliance evidence.
 #
-# Output: by default the CINC CLI report is printed to stdout. Pass --json (or set
-# JSON_OUTPUT=1) to ALSO write a JSON report to a common output directory
-# (OUT_DIR, default /out) with a timestamped, labeled filename:
-#   ${OUT_DIR}/validation-<label>-<UTC-timestamp>.json
-# The label defaults to the DB service name (RUN_LABEL override). The written path
-# is echoed to stderr. CINC's exit codes (100/101 for failed/skipped controls) are
-# preserved regardless of reporter.
-#
-# Control filter (fast iteration): pass --controls "ID [ID...]" (or set the
-# CONTROLS env) to run only the named control(s) / regexes, skipping load+exec of
-# everything else. This is the biggest per-run saving when iterating on one control.
+# Options: --json also writes a timestamped JSON report to OUT_DIR (default /out);
+# --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
 
 set -euo pipefail
 
 # --- CLI args --------------------------------------------------------------
 JSON_OUTPUT="${JSON_OUTPUT:-}"
-# CONTROLS is a whitespace-separated list of control names/regexes (may be empty).
 CONTROLS="${CONTROLS:-}"
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -50,8 +40,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         --controls | --control)
             shift
-            [ "$#" -gt 0 ] || { echo "run-validation: ${0##*/}: --controls requires a value" >&2; exit 2; }
-            # Append so repeated flags accumulate; space-separated for CINC.
+            [ "$#" -gt 0 ] || { echo "run-validation: --controls requires a value" >&2; exit 2; }
             CONTROLS="${CONTROLS:+$CONTROLS }$1"
             ;;
         --controls=*)
@@ -154,25 +143,19 @@ EOF
 AUDITOR=cinc-auditor
 command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 
-# Profile source. Defaults to the copy baked into the image at /profile (which was
-# vendored at build time — offline, no scan-time git). For fast local control
-# iteration, the `make retest` target mounts the working tree read-only and points
-# PROFILE_SOURCE at it, so edits to controls/ are picked up without an image
-# rebuild.
+# Profile source: the image's build-time-vendored copy at /profile by default;
+# `make retest` overrides it with a read-only mount of the working tree so control
+# edits are picked up without an image rebuild.
 PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
 
 exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml)
 
-# Reporters: always emit the human-readable CLI report to stdout. When JSON output
-# is requested, additionally write a timestamped, labeled JSON report to a common
-# output directory so local 23ai runs can be saved/compared. CINC exit status is
-# unaffected by the added reporter.
+# Always print the CLI report; with --json, also write a timestamped, labeled
+# JSON report so local runs can be saved/compared. Exit status is unaffected.
 reporter_args=(--reporter cli)
 
 if [ -n "$JSON_OUTPUT" ]; then
     OUT_DIR="${OUT_DIR:-/out}"
-    # Label the run so multiple reports in the shared dir are distinguishable.
-    # Default to the DB service name; sanitize to a filename-safe token.
     RUN_LABEL="${RUN_LABEL:-$DB_SERVICE}"
     RUN_LABEL="$(printf '%s' "$RUN_LABEL" | tr -c 'A-Za-z0-9._-' '_')"
     timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -189,21 +172,15 @@ fi
 
 exec_args+=("${reporter_args[@]}")
 
-# Control filter (fast iteration): restrict the run to the named control(s) /
-# regexes. `--controls` takes a list; word-splitting CONTROLS here is intentional
-# so each token is a separate argument to CINC.
 if [ -n "$CONTROLS" ]; then
-    # shellcheck disable=SC2206  # deliberate word-split into separate CINC args
+    # shellcheck disable=SC2206  # deliberate word-split: one CINC arg per control
     controls_list=($CONTROLS)
     exec_args+=(--controls "${controls_list[@]}")
     echo "run-validation: control filter → ${CONTROLS}" >&2
 fi
 
-# When the profile dir is NOT the baked-in /profile (i.e. a read-only mounted
-# working tree for `make retest`), CINC still needs a WRITABLE cache to place the
-# resolved baseline `depends`. Direct it to a writable path (default the scanner
-# user's ~/.inspec/cache) so nothing is written back into the RO mount. The baked
-# /profile keeps its build-time vendored copy and needs no cache override.
+# A read-only mounted profile still needs a writable dependency cache; keep that
+# write off the mount. The baked /profile is already vendored and needs no cache.
 if [ "$PROFILE_SOURCE" != "/profile" ]; then
     VENDOR_CACHE="${VENDOR_CACHE:-${HOME:-/home/scanner}/.inspec/cache}"
     mkdir -p "$VENDOR_CACHE"

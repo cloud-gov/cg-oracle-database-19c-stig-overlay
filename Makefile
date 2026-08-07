@@ -20,6 +20,9 @@ DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
 CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
 CF_IDLE_COMMAND ?= sleep infinity
 CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
+# App instance targeted for cf ssh; both the run and the fetch must hit the same
+# instance since the report file is instance-local.
+CF_APP_INSTANCE ?= 0
 COMPOSE_FILE  ?= runner/docker-compose.yml
 # Local directory for saved JSON reports (mounted at the container's /out).
 RESULTS_DIR ?= out
@@ -81,6 +84,27 @@ push-cloudgov: push-dockerhub ## Push an idle Docker image app to Cloud.gov for 
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
 	cf push $(CLOUDGOV_APP) --docker-image $(DOCKERHUB_IMAGE) $(CF_PUSH_FLAGS)
 
+.PHONY: report-cloudgov
+report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	@mkdir -p "$(RESULTS_DIR)"
+	@# The runner writes /out/validation-<label>-<ts>.json in the container and
+	@# echoes "JSON report path: <path>" on stderr; parse that to fetch the exact
+	@# file with a second cf ssh. Pin the instance so both calls hit the same one;
+	@# tolerate CINC 100/101 (findings, not runner errors).
+	@set -e; \
+	  log="$$(mktemp)"; \
+	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) \
+	    -c "/usr/local/bin/run-validation.sh --json" 2> "$$log" || true; \
+	  cat "$$log" >&2; \
+	  remote="$$(sed -n 's/^run-validation: JSON report path: //p' "$$log" | tail -n1)"; \
+	  rm -f "$$log"; \
+	  [ -n "$$remote" ] || { echo "ERROR: could not determine remote JSON path." >&2; exit 1; }; \
+	  local="$(RESULTS_DIR)/$$(basename "$$remote")"; \
+	  echo "report-cloudgov: fetching $$remote → $$local"; \
+	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) -c "cat '$$remote'" > "$$local"; \
+	  echo "report-cloudgov: saved $$local"
+
 .PHONY: test-go
 test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)
 	docker run --rm -v "$(CURDIR)/runner/oraquery":/src -w /src $(GO_IMAGE) \
@@ -97,26 +121,12 @@ run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile
 	docker compose -f $(COMPOSE_FILE) up --build --abort-on-container-exit
 
 # --- Fast local control iteration (no DB restart per change) ---------------
-# Iterate on controls without stopping/starting the DB each change:
-#   make db-up      # start Oracle 23ai Free once, leave it running
-#   make retest     # edit controls/, re-run in seconds — repeat as needed
-#   make db-down    # stop the DB when finished
-# `retest` mounts the working tree READ-ONLY and execs it, so edits to controls/
-# on disk are picked up immediately. The baseline `depends` is resolved from the
-# committed inspec.lock (managed in-repo via `make vendor`); run-validation.sh
-# directs CINC's dependency cache to a writable path in the container, so the
-# read-only profile dir is never written to.
-#
-# retest/report-local do NOT rebuild the runner image (that is slow and, since the
-# profile is mounted at runtime, unnecessary). They only ensure the image EXISTS,
-# building it once on first use. After changing the Dockerfile/oraquery/harness,
-# rebuild explicitly with `make build-local`.
-#
-# CONTROL(S): restrict a run to specific control IDs for the fastest iteration,
-# skipping load+exec of the rest, e.g.:
+# Keep the DB up (db-up) and re-run against it (retest); stop with db-down.
+# retest mounts the working tree read-only, so control edits need no image
+# rebuild — ensure-image builds once if missing (rebuild manually with
+# build-local after runner changes). Narrow a run with CONTROL/CONTROLS:
 #   make retest CONTROL=SV-270495
 #   make retest CONTROLS="SV-270495 SV-270496"
-# CONTROL is a convenience alias for a single id; CONTROLS takes a list.
 CONTROL ?=
 CONTROLS ?= $(CONTROL)
 
@@ -154,12 +164,8 @@ report-local: ensure-image ## Like retest, but --json: saves a timestamped JSON 
 	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
 	@mkdir -p "$(RESULTS_DIR)"
 	@echo "report-local: running --json; JSON report → $(RESULTS_DIR)/"
-	@# Mount $(RESULTS_DIR) at the container's /out so the JSON report is written
-	@# straight to the host — no copy step needed for local runs. Run as the host
-	@# user (uid:gid) so the bind-mounted /out is writable and the resulting files
-	@# are owned by the caller, not the image's scanner user (uid 10001). CINC exits
-	@# 100/101 on failed/skipped controls; that is an expected finding, not a runner
-	@# error, so tolerate it (the report file is still produced).
+	@# Run as the host uid:gid (HOME=/tmp) so the bind-mounted /out is writable and
+	@# reports are caller-owned. Tolerate CINC 100/101 (findings, not runner errors).
 	docker run --rm \
 	  --user "$$(id -u):$$(id -g)" \
 	  --network $(COMPOSE_NETWORK) \

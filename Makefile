@@ -21,6 +21,8 @@ CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
 CF_IDLE_COMMAND ?= sleep infinity
 CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
 COMPOSE_FILE  ?= runner/docker-compose.yml
+# Local directory for saved JSON reports (mounted at the container's /out).
+RESULTS_DIR ?= out
 # Compose project name (see `name:` in the compose file); used to derive the
 # network name the `retest` container joins to reach the running DB.
 COMPOSE_PROJECT ?= cg-cinc-audit-oracle
@@ -125,6 +127,34 @@ retest: deps build-local ## Re-run the LOCAL profile (RO mount) against the runn
 	  -e DB_PORT=1521 \
 	  -e PROFILE_SOURCE=/mnt/profile \
 	  $(RUNNER_IMAGE)
+
+.PHONY: report-local
+report-local: deps build-local ## Like retest, but --json: saves a timestamped JSON report to $(RESULTS_DIR)/
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	@mkdir -p "$(RESULTS_DIR)"
+	@echo "report-local: running --json; JSON report → $(RESULTS_DIR)/"
+	@# Mount $(RESULTS_DIR) at the container's /out so the JSON report is written
+	@# straight to the host — no copy step needed for local runs. Run as the host
+	@# user (uid:gid) so the bind-mounted /out is writable and the resulting files
+	@# are owned by the caller, not the image's scanner user (uid 10001). CINC exits
+	@# 100/101 on failed/skipped controls; that is an expected finding, not a runner
+	@# error, so tolerate it (the report file is still produced).
+	docker run --rm \
+	  --user "$$(id -u):$$(id -g)" \
+	  --network $(COMPOSE_NETWORK) \
+	  -v "$(CURDIR)":/mnt/profile:ro \
+	  -v "$(CURDIR)/$(RESULTS_DIR)":/out \
+	  -e HOME=/tmp \
+	  -e DB_USER=system \
+	  -e DB_PASSWORD=devpw_ChangeMe1 \
+	  -e DB_HOST=oracle \
+	  -e DB_SERVICE=FREEPDB1 \
+	  -e DB_PORT=1521 \
+	  -e PROFILE_SOURCE=/mnt/profile \
+	  $(RUNNER_IMAGE) --json \
+	  || [ $$? -ge 100 ]
+	@echo "report-local: saved JSON report(s) under $(RESULTS_DIR)/"
 
 .PHONY: db-down
 db-down: ## Stop and remove the iteration DB (and its volume)

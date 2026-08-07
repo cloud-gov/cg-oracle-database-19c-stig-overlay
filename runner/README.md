@@ -74,7 +74,32 @@ The MITRE baseline profile is consumed via git `depends` + a committed `inspec.l
 
 ## JSON output
 
-The runner intentionally does **not** emit JSON by default. Pipelines should use CINC Auditor's established CLI output and exit status. JSON reporting can be added later as an explicit option when iterating on controls or generating coverage matrices.
+By default the runner emits only the CINC Auditor CLI report and CINC's exit
+status. Pass `--json` (or set `JSON_OUTPUT=1`) to **additionally** write a
+machine-readable JSON report for iteration or coverage analysis. The CLI report
+is still printed and the exit status is unchanged.
+
+The JSON report is written to `${OUT_DIR:-/out}` with a timestamped, labeled
+filename so multiple runs are distinguishable:
+
+```
+${OUT_DIR:-/out}/validation-<label>-<UTC-timestamp>.json
+# e.g. /out/validation-FREEPDB1-20260807T195624Z.json
+```
+
+- `OUT_DIR` — output directory (default `/out`).
+- `RUN_LABEL` — label token (default: the DB service name); sanitized to
+  `[A-Za-z0-9._-]`.
+
+For local 23ai iteration, `make report-local` runs `retest` with `--json` and
+mounts `$(RESULTS_DIR)` (default `./out`) at the container's `/out`, so reports
+land directly on the host — no copy step:
+
+```bash
+make db-up
+make report-local          # → out/validation-FREEPDB1-<ts>.json
+make report-local RESULTS_DIR=reports
+```
 
 ## Credentials
 

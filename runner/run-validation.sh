@@ -24,8 +24,30 @@
 # Fidelity: local runs target Oracle 23ai Free (gvenzl) — NOT 19c/SE2/RDS. This
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the
 # live proof (aws-broker#558). Do not treat this output as compliance evidence.
+#
+# Output: by default the CINC CLI report is printed to stdout. Pass --json (or set
+# JSON_OUTPUT=1) to ALSO write a JSON report to a common output directory
+# (OUT_DIR, default /out) with a timestamped, labeled filename:
+#   ${OUT_DIR}/validation-<label>-<UTC-timestamp>.json
+# The label defaults to the DB service name (RUN_LABEL override). The written path
+# is echoed to stderr. CINC's exit codes (100/101 for failed/skipped controls) are
+# preserved regardless of reporter.
 
 set -euo pipefail
+
+# --- CLI args --------------------------------------------------------------
+JSON_OUTPUT="${JSON_OUTPUT:-}"
+for arg in "$@"; do
+    case "$arg" in
+        --json)
+            JSON_OUTPUT=1
+            ;;
+        *)
+            echo "run-validation: unknown argument '${arg}'" >&2
+            exit 2
+            ;;
+    esac
+done
 
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
 RUBY_BIN=/opt/cinc-auditor/embedded/bin/ruby
@@ -123,7 +145,33 @@ command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 # rebuild.
 PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
 
-exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml --reporter cli)
+exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml)
+
+# Reporters: always emit the human-readable CLI report to stdout. When JSON output
+# is requested, additionally write a timestamped, labeled JSON report to a common
+# output directory so local 23ai runs can be saved/compared. CINC exit status is
+# unaffected by the added reporter.
+reporter_args=(--reporter cli)
+
+if [ -n "$JSON_OUTPUT" ]; then
+    OUT_DIR="${OUT_DIR:-/out}"
+    # Label the run so multiple reports in the shared dir are distinguishable.
+    # Default to the DB service name; sanitize to a filename-safe token.
+    RUN_LABEL="${RUN_LABEL:-$DB_SERVICE}"
+    RUN_LABEL="$(printf '%s' "$RUN_LABEL" | tr -c 'A-Za-z0-9._-' '_')"
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    JSON_PATH="${OUT_DIR}/validation-${RUN_LABEL}-${timestamp}.json"
+
+    mkdir -p "$OUT_DIR" || {
+        echo "run-validation: cannot create OUT_DIR ${OUT_DIR}" >&2
+        exit 1
+    }
+
+    reporter_args+=(json:"$JSON_PATH")
+    echo "run-validation: JSON report path: ${JSON_PATH}" >&2
+fi
+
+exec_args+=("${reporter_args[@]}")
 
 # When the profile dir is NOT the baked-in /profile (i.e. a read-only mounted
 # working tree for `make retest`), CINC still needs a WRITABLE cache to place the

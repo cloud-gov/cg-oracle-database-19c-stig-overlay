@@ -30,6 +30,21 @@ RESULTS_DIR ?= out
 # network name the `retest` container joins to reach the running DB.
 COMPOSE_PROJECT ?= cg-cinc-audit-oracle
 COMPOSE_NETWORK ?= $(COMPOSE_PROJECT)_default
+# --- Local dev DB connection (matches runner/docker-compose.yml) ------------
+# NOT a secret: a well-known password for a loopback-only (127.0.0.1) throwaway
+# 23ai DB. Defined once here and reused by retest/report-local so it can't drift.
+# Override on the CLI to point those targets at a different local DB.
+LOCAL_DB_USER     ?= system
+LOCAL_DB_PASSWORD ?= devpw_ChangeMe1
+LOCAL_DB_HOST     ?= oracle
+LOCAL_DB_SERVICE  ?= FREEPDB1
+LOCAL_DB_PORT     ?= 1521
+LOCAL_DB_ENV := \
+  -e DB_USER=$(LOCAL_DB_USER) \
+  -e DB_PASSWORD=$(LOCAL_DB_PASSWORD) \
+  -e DB_HOST=$(LOCAL_DB_HOST) \
+  -e DB_SERVICE=$(LOCAL_DB_SERVICE) \
+  -e DB_PORT=$(LOCAL_DB_PORT)
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
 # Mount the repo root into the auditor container as /share.
@@ -149,11 +164,7 @@ retest: ensure-image ## Re-run the LOCAL profile (RO mount) against the running 
 	docker run --rm \
 	  --network $(COMPOSE_NETWORK) \
 	  -v "$(CURDIR)":/mnt/profile:ro \
-	  -e DB_USER=system \
-	  -e DB_PASSWORD=devpw_ChangeMe1 \
-	  -e DB_HOST=oracle \
-	  -e DB_SERVICE=FREEPDB1 \
-	  -e DB_PORT=1521 \
+	  $(LOCAL_DB_ENV) \
 	  -e PROFILE_SOURCE=/mnt/profile \
 	  -e CONTROLS="$(CONTROLS)" \
 	  $(RUNNER_IMAGE)
@@ -172,11 +183,7 @@ report-local: ensure-image ## Like retest, but --json: saves a timestamped JSON 
 	  -v "$(CURDIR)":/mnt/profile:ro \
 	  -v "$(CURDIR)/$(RESULTS_DIR)":/out \
 	  -e HOME=/tmp \
-	  -e DB_USER=system \
-	  -e DB_PASSWORD=devpw_ChangeMe1 \
-	  -e DB_HOST=oracle \
-	  -e DB_SERVICE=FREEPDB1 \
-	  -e DB_PORT=1521 \
+	  $(LOCAL_DB_ENV) \
 	  -e PROFILE_SOURCE=/mnt/profile \
 	  -e CONTROLS="$(CONTROLS)" \
 	  $(RUNNER_IMAGE) --json \

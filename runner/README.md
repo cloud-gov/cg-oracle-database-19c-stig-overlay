@@ -30,6 +30,18 @@ make help     # list all targets
 
 `make run` returns non-zero when CINC Auditor reports findings (GNU Make reports a failed recipe as exit 2; the raw compose command returns CINC's exit, such as 100). That can be the expected result of a real STIG finding against the unhardened local 23ai DB, not a runner failure. Use the CLI output to distinguish findings from infrastructure errors.
 
+### Fast local control iteration
+
+To iterate on controls **without** restarting the database each change, keep the DB up and re-run the profile against it. `retest` mounts the working tree **read-only** and execs it, so edits under `controls/` are picked up immediately — no image rebuild:
+
+```bash
+make db-up     # start Oracle 23ai Free once, leave it running (waits until healthy)
+make retest    # edit controls/, re-run in seconds — repeat as needed
+make db-down   # stop and remove the DB when finished
+```
+
+The baseline `depends` is resolved from the committed `inspec.lock` (managed in-repo — run `make vendor` if you change the dependency). Because the profile dir is mounted read-only, CINC's dependency cache is directed to a writable path inside the container (`VENDOR_CACHE`, default the scanner user's `~/.inspec/cache`), so nothing is written back into your working tree.
+
 Equivalent raw commands (what the Makefile runs), from the repository root:
 
 ```bash

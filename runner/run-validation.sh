@@ -116,6 +116,26 @@ EOF
 AUDITOR=cinc-auditor
 command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 
-"$AUDITOR" exec /profile \
-    --input-file /tmp/inputs.yml \
-    --reporter cli
+# Profile source. Defaults to the copy baked into the image at /profile (which was
+# vendored at build time — offline, no scan-time git). For fast local control
+# iteration, the `make retest` target mounts the working tree read-only and points
+# PROFILE_SOURCE at it, so edits to controls/ are picked up without an image
+# rebuild.
+PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
+
+exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml --reporter cli)
+
+# When the profile dir is NOT the baked-in /profile (i.e. a read-only mounted
+# working tree for `make retest`), CINC still needs a WRITABLE cache to place the
+# resolved baseline `depends`. Direct it to a writable path (default the scanner
+# user's ~/.inspec/cache) so nothing is written back into the RO mount. The baked
+# /profile keeps its build-time vendored copy and needs no cache override.
+if [ "$PROFILE_SOURCE" != "/profile" ]; then
+    VENDOR_CACHE="${VENDOR_CACHE:-${HOME:-/home/scanner}/.inspec/cache}"
+    mkdir -p "$VENDOR_CACHE"
+    exec_args+=(--vendor-cache "$VENDOR_CACHE")
+fi
+
+echo "run-validation: profile ${PROFILE_SOURCE}"
+
+"$AUDITOR" "${exec_args[@]}"

@@ -21,6 +21,10 @@ CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
 CF_IDLE_COMMAND ?= sleep infinity
 CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
 COMPOSE_FILE  ?= runner/docker-compose.yml
+# Compose project name (see `name:` in the compose file); used to derive the
+# network name the `retest` container joins to reach the running DB.
+COMPOSE_PROJECT ?= cg-cinc-audit-oracle
+COMPOSE_NETWORK ?= $(COMPOSE_PROJECT)_default
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
 # Mount the repo root into the auditor container as /share.
@@ -89,6 +93,42 @@ verify: check test-go build ## One-command verify: profile loads + oraquery test
 .PHONY: run
 run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile
 	docker compose -f $(COMPOSE_FILE) up --build --abort-on-container-exit
+
+# --- Fast local control iteration (no DB restart per change) ---------------
+# Iterate on controls without stopping/starting the DB each change:
+#   make db-up      # start Oracle 23ai Free once, leave it running
+#   make retest     # edit controls/, re-run in seconds — repeat as needed
+#   make db-down    # stop the DB when finished
+# `retest` mounts the working tree READ-ONLY and execs it, so edits to controls/
+# on disk are picked up immediately. The baseline `depends` is resolved from the
+# committed inspec.lock (managed in-repo via `make vendor`); run-validation.sh
+# directs CINC's dependency cache to a writable path in the container, so the
+# read-only profile dir is never written to.
+
+.PHONY: db-up
+db-up: deps ## Start Oracle 23ai Free (detached) and wait until healthy; leave it running
+	docker compose -f $(COMPOSE_FILE) up -d --wait oracle
+	@echo "db-up: Oracle 23ai Free is healthy. Iterate with 'make retest'; stop with 'make db-down'."
+
+.PHONY: retest
+retest: deps build-local ## Re-run the LOCAL profile (RO mount) against the running DB — fast iteration
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	@echo "retest: executing local profile (controls/ mounted read-only) against the running DB"
+	docker run --rm \
+	  --network $(COMPOSE_NETWORK) \
+	  -v "$(CURDIR)":/mnt/profile:ro \
+	  -e DB_USER=system \
+	  -e DB_PASSWORD=devpw_ChangeMe1 \
+	  -e DB_HOST=oracle \
+	  -e DB_SERVICE=FREEPDB1 \
+	  -e DB_PORT=1521 \
+	  -e PROFILE_SOURCE=/mnt/profile \
+	  $(RUNNER_IMAGE)
+
+.PHONY: db-down
+db-down: ## Stop and remove the iteration DB (and its volume)
+	-docker compose -f $(COMPOSE_FILE) down --volumes --remove-orphans
 
 .PHONY: clean
 clean: ## Tear down compose + remove local results and built image

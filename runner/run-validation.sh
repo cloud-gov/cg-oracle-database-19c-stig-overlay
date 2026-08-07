@@ -24,8 +24,35 @@
 # Fidelity: local runs target Oracle 23ai Free (gvenzl) — NOT 19c/SE2/RDS. This
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the
 # live proof (aws-broker#558). Do not treat this output as compliance evidence.
+#
+# Options: --json also writes a timestamped JSON report to OUT_DIR (default /out);
+# --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
 
 set -euo pipefail
+
+# --- CLI args --------------------------------------------------------------
+JSON_OUTPUT="${JSON_OUTPUT:-}"
+CONTROLS="${CONTROLS:-}"
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --json)
+            JSON_OUTPUT=1
+            ;;
+        --controls | --control)
+            shift
+            [ "$#" -gt 0 ] || { echo "run-validation: --controls requires a value" >&2; exit 2; }
+            CONTROLS="${CONTROLS:+$CONTROLS }$1"
+            ;;
+        --controls=*)
+            CONTROLS="${CONTROLS:+$CONTROLS }${1#--controls=}"
+            ;;
+        *)
+            echo "run-validation: unknown argument '${1}'" >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
 
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
 RUBY_BIN=/opt/cinc-auditor/embedded/bin/ruby
@@ -116,6 +143,54 @@ EOF
 AUDITOR=cinc-auditor
 command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 
-"$AUDITOR" exec /profile \
-    --input-file /tmp/inputs.yml \
-    --reporter cli
+# Profile source: the image's build-time-vendored copy at /profile by default;
+# `make retest` overrides it with a read-only mount of the working tree so control
+# edits are picked up without an image rebuild.
+PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
+
+exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml)
+
+# Always print the CLI report; with --json, also write a timestamped, labeled
+# JSON report so local runs can be saved/compared. Exit status is unaffected.
+reporter_args=(--reporter cli)
+
+if [ -n "$JSON_OUTPUT" ]; then
+    OUT_DIR="${OUT_DIR:-/out}"
+    RUN_LABEL="${RUN_LABEL:-$DB_SERVICE}"
+    RUN_LABEL="$(printf '%s' "$RUN_LABEL" | tr -c 'A-Za-z0-9._-' '_')"
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    JSON_PATH="${OUT_DIR}/validation-${RUN_LABEL}-${timestamp}.json"
+
+    mkdir -p "$OUT_DIR" || {
+        echo "run-validation: cannot create OUT_DIR ${OUT_DIR}" >&2
+        exit 1
+    }
+
+    reporter_args+=(json:"$JSON_PATH")
+    echo "run-validation: JSON report path: ${JSON_PATH}" >&2
+    # Stable machine marker parsed by `make report-cloudgov` to fetch the exact
+    # report over cf ssh. This is a CONTRACT — do not reword or drop it without
+    # updating the sed in the Makefile's report-cloudgov recipe.
+    printf 'JSON_REPORT_PATH=%s\n' "$JSON_PATH" >&2
+fi
+
+exec_args+=("${reporter_args[@]}")
+
+if [ -n "$CONTROLS" ]; then
+    # shellcheck disable=SC2206  # deliberate word-split: one CINC arg per control
+    controls_list=($CONTROLS)
+    exec_args+=(--controls "${controls_list[@]}")
+    echo "run-validation: control filter → ${CONTROLS}" >&2
+fi
+
+# A read-only mounted profile still needs a writable dependency cache; keep that
+# write off the mount. The baked /profile is already vendored and needs no cache.
+if [ "$PROFILE_SOURCE" != "/profile" ]; then
+    VENDOR_CACHE="${VENDOR_CACHE:-${HOME:-/home/scanner}/.inspec/cache}"
+    mkdir -p "$VENDOR_CACHE"
+    exec_args+=(--vendor-cache "$VENDOR_CACHE")
+fi
+
+echo "run-validation: profile ${PROFILE_SOURCE}"
+
+"$AUDITOR" "${exec_args[@]}"

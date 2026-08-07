@@ -111,6 +111,14 @@ run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile
 # profile is mounted at runtime, unnecessary). They only ensure the image EXISTS,
 # building it once on first use. After changing the Dockerfile/oraquery/harness,
 # rebuild explicitly with `make build-local`.
+#
+# CONTROL(S): restrict a run to specific control IDs for the fastest iteration,
+# skipping load+exec of the rest, e.g.:
+#   make retest CONTROL=SV-270495
+#   make retest CONTROLS="SV-270495 SV-270496"
+# CONTROL is a convenience alias for a single id; CONTROLS takes a list.
+CONTROL ?=
+CONTROLS ?= $(CONTROL)
 
 .PHONY: ensure-image
 ensure-image: deps ## Build the runner image only if it is missing (no rebuild if present)
@@ -137,6 +145,7 @@ retest: ensure-image ## Re-run the LOCAL profile (RO mount) against the running 
 	  -e DB_SERVICE=FREEPDB1 \
 	  -e DB_PORT=1521 \
 	  -e PROFILE_SOURCE=/mnt/profile \
+	  -e CONTROLS="$(CONTROLS)" \
 	  $(RUNNER_IMAGE)
 
 .PHONY: report-local
@@ -163,6 +172,7 @@ report-local: ensure-image ## Like retest, but --json: saves a timestamped JSON 
 	  -e DB_SERVICE=FREEPDB1 \
 	  -e DB_PORT=1521 \
 	  -e PROFILE_SOURCE=/mnt/profile \
+	  -e CONTROLS="$(CONTROLS)" \
 	  $(RUNNER_IMAGE) --json \
 	  || [ $$? -ge 100 ]
 	@echo "report-local: saved JSON report(s) under $(RESULTS_DIR)/"

@@ -40,6 +40,17 @@ make retest    # edit controls/, re-run in seconds — repeat as needed
 make db-down   # stop and remove the DB when finished
 ```
 
+For the fastest loop, restrict the run to the control(s) you're editing — CINC
+then skips loading and executing everything else:
+
+```bash
+make retest CONTROL=SV-270495                 # one control
+make retest CONTROLS="SV-270495 SV-270496"    # several
+```
+
+(Equivalently, the runner accepts `--controls "ID [ID...]"` or a `CONTROLS` env
+var directly.)
+
 The baseline `depends` is resolved from the committed `inspec.lock` (managed in-repo — run `make vendor` if you change the dependency). Because the profile dir is mounted read-only, CINC's dependency cache is directed to a writable path inside the container (`VENDOR_CACHE`, default the scanner user's `~/.inspec/cache`), so nothing is written back into your working tree.
 
 Equivalent raw commands (what the Makefile runs), from the repository root:
@@ -99,6 +110,7 @@ land directly on the host — no copy step:
 make db-up
 make report-local          # → out/validation-FREEPDB1-<ts>.json
 make report-local RESULTS_DIR=reports
+make report-local CONTROL=SV-270495    # report on a single control
 ```
 
 ## Credentials

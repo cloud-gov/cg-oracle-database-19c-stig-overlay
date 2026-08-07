@@ -32,21 +32,37 @@
 # The label defaults to the DB service name (RUN_LABEL override). The written path
 # is echoed to stderr. CINC's exit codes (100/101 for failed/skipped controls) are
 # preserved regardless of reporter.
+#
+# Control filter (fast iteration): pass --controls "ID [ID...]" (or set the
+# CONTROLS env) to run only the named control(s) / regexes, skipping load+exec of
+# everything else. This is the biggest per-run saving when iterating on one control.
 
 set -euo pipefail
 
 # --- CLI args --------------------------------------------------------------
 JSON_OUTPUT="${JSON_OUTPUT:-}"
-for arg in "$@"; do
-    case "$arg" in
+# CONTROLS is a whitespace-separated list of control names/regexes (may be empty).
+CONTROLS="${CONTROLS:-}"
+while [ "$#" -gt 0 ]; do
+    case "$1" in
         --json)
             JSON_OUTPUT=1
             ;;
+        --controls | --control)
+            shift
+            [ "$#" -gt 0 ] || { echo "run-validation: ${0##*/}: --controls requires a value" >&2; exit 2; }
+            # Append so repeated flags accumulate; space-separated for CINC.
+            CONTROLS="${CONTROLS:+$CONTROLS }$1"
+            ;;
+        --controls=*)
+            CONTROLS="${CONTROLS:+$CONTROLS }${1#--controls=}"
+            ;;
         *)
-            echo "run-validation: unknown argument '${arg}'" >&2
+            echo "run-validation: unknown argument '${1}'" >&2
             exit 2
             ;;
     esac
+    shift
 done
 
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
@@ -172,6 +188,16 @@ if [ -n "$JSON_OUTPUT" ]; then
 fi
 
 exec_args+=("${reporter_args[@]}")
+
+# Control filter (fast iteration): restrict the run to the named control(s) /
+# regexes. `--controls` takes a list; word-splitting CONTROLS here is intentional
+# so each token is a separate argument to CINC.
+if [ -n "$CONTROLS" ]; then
+    # shellcheck disable=SC2206  # deliberate word-split into separate CINC args
+    controls_list=($CONTROLS)
+    exec_args+=(--controls "${controls_list[@]}")
+    echo "run-validation: control filter → ${CONTROLS}" >&2
+fi
 
 # When the profile dir is NOT the baked-in /profile (i.e. a read-only mounted
 # working tree for `make retest`), CINC still needs a WRITABLE cache to place the

@@ -168,6 +168,10 @@ if [ -n "$JSON_OUTPUT" ]; then
 
     reporter_args+=(json:"$JSON_PATH")
     echo "run-validation: JSON report path: ${JSON_PATH}" >&2
+    # Stable machine marker parsed by `make report-cloudgov` to fetch the exact
+    # report over cf ssh. This is a CONTRACT — do not reword or drop it without
+    # updating the sed in the Makefile's report-cloudgov recipe.
+    printf 'JSON_REPORT_PATH=%s\n' "$JSON_PATH" >&2
 fi
 
 exec_args+=("${reporter_args[@]}")

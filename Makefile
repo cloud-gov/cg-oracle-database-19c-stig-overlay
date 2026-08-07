@@ -104,7 +104,8 @@ report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSO
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
 	@mkdir -p "$(RESULTS_DIR)"
 	@# The runner writes /out/validation-<label>-<ts>.json in the container and
-	@# echoes "JSON report path: <path>" on stderr; parse that to fetch the exact
+	@# emits a stable `JSON_REPORT_PATH=<path>` marker on stderr (a CONTRACT with
+	@# run-validation.sh — keep the two in sync); parse that to fetch the exact
 	@# file with a second cf ssh. Pin the instance so both calls hit the same one;
 	@# tolerate CINC 100/101 (findings, not runner errors).
 	@set -e; \
@@ -112,7 +113,7 @@ report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSO
 	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) \
 	    -c "/usr/local/bin/run-validation.sh --json" 2> "$$log" || true; \
 	  cat "$$log" >&2; \
-	  remote="$$(sed -n 's/^run-validation: JSON report path: //p' "$$log" | tail -n1)"; \
+	  remote="$$(sed -n 's/^JSON_REPORT_PATH=//p' "$$log" | tail -n1)"; \
 	  rm -f "$$log"; \
 	  [ -n "$$remote" ] || { echo "ERROR: could not determine remote JSON path." >&2; exit 1; }; \
 	  local="$(RESULTS_DIR)/$$(basename "$$remote")"; \

@@ -195,6 +195,9 @@ if [ -n "$JSON_OUTPUT" ]; then
     }
 
     reporter_args+=(json:"$JSON_PATH")
+    # Stable, parseable marker (consumed by `make report-cloudgov`); the arrow is
+    # decorative only — machine consumers key off the "JSON report path: " prefix.
+    echo "run-validation: JSON report path: ${JSON_PATH}" >&2
     echo "run-validation: JSON report → ${JSON_PATH}" >&2
 fi
 

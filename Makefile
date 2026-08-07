@@ -20,6 +20,11 @@ DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
 CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
 CF_IDLE_COMMAND ?= sleep infinity
 CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
+# Local directory for retrieved JSON reports (mirrors the container's /out).
+RESULTS_DIR ?= out
+# App instance to target for validation over SSH. Both cf ssh calls (run, then
+# fetch) MUST hit the same instance, so this is pinned rather than left to CF.
+CF_APP_INSTANCE ?= 0
 COMPOSE_FILE  ?= runner/docker-compose.yml
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
@@ -74,6 +79,34 @@ push-dockerhub: build-cloudgov ## Build and push the Cloud.gov linux/amd64 image
 push-cloudgov: push-dockerhub ## Push an idle Docker image app to Cloud.gov for cf ssh validation runs
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
 	cf push $(CLOUDGOV_APP) --docker-image $(DOCKERHUB_IMAGE) $(CF_PUSH_FLAGS)
+
+.PHONY: report-cloudgov
+report-cloudgov: ## Run validation --json on Cloud.gov and save the JSON locally under $(RESULTS_DIR)/ with the same filename
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	@mkdir -p "$(RESULTS_DIR)"
+	@echo "report-cloudgov: running --json on $(CLOUDGOV_APP) (instance $(CF_APP_INSTANCE))"
+	@# Run the validation with JSON output. The runner writes the report to
+	@# /out/validation-<label>-<ts>.json inside the container and echoes that
+	@# path on stderr as "JSON report path: <path>". Capture stderr so we can
+	@# learn the exact (timestamped) filename to fetch. CINC exits 100/101 when
+	@# controls fail/skip; that is expected and must NOT abort the fetch, so we
+	@# tolerate it.
+	@set -e; \
+	  stderr_log="$$(mktemp)"; \
+	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) \
+	    -c "/usr/local/bin/run-validation.sh --json" 2> "$$stderr_log" || true; \
+	  cat "$$stderr_log" >&2; \
+	  remote_path="$$(sed -n 's/^run-validation: JSON report path: //p' "$$stderr_log" | tail -n1)"; \
+	  rm -f "$$stderr_log"; \
+	  if [ -z "$$remote_path" ]; then \
+	    echo "ERROR: could not determine remote JSON path from run output." >&2; \
+	    exit 1; \
+	  fi; \
+	  local_path="$(RESULTS_DIR)/$$(basename "$$remote_path")"; \
+	  echo "report-cloudgov: fetching $$remote_path → $$local_path"; \
+	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) \
+	    -c "cat '$$remote_path'" > "$$local_path"; \
+	  echo "report-cloudgov: saved $$local_path"
 
 .PHONY: test-go
 test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)

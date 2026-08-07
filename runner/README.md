@@ -86,12 +86,22 @@ Retrieve it from a live Cloud.gov run with a second `cf ssh` that reads the file
 
 ```bash
 cf ssh cg-cinc-audit-oracle-runner -c "/usr/local/bin/run-validation.sh --json"
-# note the "JSON report → /out/validation-ORCL-<ts>.json" line, then:
+# note the "JSON report path: /out/validation-ORCL-<ts>.json" line, then:
 cf ssh cg-cinc-audit-oracle-runner -c "cat /out/validation-ORCL-<ts>.json" > local-report.json
 ```
 
+Or use the Makefile target, which runs `--json`, parses the remote path, and
+saves the report locally under `out/` with the **same filename**:
+
+```bash
+make report-cloudgov            # → out/validation-ORCL-<ts>.json
+# override the local dir or instance if needed:
+make report-cloudgov RESULTS_DIR=reports CF_APP_INSTANCE=0
+```
+
 > Both `cf ssh` invocations must reach the **same** app instance — with more than
-> one instance, target it explicitly (`cf ssh -i <index> …`).
+> one instance, target it explicitly (`cf ssh -i <index> …`). `make report-cloudgov`
+> pins `-i $(CF_APP_INSTANCE)` (default `0`) for exactly this reason.
 
 ## Credentials
 

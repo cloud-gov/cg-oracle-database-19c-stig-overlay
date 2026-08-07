@@ -1,4 +1,4 @@
-name: cg-oracle-19c-stig-runner
+name: cg-cinc-audit-oracle
 
 # Local STIG-profile runner (#7). Brings up Oracle 23ai Free (gvenzl) and runs
 # the overlay profile through CINC Auditor.
@@ -27,6 +27,7 @@ services:
       retries: 30
 
   runner:
+    image: cg-cinc-audit-oracle-runner:local
     build:
       # repo root: the runner Dockerfile copies inspec.yml/inspec.lock/controls
       # (the overlay profile) plus runner/oraquery + runner scripts.

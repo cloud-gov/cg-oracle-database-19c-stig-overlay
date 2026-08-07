@@ -106,6 +106,17 @@ run: deps ## Full end-to-end: start Oracle 23ai Free + exec the profile
 # committed inspec.lock (managed in-repo via `make vendor`); run-validation.sh
 # directs CINC's dependency cache to a writable path in the container, so the
 # read-only profile dir is never written to.
+#
+# retest/report-local do NOT rebuild the runner image (that is slow and, since the
+# profile is mounted at runtime, unnecessary). They only ensure the image EXISTS,
+# building it once on first use. After changing the Dockerfile/oraquery/harness,
+# rebuild explicitly with `make build-local`.
+
+.PHONY: ensure-image
+ensure-image: deps ## Build the runner image only if it is missing (no rebuild if present)
+	@docker image inspect $(RUNNER_IMAGE) >/dev/null 2>&1 \
+	  || { echo "ensure-image: $(RUNNER_IMAGE) not found — building once..."; \
+	       docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .; }
 
 .PHONY: db-up
 db-up: deps ## Start Oracle 23ai Free (detached) and wait until healthy; leave it running
@@ -113,7 +124,7 @@ db-up: deps ## Start Oracle 23ai Free (detached) and wait until healthy; leave i
 	@echo "db-up: Oracle 23ai Free is healthy. Iterate with 'make retest'; stop with 'make db-down'."
 
 .PHONY: retest
-retest: deps build-local ## Re-run the LOCAL profile (RO mount) against the running DB — fast iteration
+retest: ensure-image ## Re-run the LOCAL profile (RO mount) against the running DB — fast iteration, no image rebuild
 	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
 	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
 	@echo "retest: executing local profile (controls/ mounted read-only) against the running DB"
@@ -129,7 +140,7 @@ retest: deps build-local ## Re-run the LOCAL profile (RO mount) against the runn
 	  $(RUNNER_IMAGE)
 
 .PHONY: report-local
-report-local: deps build-local ## Like retest, but --json: saves a timestamped JSON report to $(RESULTS_DIR)/
+report-local: ensure-image ## Like retest, but --json: saves a timestamped JSON report to $(RESULTS_DIR)/ (no image rebuild)
 	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
 	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
 	@mkdir -p "$(RESULTS_DIR)"

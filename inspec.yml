@@ -6,8 +6,8 @@ copyright_email: cloud-gov-support@gsa.gov
 license: Apache-2.0
 summary: >-
   Cloud.gov overlay for the DISA Oracle Database 19c STIG. Depends on the
-  cloud-gov fork of the MITRE baseline and (during MVP) requires only a single
-  control end to end to validate the depends -> overlay -> SQL-verify path.
+  cloud-gov fork of the MITRE baseline and requires all of its runnable
+  (oracledb_session) controls via the depends -> overlay -> SQL-verify path.
 version: 0.1.0
 inspec_version: ">= 4.0"
 
@@ -19,13 +19,15 @@ depends:
     git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git
     branch: cloudgov
 
-# MVP: only SV-270495 is pulled in from the depended-on profile, via a
-# `require_controls` block in controls/SV-270495.rb. This overlay defines no
-# other controls yet (#3).
+# The overlay pulls in the runnable baseline controls (those with actual
+# oracledb_session tests) via a `require_controls` block in controls/baseline.rb.
+# Empty stubs / doc-only manual controls in the baseline are intentionally not
+# required. The baseline `cloudgov` branch forwards `port: input('port')` into
+# every connect string, so this overlay's `port` input flows straight through.
 
-# Inputs consumed by SV-270495 via oracledb_session. Values are supplied at scan
-# time (CLI/attributes/env), never committed. Defaults are empty and non-sensitive
-# metadata only.
+# Inputs consumed by the required controls via oracledb_session. Values are
+# supplied at scan time (CLI/attributes/env), never committed. Defaults are empty
+# and non-sensitive metadata only.
 inputs:
   - name: user
     description: 'Oracle DB username (RDS master user; not SYS)'

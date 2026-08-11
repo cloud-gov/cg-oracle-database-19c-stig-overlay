@@ -7,8 +7,8 @@ STIG-hardened Oracle 19c offering brokered by
 
 > **Status: work in progress — not a compliance attestation.**
 > This repo currently contains a **draft** control→layer map, a set of SQL
-> hardening/assessment scripts, and a **minimal MVP InSpec profile** (a single
-> `require_controls` proof; see
+> hardening/assessment scripts, and an **InSpec profile** that requires all
+> runnable controls from the baseline (see
 > [#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3)),
 > and **no STIG evidence has been generated against a live brokered instance.**
 > Do not read anything here as "STIG compliant."
@@ -32,19 +32,15 @@ InSpec/CINC against itself (separation of duties).
 - `hardening/sql/` — assessment-first, mostly-idempotent SQL for the database layer,
   plus rollback scripts.
 
-- A **minimal InSpec profile** (`inspec.yml` + `controls/`) that `depends` on the
-  cloud-gov fork of the MITRE baseline and, as an MVP, `require_controls` a single
-  control (SV-270495) to validate the `depends → overlay → SQL-verify` path end to
-  end. The dependency approach is recorded in
+- An **InSpec profile** (`inspec.yml` + `controls/`) that `depends` on the
+  cloud-gov fork of the MITRE baseline and `require_controls` all of its runnable
+  controls (the 32 with `oracledb_session` SQL checks) to exercise the
+  `depends → overlay → SQL-verify` path. The dependency approach is recorded in
   [`docs/adr/0001-consume-mitre-baseline-via-fork-depends.md`](docs/adr/0001-consume-mitre-baseline-via-fork-depends.md).
 
 **Not yet committed (planned / tracked):**
 
-- The full set of runnable 19c overlay controls and a `port` input — tracked in
-  [#3](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/3).
 - A consumer that reads `control-layers.yml` to classify a live run.
-- A CINC-Auditor validation/runner container — tracked in
-  [#7](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/7).
 - Any live-instance validation run (compliance evidence).
 
 ## Layout

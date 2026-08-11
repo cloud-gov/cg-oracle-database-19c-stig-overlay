@@ -33,9 +33,9 @@ InSpec/CINC against itself (separation of duties).
   plus rollback scripts.
 
 - An **InSpec profile** (`inspec.yml` + `controls/`) that `depends` on the
-  cloud-gov fork of the MITRE baseline and `require_controls` all of its runnable
-  controls (the 32 with `oracledb_session` SQL checks) to exercise the
-  `depends → overlay → SQL-verify` path. The dependency approach is recorded in
+  cloud-gov fork of the MITRE baseline and `include_controls` **all** of its
+  controls as defined there, to exercise the `depends → overlay → SQL-verify`
+  path. The dependency approach is recorded in
   [`docs/adr/0001-consume-mitre-baseline-via-fork-depends.md`](docs/adr/0001-consume-mitre-baseline-via-fork-depends.md).
 
 **Not yet committed (planned / tracked):**

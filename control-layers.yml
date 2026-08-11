@@ -5,9 +5,9 @@
 # cloud-gov/cg-oracle-database-19c-stig-overlay#1.
 #
 # STATUS: DRAFT / STARTER MAP. The overlay now has an in-repo InSpec `controls/`
-# directory (it `require_controls` the runnable baseline controls), but no
-# consumer reads this file yet; the `when_check_contains` patterns are written
-# against the expected upstream control text and MUST be validated against the
+# directory (it `include_controls` all baseline controls), but no consumer reads
+# this file yet; the `when_check_contains` patterns are written against the
+# expected upstream control text and MUST be validated against the
 # actual profile controls before this file is authoritative. Do not treat
 # classifications here as final until a test asserts each control resolves to
 # exactly one (set_by, verified_by) pair. See #1.

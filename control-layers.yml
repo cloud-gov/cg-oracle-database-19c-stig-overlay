@@ -163,3 +163,41 @@ controls:
     set_by: aws_inherited
     verified_by: not_applicable_rds
     rationale: Host OS is AWS-managed on RDS; inherited control.
+
+  # --- shared-responsibility compensating control (redo log redundancy) ---
+  # SV-276000 requires >=3 redo log groups AND >=2 members per group. On managed
+  # RDS the member-multiplexing half cannot be satisfied by any tenant action:
+  # ALTER DATABASE ADD LOGFILE MEMBER needs OS filesystem paths, and RDS manages
+  # redo on EBS with no OS access. The DISA check text exempts single members
+  # "if a RAID storage device is being used"; EBS is intra-AZ replicated and RDS
+  # Multi-AZ adds synchronous cross-AZ replication — the RAID/mirroring equivalent,
+  # owned by AWS below the DB layer.
+  #
+  # The baseline InSpec check is intentionally kept STRICT (it correctly FAILS on
+  # RDS) — this map does NOT flip it to a pass. Auto-passing would require
+  # verifying Multi-AZ from AWS metadata (not SQL-visible), so a blanket
+  # "RDS -> pass" would re-introduce a false pass. Instead this is dispositioned
+  # as a documented shared-responsibility compensating control:
+  #   * Platform provides: EBS intra-AZ replication, >=3 log groups (tenant-
+  #     controllable via rdsadmin.rdsadmin_util.add_logfile), and the AVAILABILITY
+  #     of a Multi-AZ tier.
+  #   * Customer responsibility: electing the Multi-AZ plan
+  #     (aws-broker `medium-oracle-se2-redundant`, redundant:true -> MultiAZ) when
+  #     data-criticality/RTO warrants the redundancy. On the base Single-AZ plan
+  #     the residual cross-AZ redundancy gap is a documented, customer-accepted
+  #     risk (Customer Responsibility Matrix / POA&M).
+  # Evidence for the compensating control: RDS Multi-AZ flag, EBS-backed storage,
+  # and v$log showing >=3 groups.
+  # Refs: aws-broker#541 (SG), aws-broker#567 (redundant plan), aws-broker#558
+  # (live proof); cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
+  - id_pattern: "SV-276000"
+    set_by: compensating_control
+    verified_by: sql
+    rationale: >-
+      Member multiplexing is unsupported on managed RDS (no OS access; redo on
+      EBS), so the "2 members per group" requirement is met by a compensating
+      control — EBS intra-AZ replication plus customer-elected Multi-AZ
+      synchronous cross-AZ replication (the RAID exemption the STIG allows) — a
+      shared-responsibility item recorded in the CRM/POA&M. The ">=3 groups"
+      portion remains tenant-controllable and SQL-verified; the baseline check
+      stays strict and is NOT auto-passed on RDS.

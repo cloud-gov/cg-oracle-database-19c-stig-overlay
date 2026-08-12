@@ -72,7 +72,8 @@ cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
 
 | Path | Purpose |
 | --- | --- |
-| `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits the clean CSV `oracledb_session` expects; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
+| `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits standard RFC 4180 CSV; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
+| `../libraries/oracledb_session_patch.rb` | Downstream stopgap that prepends a corrected `parse_csv_result` onto the vendored `oracledb_session` resource. The upstream resource only supports single-column results (multi-column `.column()` returns `nil`); fixed upstream in [inspec/inspec#7997](https://github.com/inspec/inspec/pull/7997). Tracking: [#32](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/32). Remove once the runner image ships a CINC Auditor including the upstream fix. |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
 | `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |

@@ -36,6 +36,7 @@ ENV ORAQUERY_CA_BUNDLE=/opt/certs/rds-govcloud-global-bundle.pem
 # Copy the overlay profile and vendor its pinned git dependency at build time.
 COPY inspec.yml inspec.lock /profile/
 COPY controls /profile/controls
+COPY libraries /profile/libraries
 RUN cinc-auditor vendor /profile --overwrite
 
 COPY --from=oraquery-build /oraquery /usr/local/bin/oraquery

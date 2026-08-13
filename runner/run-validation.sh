@@ -5,7 +5,9 @@
 # Required env (injected at runtime, never baked into the image):
 #   DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE
 # Optional:
-#   DB_PORT (default 1521; use 2484 for TCPS)
+#   DB_PORT — defaulted by the shared helper to match the TLS posture: 1521
+#     (plaintext) for a local dev target, 2484 (TCPS) for a remote target unless
+#     ORAQUERY_TLS=disable was explicitly requested. An explicit DB_PORT wins.
 #
 # When VCAP_SERVICES is present, the first aws-rds binding whose credentials
 # db_name (or name) is "ORCL" is used to fill any unset DB_* values; explicit
@@ -29,6 +31,13 @@
 # --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
 
 set -euo pipefail
+
+# Shared connection discovery (env/VCAP → DB_* + TLS mode). Sourced so this
+# script and db-query.sh cannot drift on how they reach the database.
+LOG_PREFIX=run-validation
+export LOG_PREFIX  # consumed by the sourced lib/db-connect.sh (SC2034)
+# shellcheck source=lib/db-connect.sh
+. "$(dirname "$0")/lib/db-connect.sh"
 
 # --- CLI args --------------------------------------------------------------
 JSON_OUTPUT="${JSON_OUTPUT:-}"
@@ -55,75 +64,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
-RUBY_BIN=/opt/cinc-auditor/embedded/bin/ruby
-[ -x "$RUBY_BIN" ] || RUBY_BIN=ruby
 ORAQUERY_BIN=/usr/local/bin/oraquery
 
-if [ -n "${VCAP_SERVICES:-}" ]; then
-    command -v "$RUBY_BIN" >/dev/null 2>&1 || {
-        echo "run-validation: VCAP_SERVICES provided, but ${RUBY_BIN} is not available to parse it" >&2
-        exit 1
-    }
-
-    echo "run-validation: parsing VCAP_SERVICES with ${RUBY_BIN}"
-    vcap_values="$($RUBY_BIN <<'RUBY'
-require 'json'
-
-services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
-bindings = services.fetch('aws-rds')
-
-# Select the first aws-rds binding whose credentials db_name (or name) is ORCL,
-# rather than blindly taking the first binding.
-binding = bindings.find do |b|
-  creds = b.fetch('credentials')
-  (creds['db_name'] || creds['name']) == 'ORCL'
-end
-
-if binding.nil?
-  STDERR.puts 'run-validation: no aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
-  exit 1
-end
-
-credentials = binding.fetch('credentials')
-
-puts [
-  credentials.fetch('username', ''),
-  credentials.fetch('password', ''),
-  credentials.fetch('host', ''),
-  credentials['db_name'] || credentials.fetch('name', ''),
-  credentials.fetch('port', ''),
-].join("\t")
-RUBY
-)"
-    IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port <<<"$vcap_values"
-
-    DB_USER="${DB_USER:-$vcap_user}"
-    DB_PASSWORD="${DB_PASSWORD:-$vcap_password}"
-    DB_HOST="${DB_HOST:-$vcap_host}"
-    DB_SERVICE="${DB_SERVICE:-$vcap_service}"
-    DB_PORT="${DB_PORT:-$vcap_port}"
-fi
-
-: "${DB_USER:?DB_USER required}"
-: "${DB_PASSWORD:?DB_PASSWORD required}"
-: "${DB_HOST:?DB_HOST required}"
-: "${DB_SERVICE:?DB_SERVICE required}"
-DB_PORT="${DB_PORT:-1521}"
-
-# Local-dev convenience: only auto-select plaintext for an unmistakably local
-# target when the operator has not chosen a TLS mode. Everything else inherits
-# oraquery's fail-closed verify-ca default (#16 / #20).
-if [ -z "${ORAQUERY_TLS:-}" ]; then
-    case "$DB_HOST" in
-        localhost | 127.0.0.1 | ::1 | oracle)
-            export ORAQUERY_TLS=disable
-            echo "run-validation: local target ${DB_HOST} → ORAQUERY_TLS=disable (plaintext, dev only)" >&2
-            ;;
-        *)
-            : # leave unset → oraquery defaults to verify-ca (fails closed w/o a PEM CA bundle)
-            ;;
-    esac
-fi
+# Resolve DB_* (from env and, on Cloud.gov, VCAP_SERVICES) and the TLS mode.
+# Fails closed on a missing coordinate or an absent ORCL binding.
+resolve_db_connection
 
 echo "run-validation: CINC Auditor $(cinc-auditor version 2>/dev/null || inspec version 2>/dev/null || echo '?')"
 echo "run-validation: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (TLS mode: ${ORAQUERY_TLS:-verify-ca})"

@@ -12,10 +12,11 @@
 # scans return real column values today.
 #
 # Tracking: cloud-gov/cg-oracle-database-19c-stig-overlay#32
+# Revert (dependency-blocked on the upstream fix): #35
 #
 # This override is intentionally byte-for-byte equivalent to the upstream PR's
 # parse_csv_result. Remove it once the runner image ships a CINC Auditor that
-# includes inspec/inspec#7997.
+# includes inspec/inspec#7997 (see #35).
 
 require "inspec/resources/oracledb_session"
 require "csv"

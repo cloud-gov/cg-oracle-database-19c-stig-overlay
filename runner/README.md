@@ -24,6 +24,7 @@ The only prerequisite is **Docker** (with `docker compose`). From the repository
 make verify   # profile loads + oraquery unit tests + runner image builds — no database needed
 make run      # full end-to-end: start Oracle 23ai Free and exec the profile
 make test-go  # oraquery unit tests only (go test in a Go container)
+make test-ruby # oracledb_session CSV parser stopgap specs only (rspec in the CINC image)
 make clean    # tear down and remove local results/image
 make help     # list all targets
 ```
@@ -74,6 +75,7 @@ cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
 | --- | --- |
 | `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits standard RFC 4180 CSV; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
 | `../libraries/oracledb_session_patch.rb` | Downstream stopgap that prepends a corrected `parse_csv_result` onto the vendored `oracledb_session` resource. The upstream resource only supports single-column results (multi-column `.column()` returns `nil`); fixed upstream in [inspec/inspec#7997](https://github.com/inspec/inspec/pull/7997). Tracking: [#32](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/32). Remove once the runner image ships a CINC Auditor including the upstream fix. |
+| `../spec/oracledb_session_patch_spec.rb` | Unit specs for the stopgap (run via `make test-ruby`, no DB). Mirrors the upstream PR's fixtures — multi-column, single-column back-compat, quoted-comma value, empty result — so a CINC bump that changes the resource gives fast local feedback instead of a silent wrong parse. Also carries a **"remove me" guard** that asserts the buggy `gsub`-before-`CSV.parse` pattern is still present in the vendored resource; it fails loudly once [inspec/inspec#7997](https://github.com/inspec/inspec/pull/7997) lands, signalling the revert tracked in [#35](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/35) (delete the library, this spec, and the Dockerfile `COPY libraries` line). |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
 | `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |

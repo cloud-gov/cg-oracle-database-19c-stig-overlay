@@ -24,6 +24,7 @@ The only prerequisite is **Docker** (with `docker compose`). From the repository
 make verify   # profile loads + oraquery unit tests + runner image builds — no database needed
 make run      # full end-to-end: start Oracle 23ai Free and exec the profile
 make test-go  # oraquery unit tests only (go test in a Go container)
+make test-ruby # oracledb_session CSV parser stopgap specs only (rspec in the CINC image)
 make clean    # tear down and remove local results/image
 make help     # list all targets
 ```
@@ -74,9 +75,82 @@ cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
 | --- | --- |
 | `oraquery/` | Pure-Go Oracle query client (go-ora, MIT). **Built from source** in the runner image — no prebuilt binary is committed (#11). Emits standard RFC 4180 CSV; replaces sqlplus (OTN EULA) and sqlcl (broken CSV). Unit-tested via `make test-go`. |
 | `../libraries/oracledb_session_patch.rb` | Downstream stopgap that prepends a corrected `parse_csv_result` onto the vendored `oracledb_session` resource. The upstream resource only supports single-column results (multi-column `.column()` returns `nil`); fixed upstream in [inspec/inspec#7997](https://github.com/inspec/inspec/pull/7997). Tracking: [#32](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/32). Remove once the runner image ships a CINC Auditor including the upstream fix. |
+| `../spec/oracledb_session_patch_spec.rb` | Unit specs for the stopgap (run via `make test-ruby`, no DB). Mirrors the upstream PR's fixtures — multi-column, single-column back-compat, quoted-comma value, empty result — so a CINC bump that changes the resource gives fast local feedback instead of a silent wrong parse. Also carries a **"remove me" guard** that asserts the buggy `gsub`-before-`CSV.parse` pattern is still present in the vendored resource; it fails loudly once [inspec/inspec#7997](https://github.com/inspec/inspec/pull/7997) lands, signalling the revert tracked in [#35](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/35) (delete the library, this spec, and the Dockerfile `COPY libraries` line). |
 | `Dockerfile` | Multi-stage: builds `oraquery`, then layers it + the harness onto CINC Auditor; vendors the profile's git dependency at build time; runs non-root. |
-| `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. |
+| `run-validation.sh` | Runs the profile with concise CINC CLI output and CINC's normal exit code. Image ENTRYPOINT. |
+| `db-query.sh` | Ad hoc SQL against the same DB using the same connection discovery + `oraquery` client. See [Ad hoc queries](#ad-hoc-queries-db-querysh). |
+| `lib/db-connect.sh` | Sourced helper: resolves `DB_*` from the environment (and `VCAP_SERVICES` on Cloud.gov) and picks a fail-closed TLS mode. Shared by `run-validation.sh` and `db-query.sh` so they can't drift on how they reach the database. |
 | `docker-compose.yml` | gvenzl/oracle-free (23ai) + the runner. |
+
+## Ad hoc queries (`db-query.sh`)
+
+`db-query.sh` runs arbitrary SQL against the target DB using the **same**
+connection discovery (`lib/db-connect.sh`) and the **same** pure-Go client
+(`oraquery`) the validation runner uses — so credentials, `VCAP_SERVICES`
+parsing, and the fail-closed TLS posture behave identically. It streams
+`oraquery`'s CSV straight through (a header row then data rows); errors go to
+stderr and the exit status is `oraquery`'s.
+
+It takes exactly one of:
+
+- `-c "<sql>"` / `--command "<sql>"` — a single statement
+- `-f <file.sql>` / `--file <file.sql>` — a `.sql` file; statements are split on
+  `;` and each is run in its own `oraquery` process (the client is
+  one-statement-per-process). This is a simple `;` split, **not** a full SQL
+  parser — a `;` inside a string literal or a PL/SQL block would be mis-split.
+- neither — a single statement read from **stdin**
+
+> **Plain SQL only — not a SQL\*Plus/SQLcl replacement.** `oraquery` executes each
+> statement verbatim, so SQL\*Plus directives (`SET`, `PROMPT`, `WHENEVER`,
+> `DEFINE`, substitution variables, a bare `/`, anonymous PL/SQL blocks) are **not**
+> interpreted and will cause `ORA-00900` or be mis-split by the `;` splitter.
+> Scripts written for sqlplus/sqlcl — including the `hardening/sql/*.sql` scripts —
+> must be run with those tools (deliberately not shipped here; sqlplus/sqlcl carry
+> the OTN EULA). For an ad hoc check, pass an individual `SELECT` via `-c`.
+
+To override the TLS mode for a call, set `ORAQUERY_TLS`
+(`verify-ca`/`require`/`disable`) in the environment.
+
+There is **no** Makefile target for it; invoke it directly. Because the image
+ENTRYPOINT is `run-validation.sh`, override the entrypoint for local Docker runs:
+
+```bash
+# Local dev DB (compose network "oracle" host → plaintext 1521):
+docker run --rm --network cg-cinc-audit-oracle_default \
+  --entrypoint /usr/local/bin/db-query.sh \
+  -e DB_USER=system -e DB_PASSWORD=devpw_ChangeMe1 \
+  -e DB_HOST=oracle -e DB_SERVICE=FREEPDB1 \
+  cg-cinc-audit-oracle-runner:local \
+  -c "SELECT 1 FROM dual"
+
+# From a .sql file (mount it in):
+docker run --rm --network cg-cinc-audit-oracle_default \
+  --entrypoint /usr/local/bin/db-query.sh \
+  -v "$PWD/query.sql":/tmp/query.sql:ro \
+  -e DB_USER=system -e DB_PASSWORD=devpw_ChangeMe1 \
+  -e DB_HOST=oracle -e DB_SERVICE=FREEPDB1 \
+  cg-cinc-audit-oracle-runner:local \
+  -f /tmp/query.sql
+```
+
+On Cloud.gov, run it over `cf ssh` against the bound runner app (mind shell
+quoting — single-quote the SQL and escape `$`):
+
+```bash
+cf ssh cg-cinc-audit-oracle-runner \
+  -c "/usr/local/bin/db-query.sh -c 'SELECT banner FROM v\$version'"
+```
+
+Connection coordinates come from `VCAP_SERVICES` (the `aws-rds` `ORCL` binding)
+exactly as for validation; for a live brokered RDS the remote target defaults to
+verified TLS on **TCPS 2484** (see [TLS](#tls-encryption-in-transit--oraquery_tls--oraquery_ca_bundle)).
+
+> **No interactive REPL.** `oraquery` runs exactly one statement per process, so
+> a sqlplus-style session is not native, and `cf-service-connect` does not yet
+> tunnel Oracle for a local client. Use `-c`/`-f`/stdin instead. The upstream ask
+> for Oracle support is tracked at
+> [cloud-gov/cf-service-connect](https://github.com/cloud-gov/cf-service-connect/issues).
+
 
 ## Client binary / supply chain
 
@@ -119,7 +193,11 @@ make report-local CONTROL=SV-270495    # report on a single control
 Connection coordinates are injected at runtime, never baked into the image.
 
 - **Local / ad hoc runs:** provide `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_SERVICE`
-  (and optionally `DB_PORT`, default `1521`) as environment variables.
+  (and optionally `DB_PORT`) as environment variables. When `DB_PORT` is unset,
+  the shared helper (`lib/db-connect.sh`) defaults it to match the TLS posture:
+  `1521` (plaintext) for a local dev target, `2484` (TCPS) for a remote target —
+  unless `ORAQUERY_TLS=disable` was explicitly requested, in which case `1521`.
+  An explicit `DB_PORT` always wins.
 - **Cloud.gov live-RDS runs:** bind the app to the brokered RDS service and read the
   coordinates from `VCAP_SERVICES` (label `aws-rds`): `host`, `port`, `username`,
   `password`, `db_name`. There is no separate secret store — the bound service *is*

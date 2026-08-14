@@ -45,6 +45,14 @@ RUN chmod 0755 /usr/local/bin/oraquery
 COPY runner/run-validation.sh /usr/local/bin/run-validation.sh
 RUN chmod 0755 /usr/local/bin/run-validation.sh
 
+# Ad hoc query wrapper + the shared connection-discovery library it and
+# run-validation.sh both source. The lib is resolved relative to the script via
+# $(dirname "$0")/lib, so it must sit under /usr/local/bin/lib.
+COPY runner/db-query.sh /usr/local/bin/db-query.sh
+COPY runner/lib/db-connect.sh /usr/local/bin/lib/db-connect.sh
+RUN chmod 0755 /usr/local/bin/db-query.sh \
+    && chmod 0644 /usr/local/bin/lib/db-connect.sh
+
 RUN useradd -u 10001 -m scanner \
     && chown -R scanner:scanner /profile \
     && mkdir -p /out && chown scanner:scanner /out

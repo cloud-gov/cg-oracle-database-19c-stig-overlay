@@ -186,18 +186,42 @@ controls:
   #     data-criticality/RTO warrants the redundancy. On the base Single-AZ plan
   #     the residual cross-AZ redundancy gap is a documented, customer-accepted
   #     risk (Customer Responsibility Matrix / POA&M).
-  # Evidence for the compensating control: RDS Multi-AZ flag, EBS-backed storage,
-  # and v$log showing >=3 groups.
+  #
+  # Evidence — split by source, because they are NOT the same axis:
+  #   * SQL-visible (V$LOG): >=3 redo log groups. This is the ONLY part SQL can
+  #     confirm; V$LOG/V$LOGFILE can only ever show the single-member deficit
+  #     (MEMBERS=1), never the compensating redundancy.
+  #   * AWS-metadata / CRM (NOT SQL-visible): Multi-AZ flag (redundant:true ->
+  #     MultiAZ), EBS-backed storage. This is the pass-making compensating
+  #     evidence and it lives outside the database.
+  # NOTE: electing the -redundant (Multi-AZ) plan does NOT change V$LOG/V$LOGFILE —
+  # Multi-AZ is block-level synchronous replication of the storage volume to a
+  # standby AZ, not Oracle-level redo member multiplexing. The primary still shows
+  # single-member groups, so the strict baseline check FAILS on the redundant plan
+  # too (consistent with "never auto-pass on RDS"). Do not expect -redundant to
+  # flip any SQL result.
+  #
+  # verified_by is `compensating_control`, NOT `sql`: SQL cannot confirm the
+  # member-multiplexing requirement or its compensating mechanism (see above); the
+  # >=3-groups portion stays SQL-enforced by the strict baseline check regardless.
+  #
+  # DRAFT: this is the first entry keyed by `id_pattern` (all others use
+  # text_pattern). Per #1's bar, treat the resolution as unproven until a consumer/
+  # resolver test asserts SV-276000 resolves to exactly one (set_by, verified_by)
+  # pair.
   # Refs: aws-broker#541 (SG), aws-broker#567 (redundant plan), aws-broker#558
   # (live proof); cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
   - id_pattern: "SV-276000"
     set_by: compensating_control
-    verified_by: sql
+    verified_by: compensating_control
     rationale: >-
       Member multiplexing is unsupported on managed RDS (no OS access; redo on
-      EBS), so the "2 members per group" requirement is met by a compensating
-      control — EBS intra-AZ replication plus customer-elected Multi-AZ
-      synchronous cross-AZ replication (the RAID exemption the STIG allows) — a
-      shared-responsibility item recorded in the CRM/POA&M. The ">=3 groups"
-      portion remains tenant-controllable and SQL-verified; the baseline check
-      stays strict and is NOT auto-passed on RDS.
+      EBS), and neither the member requirement nor its compensating mechanism is
+      SQL-visible — so verified_by is compensating_control, not sql. The
+      compensating control is EBS intra-AZ replication plus customer-elected
+      Multi-AZ synchronous cross-AZ replication (the RAID exemption the STIG
+      allows), evidenced by AWS metadata (Multi-AZ flag, EBS storage) + the
+      CRM/POA&M, not by a SQL query. The ">=3 groups" portion remains
+      tenant-controllable and is SQL-enforced by the strict baseline check, which
+      is NOT auto-passed on RDS (it correctly fails member-multiplexing, on the
+      Single-AZ and -redundant plans alike).

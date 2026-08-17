@@ -1,15 +1,24 @@
-# Thin overlay on Oracle's OFFICIAL SQLcl image (OTN license) that adds ONLY:
+# Thin overlay on Oracle's OFFICIAL SQLcl image (OTN license) for **LOCAL 23ai
+# testing ONLY** — one-off queries + running the hardening/sql scripts against the
+# compose dev DB. For Cloud.gov, the in-boundary runner is the Java-buildpack app
+# (runner/sqlcl-cf/, see docs/adr/0002-sqlcl-runner-docker-vs-java-buildpack.md);
+# this image is NOT used in-boundary.
+#
+# It adds ONLY:
 #   1) the shared connection-discovery library (lib/db-connect.sh) so this tool
-#      reaches the DB exactly like the CINC runner (env + VCAP_SERVICES),
+#      reaches the DB exactly like the buildpack runner (env + VCAP_SERVICES),
 #   2) the SQLcl connect wrapper (sqlcl-connect.sh) that builds the EZConnect/JDBC
 #      string and picks a fail-closed TLS mode, and
 #   3) a PKCS12 truststore built from the SAME checksum-verified public RDS CA PEM
-#      oraquery uses, so verify-ca TLS to a live brokered RDS works out of the box.
+#      oraquery uses (unused locally — the compose 23ai DB is plaintext loopback —
+#      but kept so the overlay matches what sqlcl-connect.sh expects).
 #
 # We deliberately do NOT rebuild SQLcl or bundle a JRE — the base image provides
-# both. Because SQLcl carries the Oracle OTN EULA, this derived image MUST NOT be
-# pushed to a public registry (unlike the CINC runner image). Push it only to a
-# private/Cloud.gov-internal target for `cf ssh` use.
+# both. Because SQLcl carries the Oracle OTN EULA AND this image is not built on the
+# hardened base, it is BUILT LOCALLY and NEVER pushed to any registry — that keeps
+# it clear of both the OTN redistribution restriction and the mandatory in-boundary
+# container-scanning/hardening pipeline (internal ADR-0007). The Makefile has no push
+# target for it.
 #
 # Build context is the repo root (see runner/docker-compose.yml), so paths below
 # are repo-relative — matching runner/Dockerfile.
@@ -54,8 +63,8 @@ RUN set -eux; \
         changeit; \
     chmod 0644 /opt/sqlcl-run/rds-truststore.p12
 
-# The hardening SQL scripts are copied in so `cf ssh ... -f /opt/hardening/<x>.sql`
-# works without mounting anything. They are plain SQL text (no secrets).
+# The hardening SQL scripts are copied in so `-f /opt/hardening/<x>.sql` works
+# without mounting anything (make sqlcl-run). They are plain SQL text (no secrets).
 COPY hardening/sql /opt/hardening
 
 # Run as the base image's non-root software owner (oracle, uid 54321) rather than

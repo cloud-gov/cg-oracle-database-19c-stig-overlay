@@ -153,6 +153,9 @@ Gopkg.toml
 # Cloud Foundry specific
 manifest.yml
 manifest-*.yml
+# The SQLcl buildpack app's manifest IS a committed source artifact (see
+# runner/sqlcl-cf/README.md) — exempt it from the blanket manifest.yml rule above.
+!runner/sqlcl-cf/manifest.yml
 *.env
 *.vars.yml
 *.vars-*.yml

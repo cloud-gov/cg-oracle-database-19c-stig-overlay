@@ -2,8 +2,9 @@
 # db-connect.sh — shared Oracle connection discovery for the runner scripts.
 #
 # SOURCED library (no shebang; the sourcing script owns `set` options). Source it,
-# then call `resolve_db_connection`. Shared by run-validation.sh and db-query.sh
-# so the connection contract lives in ONE place and they can't drift.
+# then call `resolve_db_connection`. Shared by run-validation.sh, db-query.sh, and
+# both SQLcl runners (sqlcl/sqlcl-connect.sh and sqlcl-cf/entrypoint.sh) so the
+# connection contract lives in ONE place and they can't drift.
 #
 # Contract: on success, exports DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE, DB_PORT
 # and (when it chose one) ORAQUERY_TLS. Fails closed (non-zero + stderr) on a

@@ -1,41 +1,20 @@
 #!/usr/bin/env bash
-# sqlcl-connect.sh — run Oracle SQLcl against the Cloud.gov (or local dev) Oracle
-# DB, resolving the connection with the SAME discovery the STIG validation runner
-# uses (lib/db-connect.sh: env + VCAP_SERVICES, fail-closed TLS). Unlike the pure-Go
-# oraquery wrapper (db-query.sh), SQLcl is a full SQL*Plus/SQLcl interpreter, so it
-# CAN execute the hardening/sql/*.sql scripts (SET/PROMPT/WHENEVER/DEFINE, anonymous
-# PL/SQL blocks, a bare '/', substitution variables) — that is the whole point.
+# sqlcl-connect.sh — run Oracle SQLcl against the Cloud.gov (or local dev) Oracle DB,
+# resolving the connection with the SAME discovery the STIG validation runner uses
+# (lib/db-connect.sh: env + VCAP_SERVICES, fail-closed TLS). SQLcl is a full
+# SQL*Plus/SQLcl interpreter, so unlike the pure-Go oraquery wrapper it CAN run the
+# hardening/sql/*.sql scripts and provide a REPL.
 #
 # Usage:
-#   sqlcl-connect.sh                         # interactive REPL
-#   sqlcl-connect.sh -f /opt/hardening/10_profiles.sql  # run a .sql script, then exit
+#   sqlcl-connect.sh                                    # interactive REPL
+#   sqlcl-connect.sh -f /opt/hardening/10_profiles.sql  # run a script, then exit
 #   sqlcl-connect.sh @/opt/hardening/10_profiles.sql    # SQLcl-native @ form (same)
 #
-# With no args it drops into an interactive SQLcl session (connected).
-#
-# For a script, pass EITHER our `-f <file>` (a familiar alias) OR SQLcl's native
-# `@<file>`. Note SQLcl itself has NO `-f` flag — this wrapper translates `-f <file>`
-# to `@<file>`. Because SQLcl does NOT auto-exit at end-of-script (it would drop to
-# the prompt), the wrapper runs the script via a small driver that appends `EXIT`
-# and sets `WHENEVER SQLERROR/OSERROR EXIT` so batch runs terminate deterministically
-# with a meaningful exit code. Any other args are forwarded verbatim.
-#
-# Connection env & TLS: identical contract to run-validation.sh / db-query.sh — see
-# lib/db-connect.sh. Required: DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE (or an
-# aws-rds "ORCL" binding in VCAP_SERVICES). TLS defaults to verify-ca for remote
-# targets and disable for local dev targets; override with ORAQUERY_TLS.
-#
-#   ORAQUERY_TLS=verify-ca  → TCPS + JDBC truststore (the baked RDS CA). Live RDS.
-#   ORAQUERY_TLS=require     → TCPS, no cert verification (encrypt-only). Debug only.
-#   ORAQUERY_TLS=disable     → plaintext TCP (local dev DB only).
-#
-# The RDS CA truststore is baked into the image at build time from the same
-# checksum-verified PEM bundle oraquery uses (RDS_TRUSTSTORE, default below); no
-# per-start conversion. It is a PUBLIC, non-secret trust anchor.
-#
-# On Cloud.gov, run it over cf ssh against the bound app, e.g.:
-#   cf ssh cg-sqlcl-oracle -c "/opt/sqlcl-run/sqlcl-connect.sh -f /opt/hardening/10_profiles.sql"
-# (an interactive REPL needs `cf ssh -t`).
+# TLS modes, credential handling, and script/exit behavior are documented in
+# README.md. Two behaviors are non-obvious and load-bearing (see below): SQLcl has
+# no `-f` flag (we translate it to `@`) and does not auto-exit at end-of-script, and
+# a CONNECT from a separate SQLPATH/login.sql does NOT carry into a `@script` run
+# (ORA-17008) — so we always CONNECT from the first line of the script we run.
 
 set -euo pipefail
 

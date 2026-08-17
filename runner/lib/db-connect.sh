@@ -33,21 +33,14 @@ _dbc_ruby_bin() {
     return 1
 }
 
-# Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
-# "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but
-# has no ORCL binding — never guesses another database. No-op without VCAP.
-_dbc_parse_vcap() {
-    [ -n "${VCAP_SERVICES:-}" ] || return 0
+# Emit the selected ORCL binding's coordinates as a single tab-separated line:
+#   username <TAB> password <TAB> host <TAB> service <TAB> port
+# Two interpreters implement the SAME contract so the shared resolver works in
+# BOTH runner images without drift: the CINC image ships Ruby; the stock SQLcl
+# image ships python3 (no Ruby). Ruby is preferred when present, else python3.
 
-    local ruby_bin
-    if ! ruby_bin="$(_dbc_ruby_bin)"; then
-        _dbc_log "VCAP_SERVICES provided, but no Ruby interpreter is available to parse it"
-        return 1
-    fi
-
-    _dbc_log "parsing VCAP_SERVICES with ${ruby_bin}"
-    local vcap_values
-    vcap_values="$("$ruby_bin" <<'RUBY'
+_dbc_vcap_ruby() {
+    "$1" <<'RUBY'
 require 'json'
 
 services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
@@ -73,7 +66,53 @@ puts [
   credentials.fetch('port', ''),
 ].join("\t")
 RUBY
-    )" || return 1
+}
+
+_dbc_vcap_python() {
+    "$1" <<'PY'
+import json, os, sys
+
+services = json.loads(os.environ["VCAP_SERVICES"])
+bindings = services["aws-rds"]  # KeyError → non-zero, matching Ruby's fetch
+
+binding = next(
+    (b for b in bindings
+     if (b["credentials"].get("db_name") or b["credentials"].get("name")) == "ORCL"),
+    None,
+)
+
+if binding is None:
+    sys.stderr.write('db-connect: no aws-rds binding with db_name "ORCL" found in VCAP_SERVICES\n')
+    sys.exit(1)
+
+c = binding["credentials"]
+print("\t".join([
+    c.get("username", ""),
+    c.get("password", ""),
+    c.get("host", ""),
+    c.get("db_name") or c.get("name", ""),
+    str(c.get("port", "")),
+]))
+PY
+}
+
+# Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
+# "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but
+# has no ORCL binding — never guesses another database. No-op without VCAP.
+_dbc_parse_vcap() {
+    [ -n "${VCAP_SERVICES:-}" ] || return 0
+
+    local vcap_values ruby_bin python_bin
+    if ruby_bin="$(_dbc_ruby_bin)"; then
+        _dbc_log "parsing VCAP_SERVICES with ${ruby_bin}"
+        vcap_values="$(_dbc_vcap_ruby "$ruby_bin")" || return 1
+    elif python_bin="$(command -v python3)"; then
+        _dbc_log "parsing VCAP_SERVICES with ${python_bin}"
+        vcap_values="$(_dbc_vcap_python "$python_bin")" || return 1
+    else
+        _dbc_log "VCAP_SERVICES provided, but no Ruby or python3 interpreter is available to parse it"
+        return 1
+    fi
 
     local vcap_user vcap_password vcap_host vcap_service vcap_port
     IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port <<<"$vcap_values"

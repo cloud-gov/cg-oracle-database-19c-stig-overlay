@@ -1,8 +1,7 @@
 # Thin overlay on Oracle's OFFICIAL SQLcl image (OTN license) for **LOCAL 23ai
 # testing ONLY** — one-off queries + running the hardening/sql scripts against the
 # compose dev DB. For Cloud.gov, the in-boundary runner is the Java-buildpack app
-# (runner/sqlcl-cf/, see docs/adr/0002-sqlcl-runner-docker-vs-java-buildpack.md);
-# this image is NOT used in-boundary.
+# (runner/sqlcl-cf/); this image is NOT used in-boundary.
 #
 # It adds ONLY:
 #   1) the shared connection-discovery library (lib/db-connect.sh) so this tool

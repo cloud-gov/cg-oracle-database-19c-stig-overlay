@@ -5,12 +5,11 @@
 > assessment scripts while iterating. **It is built locally and never pushed.**
 >
 > **For Cloud.gov, use the Java-buildpack app** in [`../sqlcl-cf/`](../sqlcl-cf/)
-> (`make push-sqlcl-cf`). The buildpack path is the only supported in-boundary
-> runner — see [ADR-0002](../../docs/adr/0002-sqlcl-runner-docker-vs-java-buildpack.md).
-> A Docker image cannot run in-boundary without being re-based on `ubuntu-hardened`
-> and onboarded to the mandatory container-scanning pipeline (internal ADR-0007),
-> which also collides with the Oracle OTN redistribution restriction. Keeping this
-> image local-only sidesteps both.
+> (`make push-sqlcl-cf`) — the only supported in-boundary runner. A Docker image
+> cannot run in-boundary without being re-based on `ubuntu-hardened` and onboarded to
+> the mandatory container-scanning pipeline (internal ADR-0007), which also collides
+> with the Oracle OTN redistribution restriction. Keeping this image local-only
+> sidesteps both.
 
 `db-query.sh` (the pure-Go `oraquery` wrapper) is deliberately **plain SQL only**:
 it runs one statement per process and does **not** interpret SQL\*Plus/SQLcl

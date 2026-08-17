@@ -21,9 +21,9 @@ RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
 # `docker inspect <img> --format '{{index .RepoDigests 0}}'`.
 #
 # NOT for Cloud.gov: the in-boundary SQLcl runner uses the Java-buildpack app
-# (runner/sqlcl-cf/, see ADR-0002). This image is built locally and NEVER pushed to
-# a registry — that keeps it clear of both the OTN redistribution restriction and
-# the mandatory in-boundary container-scanning/hardening pipeline (internal ADR-0007).
+# (runner/sqlcl-cf/). This image is built locally and NEVER pushed to a registry —
+# that keeps it clear of both the OTN redistribution restriction and the mandatory
+# in-boundary container-scanning/hardening pipeline (internal ADR-0007).
 SQLCL_IMAGE       ?= cg-sqlcl-oracle:local
 SQLCL_BASE_IMAGE  ?= container-registry.oracle.com/database/sqlcl@sha256:c039d51466cea7c76f1e3b3ae4b125e2a73381a884a548737cb65b26e6dd7db1
 CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
@@ -98,7 +98,7 @@ build-local: deps ## Build the runner image for local testing
 # A full SQL*Plus/SQLcl interpreter (unlike the pure-Go oraquery wrapper) for one-off
 # queries + running the hardening/sql/*.sql scripts against the compose dev DB. Thin
 # overlay on Oracle's official OTN SQLcl image, BUILT LOCALLY and NEVER pushed. For
-# Cloud.gov use the Java-buildpack app instead (make push-sqlcl-cf; ADR-0002).
+# Cloud.gov use the Java-buildpack app instead (make push-sqlcl-cf).
 .PHONY: build-sqlcl
 build-sqlcl: deps ## Build the SQLcl image for LOCAL 23ai testing (thin overlay on the official OTN image)
 	docker build -f runner/sqlcl/Dockerfile \
@@ -130,7 +130,7 @@ sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the ru
 	  $(SQLCL_IMAGE) -f /opt/hardening/$(SQL)
 
 # --- SQLcl via the Java buildpack (Cloud.gov — the ONLY supported in-boundary path) --
-# For Cloud.gov we cf push the pure-Java SQLcl through the Java buildpack (ADR-0002):
+# For Cloud.gov we cf push the pure-Java SQLcl through the Java buildpack:
 # no Docker image, no registry, no registry creds, no cross-arch build, and outside
 # the mandatory in-boundary container-scanning pipeline (internal ADR-0007). SQLcl
 # must be vendored under runner/sqlcl-cf/vendor/sqlcl/ first (see that dir's README).

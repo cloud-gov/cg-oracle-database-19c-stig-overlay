@@ -1,0 +1,10 @@
+# Staged copies of the single-source files (produced by `make stage-sqlcl-cf`).
+# These are git-ignored so the canonical sources under runner/lib, runner/sqlcl,
+# hardening/sql, and runner/certs remain authoritative and cannot drift.
+/lib/
+/sqlcl-connect.sh
+/hardening/
+/certs/
+
+# Vendored SQLcl distribution — large + OTN license-restricted; never commit.
+/vendor/sqlcl/

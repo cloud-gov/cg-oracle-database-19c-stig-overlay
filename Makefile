@@ -14,25 +14,18 @@
 #   make check AUDITOR_IMAGE=cincproject/auditor:6
 AUDITOR_IMAGE ?= cincproject/auditor:7
 RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
-# SQLcl image (full SQL*Plus/SQLcl interpreter — runs the hardening/sql scripts).
-# Thin overlay on Oracle's official OTN image. SQLCL_BASE_IMAGE is pinned by digest
-# (dependency policy forbids floating tags) — SQLcl 26.2.1.0, resolved 2026-08-17.
-# To update: pull the tag and read `docker inspect <img> --format '{{index .RepoDigests 0}}'`.
+# SQLcl image — LOCAL 23ai testing ONLY (one-off queries + running hardening/sql
+# scripts against the compose dev DB). Thin overlay on Oracle's official OTN image;
+# SQLCL_BASE_IMAGE is pinned by digest (dependency policy forbids floating tags) —
+# SQLcl 26.2.1.0, resolved 2026-08-17. To update: pull the tag and read
+# `docker inspect <img> --format '{{index .RepoDigests 0}}'`.
 #
-# OTN EULA: SQLcl redistribution is restricted, so this derived image MUST live in a
-# PRIVATE registry only — never a public one. It is pushed to a private Docker Hub
-# repo under pburkholder/ so Cloud.gov's cell can pull it (cf push --docker-image
-# does NOT upload a local image; the platform pulls from a registry it can reach).
+# NOT for Cloud.gov: the in-boundary SQLcl runner uses the Java-buildpack app
+# (runner/sqlcl-cf/, see ADR-0002). This image is built locally and NEVER pushed to
+# a registry — that keeps it clear of both the OTN redistribution restriction and
+# the mandatory in-boundary container-scanning/hardening pipeline (internal ADR-0007).
 SQLCL_IMAGE       ?= cg-sqlcl-oracle:local
 SQLCL_BASE_IMAGE  ?= container-registry.oracle.com/database/sqlcl@sha256:c039d51466cea7c76f1e3b3ae4b125e2a73381a884a548737cb65b26e6dd7db1
-# Private Docker Hub repo (MUST be set to Private in Docker Hub — OTN license).
-SQLCL_DOCKERHUB_REPO ?= pburkholder/cg-sqlcl-oracle
-SQLCL_DOCKERHUB_TAG  ?= amd64
-CLOUDGOV_SQLCL_IMAGE ?= $(SQLCL_DOCKERHUB_REPO):$(SQLCL_DOCKERHUB_TAG)
-CLOUDGOV_SQLCL_APP   ?= cg-sqlcl-oracle
-# Docker Hub credentials the Cloud.gov cell uses to pull the PRIVATE image. Supply
-# on the CLI / environment (never commit): CF_DOCKER_USERNAME + CF_DOCKER_PASSWORD.
-CF_DOCKER_USERNAME ?=
 CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
 CLOUDGOV_PLATFORM ?= linux/amd64
 DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
@@ -101,11 +94,13 @@ build: build-local ## Build the runner image for local testing
 build-local: deps ## Build the runner image for local testing
 	docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .
 
-# --- SQLcl image (interactive REPL + runs the hardening/sql/*.sql scripts) --
-# A full SQL*Plus/SQLcl interpreter, unlike the pure-Go oraquery wrapper. Thin
-# overlay on Oracle's official OTN SQLcl image — do NOT push to a public registry.
+# --- SQLcl image — LOCAL 23ai testing ONLY --------------------------------
+# A full SQL*Plus/SQLcl interpreter (unlike the pure-Go oraquery wrapper) for one-off
+# queries + running the hardening/sql/*.sql scripts against the compose dev DB. Thin
+# overlay on Oracle's official OTN SQLcl image, BUILT LOCALLY and NEVER pushed. For
+# Cloud.gov use the Java-buildpack app instead (make push-sqlcl-cf; ADR-0002).
 .PHONY: build-sqlcl
-build-sqlcl: deps ## Build the SQLcl image (thin overlay on the official OTN image)
+build-sqlcl: deps ## Build the SQLcl image for LOCAL 23ai testing (thin overlay on the official OTN image)
 	docker build -f runner/sqlcl/Dockerfile \
 	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
 	  -t $(SQLCL_IMAGE) .
@@ -134,35 +129,32 @@ sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the ru
 	  -e ORAQUERY_TLS=disable \
 	  $(SQLCL_IMAGE) -f /opt/hardening/$(SQL)
 
-.PHONY: build-sqlcl-cloudgov
-build-sqlcl-cloudgov: deps ## Build the SQLcl image for Cloud.gov (linux/amd64) and load it locally
-	docker buildx build --platform $(CLOUDGOV_PLATFORM) \
-	  -f runner/sqlcl/Dockerfile \
-	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
-	  -t $(CLOUDGOV_SQLCL_IMAGE) \
-	  --load \
-	  .
+# --- SQLcl via the Java buildpack (Cloud.gov — the ONLY supported in-boundary path) --
+# For Cloud.gov we cf push the pure-Java SQLcl through the Java buildpack (ADR-0002):
+# no Docker image, no registry, no registry creds, no cross-arch build, and outside
+# the mandatory in-boundary container-scanning pipeline (internal ADR-0007). SQLcl
+# must be vendored under runner/sqlcl-cf/vendor/sqlcl/ first (see that dir's README).
+SQLCL_CF_DIR ?= runner/sqlcl-cf
+SQLCL_CF_APP ?= cg-sqlcl-oracle-cf
 
-.PHONY: push-sqlcl-dockerhub
-push-sqlcl-dockerhub: build-sqlcl-cloudgov ## Push the SQLcl image to the PRIVATE pburkholder Docker Hub repo
-	@# OTN EULA: this repo MUST be Private on Docker Hub — never public. Log in
-	@# first with `docker login` as the pburkholder account.
-	@echo "push-sqlcl-dockerhub: pushing $(CLOUDGOV_SQLCL_IMAGE) — ensure this Docker Hub repo is PRIVATE (OTN license)."
-	docker push $(CLOUDGOV_SQLCL_IMAGE)
+.PHONY: stage-sqlcl-cf
+stage-sqlcl-cf: ## Copy the single-source files into runner/sqlcl-cf/ (no drift) before cf push
+	@# These staged copies are git-ignored; the sources under runner/lib, runner/sqlcl,
+	@# hardening/sql, and runner/certs stay authoritative.
+	@mkdir -p "$(SQLCL_CF_DIR)/lib" "$(SQLCL_CF_DIR)/hardening" "$(SQLCL_CF_DIR)/certs"
+	cp runner/lib/db-connect.sh          "$(SQLCL_CF_DIR)/lib/db-connect.sh"
+	cp runner/sqlcl/sqlcl-connect.sh     "$(SQLCL_CF_DIR)/sqlcl-connect.sh"
+	cp -R hardening/sql/.                 "$(SQLCL_CF_DIR)/hardening/"
+	cp runner/certs/rds-govcloud-global-bundle.crt.bundle \
+	   "$(SQLCL_CF_DIR)/certs/rds-govcloud-global-bundle.pem"
+	@echo "stage-sqlcl-cf: staged shared files into $(SQLCL_CF_DIR)/ (git-ignored copies)."
 
-.PHONY: push-sqlcl-cloudgov
-push-sqlcl-cloudgov: push-sqlcl-dockerhub ## Push an idle SQLcl app to Cloud.gov (pulls the PRIVATE Docker Hub image) for cf ssh runs
+.PHONY: push-sqlcl-cf
+push-sqlcl-cf: stage-sqlcl-cf ## cf push the SQLcl runner via the Java buildpack (needs vendored SQLcl)
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
-	@# cf push --docker-image PULLS from the registry (it does not upload the local
-	@# image). For a PRIVATE Docker Hub repo the cell needs registry creds: set
-	@# CF_DOCKER_USERNAME (Make var) and export CF_DOCKER_PASSWORD in the environment
-	@# (never committed). cf reads CF_DOCKER_PASSWORD from the env automatically.
-	@[ -n "$(CF_DOCKER_USERNAME)" ] || { echo "ERROR: set CF_DOCKER_USERNAME=<dockerhub-user> (and export CF_DOCKER_PASSWORD)." >&2; exit 1; }
-	@[ -n "$${CF_DOCKER_PASSWORD:-}" ] || { echo "ERROR: export CF_DOCKER_PASSWORD (a Docker Hub access token) in your environment." >&2; exit 1; }
-	cf push $(CLOUDGOV_SQLCL_APP) \
-	  --docker-image $(CLOUDGOV_SQLCL_IMAGE) \
-	  --docker-username $(CF_DOCKER_USERNAME) \
-	  $(CF_PUSH_FLAGS)
+	@[ -x "$(SQLCL_CF_DIR)/vendor/sqlcl/bin/sql" ] \
+	  || { echo "ERROR: vendor SQLcl first — see $(SQLCL_CF_DIR)/vendor/README.md (need vendor/sqlcl/bin/sql)." >&2; exit 1; }
+	cf push -f "$(SQLCL_CF_DIR)/manifest.yml" -p "$(SQLCL_CF_DIR)"
 
 .PHONY: build-cloudgov
 build-cloudgov: deps tests ## Build the runner image for Cloud.gov (linux/amd64) and load it locally

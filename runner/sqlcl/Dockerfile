@@ -14,7 +14,6 @@
 # Build context is the repo root (see runner/docker-compose.yml), so paths below
 # are repo-relative — matching runner/Dockerfile.
 #
-# NOTE: pin BASE_IMAGE to an exact digest/tag before merging (dependency policy
 # NOTE: BASE_IMAGE is pinned to an exact digest (dependency policy forbids floating
 # tags). Resolved from container-registry.oracle.com/database/sqlcl:latest
 # (SQLcl 26.2.1.0) on 2026-08-17. To update: pull the tag, read the RepoDigest

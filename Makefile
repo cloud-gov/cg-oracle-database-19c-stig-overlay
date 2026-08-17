@@ -14,6 +14,25 @@
 #   make check AUDITOR_IMAGE=cincproject/auditor:6
 AUDITOR_IMAGE ?= cincproject/auditor:7
 RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
+# SQLcl image (full SQL*Plus/SQLcl interpreter — runs the hardening/sql scripts).
+# Thin overlay on Oracle's official OTN image. SQLCL_BASE_IMAGE is pinned by digest
+# (dependency policy forbids floating tags) — SQLcl 26.2.1.0, resolved 2026-08-17.
+# To update: pull the tag and read `docker inspect <img> --format '{{index .RepoDigests 0}}'`.
+#
+# OTN EULA: SQLcl redistribution is restricted, so this derived image MUST live in a
+# PRIVATE registry only — never a public one. It is pushed to a private Docker Hub
+# repo under pburkholder/ so Cloud.gov's cell can pull it (cf push --docker-image
+# does NOT upload a local image; the platform pulls from a registry it can reach).
+SQLCL_IMAGE       ?= cg-sqlcl-oracle:local
+SQLCL_BASE_IMAGE  ?= container-registry.oracle.com/database/sqlcl@sha256:c039d51466cea7c76f1e3b3ae4b125e2a73381a884a548737cb65b26e6dd7db1
+# Private Docker Hub repo (MUST be set to Private in Docker Hub — OTN license).
+SQLCL_DOCKERHUB_REPO ?= pburkholder/cg-sqlcl-oracle
+SQLCL_DOCKERHUB_TAG  ?= amd64
+CLOUDGOV_SQLCL_IMAGE ?= $(SQLCL_DOCKERHUB_REPO):$(SQLCL_DOCKERHUB_TAG)
+CLOUDGOV_SQLCL_APP   ?= cg-sqlcl-oracle
+# Docker Hub credentials the Cloud.gov cell uses to pull the PRIVATE image. Supply
+# on the CLI / environment (never commit): CF_DOCKER_USERNAME + CF_DOCKER_PASSWORD.
+CF_DOCKER_USERNAME ?=
 CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
 CLOUDGOV_PLATFORM ?= linux/amd64
 DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
@@ -81,6 +100,69 @@ build: build-local ## Build the runner image for local testing
 
 build-local: deps ## Build the runner image for local testing
 	docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .
+
+# --- SQLcl image (interactive REPL + runs the hardening/sql/*.sql scripts) --
+# A full SQL*Plus/SQLcl interpreter, unlike the pure-Go oraquery wrapper. Thin
+# overlay on Oracle's official OTN SQLcl image — do NOT push to a public registry.
+.PHONY: build-sqlcl
+build-sqlcl: deps ## Build the SQLcl image (thin overlay on the official OTN image)
+	docker build -f runner/sqlcl/Dockerfile \
+	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
+	  -t $(SQLCL_IMAGE) .
+
+.PHONY: sqlcl-repl
+sqlcl-repl: build-sqlcl ## Interactive SQLcl REPL against the running local 23ai DB (needs 'make db-up')
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	docker run --rm -it \
+	  --network $(COMPOSE_NETWORK) \
+	  $(LOCAL_DB_ENV) \
+	  -e ORAQUERY_TLS=disable \
+	  $(SQLCL_IMAGE)
+
+# Run one hardening/assessment SQL script against the running local 23ai DB.
+# The scripts are baked into the image at /opt/hardening; pick one with SQL=<name>.
+#   make sqlcl-run SQL=00_connectivity_check.sql
+SQL ?= 00_connectivity_check.sql
+.PHONY: sqlcl-run
+sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the running local 23ai DB
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	docker run --rm \
+	  --network $(COMPOSE_NETWORK) \
+	  $(LOCAL_DB_ENV) \
+	  -e ORAQUERY_TLS=disable \
+	  $(SQLCL_IMAGE) -f /opt/hardening/$(SQL)
+
+.PHONY: build-sqlcl-cloudgov
+build-sqlcl-cloudgov: deps ## Build the SQLcl image for Cloud.gov (linux/amd64) and load it locally
+	docker buildx build --platform $(CLOUDGOV_PLATFORM) \
+	  -f runner/sqlcl/Dockerfile \
+	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
+	  -t $(CLOUDGOV_SQLCL_IMAGE) \
+	  --load \
+	  .
+
+.PHONY: push-sqlcl-dockerhub
+push-sqlcl-dockerhub: build-sqlcl-cloudgov ## Push the SQLcl image to the PRIVATE pburkholder Docker Hub repo
+	@# OTN EULA: this repo MUST be Private on Docker Hub — never public. Log in
+	@# first with `docker login` as the pburkholder account.
+	@echo "push-sqlcl-dockerhub: pushing $(CLOUDGOV_SQLCL_IMAGE) — ensure this Docker Hub repo is PRIVATE (OTN license)."
+	docker push $(CLOUDGOV_SQLCL_IMAGE)
+
+.PHONY: push-sqlcl-cloudgov
+push-sqlcl-cloudgov: push-sqlcl-dockerhub ## Push an idle SQLcl app to Cloud.gov (pulls the PRIVATE Docker Hub image) for cf ssh runs
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	@# cf push --docker-image PULLS from the registry (it does not upload the local
+	@# image). For a PRIVATE Docker Hub repo the cell needs registry creds: set
+	@# CF_DOCKER_USERNAME (Make var) and export CF_DOCKER_PASSWORD in the environment
+	@# (never committed). cf reads CF_DOCKER_PASSWORD from the env automatically.
+	@[ -n "$(CF_DOCKER_USERNAME)" ] || { echo "ERROR: set CF_DOCKER_USERNAME=<dockerhub-user> (and export CF_DOCKER_PASSWORD)." >&2; exit 1; }
+	@[ -n "$${CF_DOCKER_PASSWORD:-}" ] || { echo "ERROR: export CF_DOCKER_PASSWORD (a Docker Hub access token) in your environment." >&2; exit 1; }
+	cf push $(CLOUDGOV_SQLCL_APP) \
+	  --docker-image $(CLOUDGOV_SQLCL_IMAGE) \
+	  --docker-username $(CF_DOCKER_USERNAME) \
+	  $(CF_PUSH_FLAGS)
 
 .PHONY: build-cloudgov
 build-cloudgov: deps tests ## Build the runner image for Cloud.gov (linux/amd64) and load it locally
@@ -210,3 +292,4 @@ db-down: ## Stop and remove the iteration DB (and its volume)
 clean: ## Tear down compose + remove local results and built image
 	-docker compose -f $(COMPOSE_FILE) down --volumes --remove-orphans
 	-docker image rm $(RUNNER_IMAGE) 2>/dev/null || true
+	-docker image rm $(SQLCL_IMAGE) 2>/dev/null || true

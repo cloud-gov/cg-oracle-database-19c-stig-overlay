@@ -133,9 +133,9 @@ run, assessed under `--all` once the customer has applied a limit.
 
 ## Current customer-responsibility controls
 
-| Control | Intent | Why customer-owned |
-| --- | --- | --- |
-| SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). |
+| Control | Intent | Why customer-owned | Remediation step |
+| --- | --- | --- | --- |
+| SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
 > `controls/baseline.rb` (the authoritative, executable `skip_control` list).

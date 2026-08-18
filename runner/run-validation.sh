@@ -29,6 +29,8 @@
 #
 # Options: --json also writes a timestamped JSON report to OUT_DIR (default /out);
 # --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
+# --skip-customer-controls (or SKIP_CUSTOMER_CONTROLS=1) skips customer-
+#   responsibility controls; default runs all. See ../docs/RESPONSIBILITY.md.
 
 set -euo pipefail
 
@@ -42,10 +44,19 @@ export LOG_PREFIX  # consumed by the sourced lib/db-connect.sh (SC2034)
 # --- CLI args --------------------------------------------------------------
 JSON_OUTPUT="${JSON_OUTPUT:-}"
 CONTROLS="${CONTROLS:-}"
+# Responsibility posture (see ../docs/RESPONSIBILITY.md). Default = run all;
+# --skip-customer-controls / SKIP_CUSTOMER_CONTROLS sets the profile input below.
+SKIP_CUSTOMER_CONTROLS="${SKIP_CUSTOMER_CONTROLS:-}"
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --json)
             JSON_OUTPUT=1
+            ;;
+        --skip-customer-controls)
+            SKIP_CUSTOMER_CONTROLS=1
+            ;;
+        --all)
+            SKIP_CUSTOMER_CONTROLS=0  # explicit alias for the default
             ;;
         --controls | --control)
             shift
@@ -63,6 +74,12 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
+# Normalize to a strict true/false the profile input expects (default false).
+case "${SKIP_CUSTOMER_CONTROLS}" in
+    1 | true | TRUE | yes | YES) SKIP_CUSTOMER_CONTROLS=true ;;
+    *) SKIP_CUSTOMER_CONTROLS=false ;;
+esac
+
 export PATH="/opt/cinc-auditor/embedded/bin:/usr/local/bin:${PATH}"
 ORAQUERY_BIN=/usr/local/bin/oraquery
 
@@ -72,9 +89,15 @@ resolve_db_connection
 
 echo "run-validation: CINC Auditor $(cinc-auditor version 2>/dev/null || inspec version 2>/dev/null || echo '?')"
 echo "run-validation: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (TLS mode: ${ORAQUERY_TLS:-verify-ca})"
+if [ "$SKIP_CUSTOMER_CONTROLS" = true ]; then
+    echo "run-validation: posture: PLATFORM-only (skipping customer-responsibility controls)" >&2
+else
+    echo "run-validation: posture: --all (running customer-responsibility controls too)" >&2
+fi
 
 # Inputs the overlay/baseline profile expects. oracledb_session shells out to the
-# pure-Go wrapper via sqlplus_bin.
+# pure-Go wrapper via sqlplus_bin. skip_customer_responsibility_controls drives the
+# responsibility gate in controls/baseline.rb.
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -82,6 +105,7 @@ host: '${DB_HOST}'
 service: '${DB_SERVICE}'
 port: ${DB_PORT}
 sqlplus_bin: '${ORAQUERY_BIN}'
+skip_customer_responsibility_controls: ${SKIP_CUSTOMER_CONTROLS}
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

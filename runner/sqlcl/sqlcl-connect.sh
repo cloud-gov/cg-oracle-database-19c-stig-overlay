@@ -46,12 +46,15 @@ case "$TLS_MODE" in
         CONNECT_ID="${DB_HOST}:${DB_PORT}/${DB_SERVICE}"
         ;;
     require)
-        # TCPS, encrypt-only (no server-cert verification). NOT MITM-safe / NOT
-        # compliance evidence — a loud warning, mirroring oraquery's posture.
-        echo "sqlcl-connect: WARNING ORAQUERY_TLS=require — TLS WITHOUT certificate verification (not MITM-safe, not compliance evidence)" >&2
-        CONNECT_ID="jdbc:oracle:thin:@tcps://${DB_HOST}:${DB_PORT}/${DB_SERVICE}"
-        # Disable JDBC server DN match / cert validation for encrypt-only.
-        export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Doracle.net.ssl_server_dn_match=false"
+        # Encrypt-only TLS (no server-cert verification) is NOT MITM-safe and NOT
+        # valid compliance evidence — the "false-compliant" failure mode this runner
+        # exists to prevent. Rather than warn-and-continue (a warning is easy to miss
+        # in CI), fail closed: a compliance run must never proceed over an unverified
+        # channel. Use verify-ca (the default) for real runs, or disable for a local
+        # plaintext dev DB. If a future non-evidence use genuinely needs encrypt-only,
+        # add it back deliberately then.
+        echo "sqlcl-connect: ORAQUERY_TLS=require (encrypt-only, no certificate verification) is not permitted — not MITM-safe, not compliance evidence. Use verify-ca (default) or disable (local dev)." >&2
+        exit 2
         ;;
     verify-ca)
         # Verified TLS on TCPS using the baked RDS CA truststore.
@@ -67,7 +70,7 @@ case "$TLS_MODE" in
 -Doracle.net.ssl_server_dn_match=true"
         ;;
     *)
-        echo "sqlcl-connect: unknown ORAQUERY_TLS='${TLS_MODE}' (want verify-ca|require|disable)" >&2
+        echo "sqlcl-connect: unknown ORAQUERY_TLS='${TLS_MODE}' (want verify-ca|disable)" >&2
         exit 2
         ;;
 esac

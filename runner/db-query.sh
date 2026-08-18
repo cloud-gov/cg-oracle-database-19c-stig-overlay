@@ -9,7 +9,7 @@
 #   db-query.sh -c "SELECT 1 FROM dual"     # run a single statement
 #   db-query.sh -f path/to/query.sql        # run each ';'-separated statement in a file
 #   echo "SELECT 1 FROM dual" | db-query.sh # statement on stdin (no -c/-f)
-#   ORAQUERY_TLS=require db-query.sh -c ...  # override the TLS mode via the env var
+#   ORAQUERY_TLS=disable db-query.sh -c ...  # override the TLS mode via the env var
 #
 # Exactly one of -c/--command or -f/--file may be given. With neither, SQL is
 # read from stdin (a single statement). A trailing ';' on any statement is fine.

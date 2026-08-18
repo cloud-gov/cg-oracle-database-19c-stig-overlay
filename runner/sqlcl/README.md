@@ -90,12 +90,13 @@ Same env var and fail-closed semantics as `oraquery`, mapped to SQLcl/JDBC:
 | `ORAQUERY_TLS` | SQLcl connect | Use for |
 | --- | --- | --- |
 | `verify-ca` (**default** for remote) | JDBC `tcps://` + baked PKCS12 truststore, `ssl_server_dn_match=true` | Real brokered RDS (TCPS 2484). Only mode valid toward evidence. |
-| `require` | JDBC `tcps://`, `ssl_server_dn_match=false` (encrypt-only, **no** cert verification) | Narrow debugging only. Not MITM-safe. |
+| `require` | **Rejected** (exit 2) | Encrypt-only, no cert verification — not MITM-safe, not evidence. This runner fails closed rather than proceed over an unverified channel. |
 | `disable` | EZConnect plaintext `host:port/service` | A **local** dev DB only (23ai on 1521). |
 
 `lib/db-connect.sh` auto-selects `disable` only for a loopback/local target when
 `ORAQUERY_TLS` is unset; any non-local target inherits the fail-closed `verify-ca`
-default.
+default. `require` is intentionally not accepted: it would encrypt without
+verifying the server, which a compliance runner must never treat as evidence.
 
 ## Credential handling
 

@@ -31,8 +31,10 @@ SET VERIFY OFF
 WHENEVER SQLERROR CONTINUE
 
 -- Connections held back from the instance SESSIONS ceiling so no single account
--- can consume the entire pool. Org-defined; 30 is a conservative default.
-DEFINE session_headroom = 30
+-- can consume the entire pool — leaving free sessions for an operator to log in
+-- and remediate. Org-defined; 64 is a conservative default (e.g. on an se2.medium
+-- with SESSIONS=614 this caps a user at 550).
+DEFINE session_headroom = 64
 
 DECLARE
   v_headroom  PLS_INTEGER := &&session_headroom;

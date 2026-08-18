@@ -81,7 +81,14 @@ echo "sqlcl-connect: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (T
 # not reliably carry into the @script session (observed ORA-17008 "Closed
 # connection"). Issuing CONNECT as the first line of the SAME script we run is
 # reliable, so both the REPL and batch paths connect from an explicit script.
-CONNECT_CMD="connect ${DB_USER}/\"${DB_PASSWORD}\"@${CONNECT_ID}"
+#
+# The password goes into a DOUBLE-QUOTED SQLcl connect literal. A literal `"` in the
+# password would otherwise terminate that literal early — a malformed connect AND a
+# credential leak, since SQLcl echoes the offending line to stderr. Doubling every
+# `"` is the SQL-quoted-literal escape (a `""` inside a `"..."` literal is one `"`),
+# so an RDS-generated password containing quotes connects correctly and never leaks.
+escaped_password="${DB_PASSWORD//\"/\"\"}"
+CONNECT_CMD="connect ${DB_USER}/\"${escaped_password}\"@${CONNECT_ID}"
 
 umask 077
 work_dir="$(mktemp -d)"

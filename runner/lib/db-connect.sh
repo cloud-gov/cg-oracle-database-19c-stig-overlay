@@ -70,35 +70,43 @@ RUBY
 }
 
 # jq fallback for platforms with NO Ruby (cflinuxfs4 + Java
-# buildpack ships jq). Same contract/output as the Ruby parser: selects the
-# first aws-rds binding whose credentials db_name (or name) is "ORCL" and emits its
-# five fields tab-separated. jq handles JSON escaping correctly (passwords with
-# quotes/backslashes), so no hand-rolled decoding. Fails closed (non-zero) if no
-# ORCL binding is found, matching the Ruby behavior.
+# buildpack ships jq). Same contract/output as the Ruby parser, with the SAME
+# selection semantics: of all aws-rds bindings whose credentials db_name (or name)
+# is "ORCL", it emits the FIRST in array order — matching Ruby's `bindings.find`.
+# jq handles JSON escaping correctly (passwords with quotes/backslashes), so no
+# hand-rolled decoding. Fails closed (non-zero) if no ORCL binding is found,
+# matching the Ruby behavior.
 _dbc_vcap_jq() {
     # -e: exit non-zero if the final result is null/false (no ORCL match) → fail
     #     closed. -r: raw output (no JSON quoting). join("\t") emits the five decoded
     #     fields tab-separated — NOT @tsv, which TSV-escapes backslashes (doubling a
     #     `\` in a password). Credentials never contain a literal tab, and the caller
     #     reads back with IFS=$'\t', so join("\t") is the faithful, correct form.
-    # `.["aws-rds"] // empty` tolerates a missing aws-rds key (→ empty → -e fails).
+    # `[.["aws-rds"][]?] | map(...) | first(...)` collects ALL aws-rds bindings
+    #     (the `[]?` tolerates a missing/empty aws-rds key → empty array → no match →
+    #     -e fails, fail-closed), then `first(select(...))` picks the FIRST ORCL match
+    #     in array order — the direct jq analogue of Ruby's `bindings.find`. This is
+    #     done INSIDE jq (not with a shell `head -n1`) so the single result flows out
+    #     without a truncated pipe, keeping jq's own exit status authoritative under
+    #     the caller's `set -o pipefail`.
+    # Ruby emits credentials.db_name || name for the service field; the select filter
+    #     already fixed that to "ORCL", so a literal "ORCL" is byte-identical here.
     # Portability: every construct here works on jq 1.6 (the platform's version) and
-    # older. We deliberately AVOID `error("msg")` (the string-argument form, new in
-    # 1.6); instead an unmatched query yields `empty`, and `-e` turns that into a
-    # non-zero exit. The human-readable "no ORCL binding" message is emitted by the
-    # bash caller (_dbc_parse_vcap) on a non-zero return, so no jq-version-sensitive
-    # error() call is needed.
+    #     older. We deliberately AVOID `error("msg")` (the string-argument form, new in
+    #     1.6); an unmatched query yields no output, and `-e` turns that into a non-zero
+    #     exit. The human-readable "no ORCL binding" message is emitted by the bash
+    #     caller (_dbc_parse_vcap) on a non-zero return, so no jq-version-sensitive
+    #     error() call is needed.
     printf '%s' "${VCAP_SERVICES}" | "$1" -er '
-        (.["aws-rds"] // empty)[]
-        | .credentials
-        | select((.db_name // .name) == "ORCL")
+        [ .["aws-rds"][]? | .credentials ]
+        | first(.[] | select((.db_name // .name) == "ORCL"))
         | [ (.username // ""),
             (.password // ""),
             (.host // ""),
             "ORCL",
             (.port // "" | tostring) ]
         | join("\t")
-    ' | head -n1
+    '
 }
 # Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
 # "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but

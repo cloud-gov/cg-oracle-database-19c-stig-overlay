@@ -128,5 +128,5 @@ drop to the `SQL>` prompt). The wrapper handles both:
 | `Dockerfile` | Thin overlay on the official OTN SQLcl image; bakes the truststore + scripts; runs non-root. |
 | `sqlcl-connect.sh` | Entrypoint: resolve `DB_*`/TLS (shared lib), build connect string, REPL or run a script. |
 | `build-truststore.sh` | Build-time PEM→PKCS12 conversion (per-cert import; the RDS bundle has 10 CAs). |
-| `../lib/db-connect.sh` | Shared connection discovery — reused, not duplicated. Parses `VCAP_SERVICES` with CINC's embedded Ruby, else `ruby`, else `python3`, else `jq` (the buildpack runner's cflinuxfs path), so the SAME resolver works everywhere without drift. |
+| `../lib/db-connect.sh` | Shared connection discovery — reused, not duplicated. Parses `VCAP_SERVICES` with CINC's embedded Ruby, else `ruby`, else `jq` (the buildpack runner's cflinuxfs path), so the SAME resolver works everywhere without drift. |
 | `../certs/` | The checksum-verified public RDS CA bundle (single source of truth). |

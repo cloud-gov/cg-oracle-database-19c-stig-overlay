@@ -25,6 +25,21 @@ BEGIN
   check_profile('PASSWORD_LIFE_TIME','35');
   check_profile('INACTIVE_ACCOUNT_TIME','35');
 
+  -- SV-270495: SESSIONS_PER_USER must not be UNLIMITED/DEFAULT (org-defined value;
+  -- see docs/RESPONSIBILITY.md). We only assert it is a bounded integer here, not a
+  -- specific number — the correct value is a site/mission decision.
+  BEGIN
+    SELECT LIMIT INTO v_val FROM DBA_PROFILES
+     WHERE PROFILE='DEFAULT' AND RESOURCE_NAME='SESSIONS_PER_USER';
+    DBMS_OUTPUT.PUT_LINE(
+      RPAD('SESSIONS_PER_USER',28)||' = '||RPAD(v_val,12)||
+      CASE WHEN v_val IN ('UNLIMITED','DEFAULT')
+           THEN ' [REVIEW: set an org-defined integer — SV-270495]'
+           ELSE ' [PASS]' END);
+  EXCEPTION WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('SESSIONS_PER_USER check error: '||SQLERRM);
+  END;
+
   BEGIN
     SELECT COUNT(DISTINCT POLICY_NAME) INTO v_val FROM AUDIT_UNIFIED_ENABLED_POLICIES
      WHERE POLICY_NAME IN ('ORA_SECURECONFIG','ORA_LOGON_FAILURES');

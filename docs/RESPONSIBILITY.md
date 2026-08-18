@@ -125,7 +125,8 @@ canonical example:
   — database-altering SQL whose `<integer>` is **organization-defined** (the STIG
   itself says the number is site-specific). Cloud.gov cannot choose it for the
   tenant; `hardening/sql/15_concurrent_sessions.sql` is sample remediation only
-  (it sets a bounded, non-`UNLIMITED`/`DEFAULT` value the tenant MUST review).
+  (it sets a bounded upper bound of instance `SESSIONS` − headroom the tenant
+  MUST review — an app pool may need more, an interactive user far less).
 
 Therefore SV-270495 is a **customer responsibility**: skipped on a platform-only
 run, assessed under `--all` once the customer has applied a limit.

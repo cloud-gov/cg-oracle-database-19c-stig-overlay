@@ -36,6 +36,10 @@
 #   compensating_control    met by a documented compensating control
 #   blocked                 cannot be met on RDS; POA&M candidate
 #
+# PLATFORM vs. CUSTOMER RESPONSIBILITY: this map is the PLATFORM-side disposition
+# (who APPLIES / who VERIFIES). For the customer-vs-platform determination and the
+# list of customer-responsibility controls, see docs/RESPONSIBILITY.md.
+#
 # RULE PRECEDENCE (explicit): an entry in `controls:` (matched by id_pattern OR
 # text_pattern) ALWAYS overrides `default_layer_rules`. Among `default_layer_rules`,
 # first match wins in listed order. A control that matches nothing defaults to

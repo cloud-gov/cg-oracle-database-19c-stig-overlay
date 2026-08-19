@@ -14,6 +14,18 @@
 #   make check AUDITOR_IMAGE=cincproject/auditor:6
 AUDITOR_IMAGE ?= cincproject/auditor:7
 RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
+# SQLcl image — LOCAL 23ai testing ONLY (one-off queries + running hardening/sql
+# scripts against the compose dev DB). Thin overlay on Oracle's official OTN image;
+# SQLCL_BASE_IMAGE is pinned by digest (dependency policy forbids floating tags) —
+# SQLcl 26.2.1.0, resolved 2026-08-17. To update: pull the tag and read
+# `docker inspect <img> --format '{{index .RepoDigests 0}}'`.
+#
+# NOT for Cloud.gov: the in-boundary SQLcl runner uses the Java-buildpack app
+# (runner/sqlcl-cf/). This image is built locally and NEVER pushed to a registry —
+# that keeps it clear of both the OTN redistribution restriction and the mandatory
+# in-boundary container-scanning/hardening pipeline (internal ADR-0007).
+SQLCL_IMAGE       ?= cg-sqlcl-oracle:local
+SQLCL_BASE_IMAGE  ?= container-registry.oracle.com/database/sqlcl@sha256:c039d51466cea7c76f1e3b3ae4b125e2a73381a884a548737cb65b26e6dd7db1
 CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
 CLOUDGOV_PLATFORM ?= linux/amd64
 DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
@@ -81,6 +93,68 @@ build: build-local ## Build the runner image for local testing
 
 build-local: deps ## Build the runner image for local testing
 	docker build -f runner/Dockerfile -t $(RUNNER_IMAGE) .
+
+# --- SQLcl image — LOCAL 23ai testing ONLY --------------------------------
+# A full SQL*Plus/SQLcl interpreter (unlike the pure-Go oraquery wrapper) for one-off
+# queries + running the hardening/sql/*.sql scripts against the compose dev DB. Thin
+# overlay on Oracle's official OTN SQLcl image, BUILT LOCALLY and NEVER pushed. For
+# Cloud.gov use the Java-buildpack app instead (make push-sqlcl-cf).
+.PHONY: build-sqlcl
+build-sqlcl: deps ## Build the SQLcl image for LOCAL 23ai testing (thin overlay on the official OTN image)
+	docker build -f runner/sqlcl/Dockerfile \
+	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
+	  -t $(SQLCL_IMAGE) .
+
+.PHONY: sqlcl-repl
+sqlcl-repl: build-sqlcl ## Interactive SQLcl REPL against the running local 23ai DB (needs 'make db-up')
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	docker run --rm -it \
+	  --network $(COMPOSE_NETWORK) \
+	  $(LOCAL_DB_ENV) \
+	  -e ORAQUERY_TLS=disable \
+	  $(SQLCL_IMAGE)
+
+# Run one hardening/assessment SQL script against the running local 23ai DB.
+# The scripts are baked into the image at /opt/hardening; pick one with SQL=<name>.
+#   make sqlcl-run SQL=00_connectivity_check.sql
+SQL ?= 00_connectivity_check.sql
+.PHONY: sqlcl-run
+sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the running local 23ai DB
+	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
+	  || { echo "ERROR: Oracle DB is not running. Start it first with 'make db-up'." >&2; exit 1; }
+	docker run --rm \
+	  --network $(COMPOSE_NETWORK) \
+	  $(LOCAL_DB_ENV) \
+	  -e ORAQUERY_TLS=disable \
+	  $(SQLCL_IMAGE) -f /opt/hardening/$(SQL)
+
+# --- SQLcl via the Java buildpack (Cloud.gov — the ONLY supported in-boundary path) --
+# For Cloud.gov we cf push the pure-Java SQLcl through the Java buildpack:
+# no Docker image, no registry, no registry creds, no cross-arch build, and outside
+# the mandatory in-boundary container-scanning pipeline (internal ADR-0007). SQLcl
+# must be vendored under runner/sqlcl-cf/vendor/sqlcl/ first (see that dir's README).
+SQLCL_CF_DIR ?= runner/sqlcl-cf
+SQLCL_CF_APP ?= cg-sqlcl-oracle-cf
+
+.PHONY: stage-sqlcl-cf
+stage-sqlcl-cf: ## Copy the single-source files into runner/sqlcl-cf/ (no drift) before cf push
+	@# These staged copies are git-ignored; the sources under runner/lib, runner/sqlcl,
+	@# hardening/sql, and runner/certs stay authoritative.
+	@mkdir -p "$(SQLCL_CF_DIR)/lib" "$(SQLCL_CF_DIR)/hardening" "$(SQLCL_CF_DIR)/certs"
+	cp runner/lib/db-connect.sh          "$(SQLCL_CF_DIR)/lib/db-connect.sh"
+	cp runner/sqlcl/sqlcl-connect.sh     "$(SQLCL_CF_DIR)/sqlcl-connect.sh"
+	cp -R hardening/sql/.                 "$(SQLCL_CF_DIR)/hardening/"
+	cp runner/certs/rds-govcloud-global-bundle.crt.bundle \
+	   "$(SQLCL_CF_DIR)/certs/rds-govcloud-global-bundle.pem"
+	@echo "stage-sqlcl-cf: staged shared files into $(SQLCL_CF_DIR)/ (git-ignored copies)."
+
+.PHONY: push-sqlcl-cf
+push-sqlcl-cf: stage-sqlcl-cf ## cf push the SQLcl runner via the Java buildpack (needs vendored SQLcl)
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	@[ -x "$(SQLCL_CF_DIR)/vendor/sqlcl/bin/sql" ] \
+	  || { echo "ERROR: vendor SQLcl first — see $(SQLCL_CF_DIR)/vendor/README.md (need vendor/sqlcl/bin/sql)." >&2; exit 1; }
+	cf push -f "$(SQLCL_CF_DIR)/manifest.yml" -p "$(SQLCL_CF_DIR)"
 
 .PHONY: build-cloudgov
 build-cloudgov: deps tests ## Build the runner image for Cloud.gov (linux/amd64) and load it locally
@@ -210,3 +284,4 @@ db-down: ## Stop and remove the iteration DB (and its volume)
 clean: ## Tear down compose + remove local results and built image
 	-docker compose -f $(COMPOSE_FILE) down --volumes --remove-orphans
 	-docker image rm $(RUNNER_IMAGE) 2>/dev/null || true
+	-docker image rm $(SQLCL_IMAGE) 2>/dev/null || true

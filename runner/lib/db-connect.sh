@@ -2,8 +2,9 @@
 # db-connect.sh — shared Oracle connection discovery for the runner scripts.
 #
 # SOURCED library (no shebang; the sourcing script owns `set` options). Source it,
-# then call `resolve_db_connection`. Shared by run-validation.sh and db-query.sh
-# so the connection contract lives in ONE place and they can't drift.
+# then call `resolve_db_connection`. Shared by run-validation.sh, db-query.sh, and
+# both SQLcl runners (sqlcl/sqlcl-connect.sh and sqlcl-cf/entrypoint.sh) so the
+# connection contract lives in ONE place and they can't drift.
 #
 # Contract: on success, exports DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE, DB_PORT
 # and (when it chose one) ORAQUERY_TLS. Fails closed (non-zero + stderr) on a
@@ -33,21 +34,14 @@ _dbc_ruby_bin() {
     return 1
 }
 
-# Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
-# "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but
-# has no ORCL binding — never guesses another database. No-op without VCAP.
-_dbc_parse_vcap() {
-    [ -n "${VCAP_SERVICES:-}" ] || return 0
+# Emit the selected ORCL binding's coordinates as a single tab-separated line:
+#   username <TAB> password <TAB> host <TAB> service <TAB> port
+# TWO interpreters implement the SAME contract so the shared resolver works in
+# every runner without drift: the CINC image ships Ruby; the Java-buildpack app on
+# cflinuxfs4 ships no Ruby but has jq. Preference order (richest first): Ruby → jq.
 
-    local ruby_bin
-    if ! ruby_bin="$(_dbc_ruby_bin)"; then
-        _dbc_log "VCAP_SERVICES provided, but no Ruby interpreter is available to parse it"
-        return 1
-    fi
-
-    _dbc_log "parsing VCAP_SERVICES with ${ruby_bin}"
-    local vcap_values
-    vcap_values="$("$ruby_bin" <<'RUBY'
+_dbc_vcap_ruby() {
+    "$1" <<'RUBY'
 require 'json'
 
 services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
@@ -73,7 +67,65 @@ puts [
   credentials.fetch('port', ''),
 ].join("\t")
 RUBY
-    )" || return 1
+}
+
+# jq fallback for platforms with NO Ruby (cflinuxfs4 + Java
+# buildpack ships jq). Same contract/output as the Ruby parser, with the SAME
+# selection semantics: of all aws-rds bindings whose credentials db_name (or name)
+# is "ORCL", it emits the FIRST in array order — matching Ruby's `bindings.find`.
+# jq handles JSON escaping correctly (passwords with quotes/backslashes), so no
+# hand-rolled decoding. Fails closed (non-zero) if no ORCL binding is found,
+# matching the Ruby behavior.
+_dbc_vcap_jq() {
+    # -e: exit non-zero if the final result is null/false (no ORCL match) → fail
+    #     closed. -r: raw output (no JSON quoting). join("\t") emits the five decoded
+    #     fields tab-separated — NOT @tsv, which TSV-escapes backslashes (doubling a
+    #     `\` in a password). Credentials never contain a literal tab, and the caller
+    #     reads back with IFS=$'\t', so join("\t") is the faithful, correct form.
+    # `[.["aws-rds"][]?] | map(...) | first(...)` collects ALL aws-rds bindings
+    #     (the `[]?` tolerates a missing/empty aws-rds key → empty array → no match →
+    #     -e fails, fail-closed), then `first(select(...))` picks the FIRST ORCL match
+    #     in array order — the direct jq analogue of Ruby's `bindings.find`. This is
+    #     done INSIDE jq (not with a shell `head -n1`) so the single result flows out
+    #     without a truncated pipe, keeping jq's own exit status authoritative under
+    #     the caller's `set -o pipefail`.
+    # Ruby emits credentials.db_name || name for the service field; the select filter
+    #     already fixed that to "ORCL", so a literal "ORCL" is byte-identical here.
+    # Portability: every construct here works on jq 1.6 (the platform's version) and
+    #     older. We deliberately AVOID `error("msg")` (the string-argument form, new in
+    #     1.6); an unmatched query yields no output, and `-e` turns that into a non-zero
+    #     exit. The human-readable "no ORCL binding" message is emitted by the bash
+    #     caller (_dbc_parse_vcap) on a non-zero return, so no jq-version-sensitive
+    #     error() call is needed.
+    printf '%s' "${VCAP_SERVICES}" | "$1" -er '
+        [ .["aws-rds"][]? | .credentials ]
+        | first(.[] | select((.db_name // .name) == "ORCL"))
+        | [ (.username // ""),
+            (.password // ""),
+            (.host // ""),
+            "ORCL",
+            (.port // "" | tostring) ]
+        | join("\t")
+    '
+}
+# Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
+# "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but
+# has no ORCL binding — never guesses another database. No-op without VCAP.
+_dbc_parse_vcap() {
+    [ -n "${VCAP_SERVICES:-}" ] || return 0
+
+    local vcap_values ruby_bin jq_bin
+    if ruby_bin="$(_dbc_ruby_bin)"; then
+        _dbc_log "parsing VCAP_SERVICES with ${ruby_bin}"
+        vcap_values="$(_dbc_vcap_ruby "$ruby_bin")" || return 1
+    elif jq_bin="$(command -v jq)"; then
+        # cflinuxfs4 + Java buildpack: no Ruby, but jq is present.
+        _dbc_log "parsing VCAP_SERVICES with ${jq_bin}"
+        vcap_values="$(_dbc_vcap_jq "$jq_bin")" || return 1
+    else
+        _dbc_log "VCAP_SERVICES provided, but no Ruby or jq interpreter is available to parse it"
+        return 1
+    fi
 
     local vcap_user vcap_password vcap_host vcap_service vcap_port
     IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port <<<"$vcap_values"

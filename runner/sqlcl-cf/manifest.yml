@@ -1,0 +1,36 @@
+---
+# manifest.yml — cf push the SQLcl runner via the Cloud.gov Java buildpack (no
+# Docker image, no private registry). SQLcl is pure Java, so the buildpack's JRE
+# runs it directly. This is the OTN-friendly packaging: we do NOT redistribute
+# SQLcl through a registry — we push the vendored distribution into our own app
+# droplet in a single Cloud.gov space, and interact over `cf ssh` (same as the
+# Docker path). Provenance/vendoring of SQLcl: see vendor/README.md.
+#
+# The app is an idle "worker" (no HTTP route, health-check by process) that exists
+# only so `cf ssh` has a bound, VCAP_SERVICES-populated container to run in — the
+# same posture as the Docker `cf push --docker-image` app.
+applications:
+  - name: cg-sqlcl-oracle-cf
+    # Use the platform's named buildpack, NOT a git URL: a git URL makes the platform
+    # clone + compile from source, and the java-buildpack tags ship no config.yml, so
+    # staging fails ("Failed to read buildpack config.yml … deps/0/config.yml"). Run
+    # `cf buildpacks` for the exact name on your foundation (java_buildpack{,_offline}).
+    buildpacks:
+      - java_buildpack
+    # cf-ssh worker: no HTTP route, process health-check, idle command keeps the
+    # container alive so `cf ssh` can exec entrypoint.sh.
+    health-check-type: process
+    no-route: true
+    command: "while true; do sleep 3600; done"
+    instances: 1
+    memory: 1G
+    disk_quota: 1G
+    env:
+      # SQLcl 26.x needs Java 11+; the buildpack otherwise defaulted to Java 8 on the
+      # cell ("SQLcl requires Java 11 and above"). 17 is the current LTS SQLcl supports.
+      JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 17.+ } }'
+      # No JVM main app to launch (we run SQLcl's vendored bin/sql via our command
+      # above), so stop the buildpack looking for a main class / jar.
+      JBP_CONFIG_JAVA_MAIN: '{ java_main_class: "" }'
+      # Fail-closed TLS default for the live RDS target. Overridable.
+      ORAQUERY_TLS: verify-ca

@@ -60,6 +60,44 @@ classified in [`control-layers.yml`](../control-layers.yml) via its `set_by` /
   `tag 'responsibility'`; overlay controls that document a platform disposition
   may use `tag responsibility: 'platform'`.
 
+## Platform not-applicable overrides (not_applicable_rds)
+
+Distinct from the customer-responsibility *skip*, some inherited controls have a
+**platform disposition of `not_applicable_rds`**: their baseline check targets
+the OS, host, or listener, which the tenant cannot reach on managed RDS. Running
+such a check on RDS produces a *misleading* failure (e.g. reading a
+`listener.ora` that does not exist under the tenant's `$ORACLE_HOME`).
+
+For those, the overlay **overrides the inherited control in-place** and marks it
+Not Applicable (`impact 0.0`) with a documented rationale, so the control is
+reported once, honestly, as N/A rather than failed. Unlike the
+customer-responsibility skip, this override applies in **both** run postures (it
+is a platform fact, not a posture choice).
+
+```ruby
+include_controls 'oracle-database-19c-stig-baseline' do
+  control 'SV-2704XX' do
+    impact 0.0
+    title '...'                      # required by the linter on an override
+    desc  'Not Applicable on managed AWS RDS ...'
+    tag responsibility: 'platform'
+    describe '... is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): ...'
+    end
+  end
+end
+```
+
+Confirm the control's `control-layers.yml` entry is
+`set_by: aws_inherited` / `verified_by: not_applicable_rds` (or an equivalent
+inherited/not-applicable pairing), then record it in the table below.
+
+### Current platform not-applicable overrides
+
+| Control | Intent | Why N/A on RDS |
+| --- | --- | --- |
+| SV-270496 | DoS attack mitigation (SC-5/AC-10) | Baseline check reads `$ORACLE_HOME/network/admin/listener.ora` for a connection `RATE_LIMIT`; the listener is AWS-managed on RDS (no OS/listener access) and the rate limit is inherited from the platform. Profile/quota DoS levers are org-defined limits on the customer-responsibility path (SV-270495), not this control's listener.ora assertion. |
+
 ## Run postures
 
 The behavior is driven by the `skip_customer_responsibility_controls` input

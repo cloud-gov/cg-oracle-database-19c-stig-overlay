@@ -160,6 +160,20 @@ controls:
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
 
   # --- not applicable / inherited on RDS ---
+  - id_pattern: "SV-270496"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      DoS mitigation (SC-5/AC-10). Baseline check reads
+      $ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT /
+      CONNECTION_RATE_LISTENER; the listener is AWS-managed on RDS and
+      unreachable by the tenant (no OS/listener access). The listener-level DoS
+      rate limit is inherited from the AWS platform and is not SQL-verifiable.
+      The STIG's other DoS levers (profile CPU_PER_CALL/IDLE_TIME/LOGICAL_READS,
+      tablespace quotas) are org-defined resource limits on the
+      customer-responsibility profile-hardening path (see SV-270495), not this
+      control's listener.ora assertion. Overridden to N/A (impact 0.0) in
+      controls/baseline.rb.
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

@@ -16,6 +16,7 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
+    skip_control 'SV-270497'  # max_idle_time — org-defined value; see docs/RESPONSIBILITY.md
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -51,6 +52,67 @@ include_controls 'oracle-database-19c-stig-baseline' do
       skip 'Not Applicable (not_applicable_rds): the listener is AWS-managed on ' \
            'RDS; the listener.ora RATE_LIMIT check is neither tenant-applicable ' \
            'nor SQL-verifiable. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # --- MANUAL disposition: satisfied by documentation / compensating control ---
+  # These DISA checks are procedural (system-documentation / organizational
+  # policy review), not SQL-verifiable and not platform-unreachable. The overlay
+  # overrides them in-place (impact 0.0) and records the manual/compensating
+  # disposition so an RDS run reports them honestly rather than as a zero-test
+  # pass or a misleading failure. See docs/RESPONSIBILITY.md ("Manual /
+  # compensating-control dispositions") and control-layers.yml (manual_review).
+
+  # SV-270498 (AC-16) — security labels on data in storage. Whether data-labeling
+  # is required is a system-documentation decision; if no data is classified as
+  # sensitive/CUI, or labeling is not required, the STIG check is Not a Finding.
+  control 'SV-270498' do
+    impact 0.0
+    title 'Oracle Database must associate organization-defined types of ' \
+          'security labels having organization-defined security label values ' \
+          'with information in storage.'
+    desc 'Manual disposition. The DISA check is procedural: if no data is ' \
+         'identified as sensitive/classified in the system documentation, or ' \
+         'security labeling is not required, this is Not a Finding. This ' \
+         'determination is an organizational documentation/policy decision that ' \
+         'is not SQL-verifiable and is not a managed-RDS platform fact; it is ' \
+         'satisfied by documentation (the Cloud.gov SSP data-classification / ' \
+         'AC-16 posture) or a compensating control, not by an automated ' \
+         'assertion. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, associating "organization-defined ' \
+             'types of security labels having organization-defined security label ' \
+             'values with information in storage", is a manual/documentation ' \
+             'determination: if no data is classified as sensitive/CUI or security ' \
+             'labeling is not required per the system documentation, this is Not a ' \
+             'Finding. It is satisfied by the Cloud.gov SSP data-classification ' \
+             'posture (AC-16), not by an automated SQL assertion.' do
+      skip 'Manual review: satisfied by system documentation / SSP (AC-16); no ' \
+           'SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270499 (AC-2(1)) — organization-level authentication/account management.
+  # Satisfied by the Cloud.gov org-level identity/account-management posture as
+  # documented in the SSP (AC-2(1)); mirrors the MySQL STIG disposition.
+  control 'SV-270499' do
+    impact 0.0
+    title 'Oracle Database must integrate with an organization-level ' \
+          'authentication/access mechanism providing account management and ' \
+          'automation for all users, groups, roles, and any other principals.'
+    desc 'Manual disposition. Account management and automation are provided at ' \
+         'the organization level; this is a documentation/policy determination ' \
+         'that is not SQL-verifiable and not a managed-RDS platform fact. It is ' \
+         'satisfied by the Cloud.gov SSP AC-2(1) control. See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, integration "with an ' \
+             'organization-level authentication/access mechanism providing account ' \
+             'management and automation for all users, groups, roles, and any other ' \
+             'principals", is satisfied by our AC-2(1) control as described in the ' \
+             'Cloud.gov SSP.' do
+      skip 'Manual review: satisfied by the Cloud.gov SSP AC-2(1) control; no ' \
+           'SQL assertion is applicable on managed RDS.'
     end
   end
 end

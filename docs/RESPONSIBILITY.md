@@ -98,6 +98,29 @@ inherited/not-applicable pairing), then record it in the table below.
 | --- | --- | --- |
 | SV-270496 | DoS attack mitigation (SC-5/AC-10) | Baseline check reads `$ORACLE_HOME/network/admin/listener.ora` for a connection `RATE_LIMIT`; the listener is AWS-managed on RDS (no OS/listener access) and the rate limit is inherited from the platform. Profile/quota DoS levers are org-defined limits on the customer-responsibility path (SV-270495), not this control's listener.ora assertion. |
 
+## Manual / compensating-control dispositions
+
+Some DISA checks are **procedural**: the check procedure directs a reviewer to
+inspect system documentation or organizational policy rather than query the
+database. These are neither SQL-verifiable nor a managed-RDS platform fact, so
+they are satisfied by **documentation or a compensating control** (typically a
+Cloud.gov SSP control).
+
+Like the platform not-applicable overrides, the overlay **overrides these
+in-place** (`impact 0.0`) with a documented rationale so the control is reported
+once, honestly, as a manual disposition rather than a zero-test pass or a
+misleading failure. The override applies in **both** run postures (it is a
+documentation fact, not a posture choice). Confirm the control's
+`control-layers.yml` entry is `set_by: manual_review` / `verified_by:
+manual_review`, then record it in the table below.
+
+### Current manual / compensating-control overrides
+
+| Control | Intent | How satisfied |
+| --- | --- | --- |
+| SV-270498 | Security labels on data in storage (AC-16) | Procedural: if no data is classified sensitive/CUI or labeling is not required per system documentation, this is Not a Finding. Satisfied by the Cloud.gov SSP data-classification (AC-16) posture. |
+| SV-270499 | Organization-level auth / account management (AC-2(1)) | Satisfied by the Cloud.gov SSP AC-2(1) control (org identity + account-management automation). Mirrors the MySQL STIG disposition. |
+
 ## Run postures
 
 The behavior is driven by the `skip_customer_responsibility_controls` input
@@ -172,6 +195,7 @@ run, assessed under `--all` once the customer has applied a limit.
 | Control | Intent | Why customer-owned |
 | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). |
+| SV-270497 | Automatic idle-session termination (`max_idle_time`) | Fix is `ALTER SYSTEM SET max_idle_time = <minutes>` with an org-defined value (AC-12; STIG assumes 15 min when undocumented). SQL-verified via `GV$PARAMETER`. RDS parameter-group modifiability of `max_idle_time` is unverified — confirm before applying. |
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
 > `controls/baseline.rb` (the authoritative, executable `skip_control` list).

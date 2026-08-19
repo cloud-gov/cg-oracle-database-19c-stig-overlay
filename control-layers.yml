@@ -138,6 +138,19 @@ controls:
       against the CloudWatch log-group retention config.
 
   # --- SQL hardening layer (remediated + verified in SQL) ---
+  - id_pattern: "SV-270497"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      SV-270497 (AC-12) automatic idle-session termination. Remediated by
+      hardening/sql/11_session_idle.sql (ALTER SYSTEM SET max_idle_time =
+      <org-defined minutes>) and SQL-verified via GV$PARAMETER (name =
+      'max_idle_time'). Customer responsibility: the minutes value is
+      organization-defined (STIG assumes 15 when undocumented). NOTE: whether
+      max_idle_time is settable via ALTER SYSTEM or must be applied through the
+      RDS DB parameter group is UNVERIFIED for the GovCloud oracle-ee-19 family;
+      confirm via `aws rds describe-engine-default-parameters` before relying on
+      the ALTER SYSTEM path.
   - text_pattern: "FAILED_LOGIN_ATTEMPTS|PASSWORD_LIFE_TIME|password.*lifetime|profile limit"
     set_by: sql_hardening
     verified_by: sql
@@ -158,6 +171,27 @@ controls:
     rationale: >-
       PUBLIC grants are detected (40_public_grants_assess.sql) but never
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
+
+  # --- manual / compensating-control dispositions (documentation / SSP) ---
+  - id_pattern: "SV-270498"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270498 (AC-16) security labels on data in storage. Procedural DISA
+      check: if no data is classified sensitive/CUI or labeling is not required
+      per system documentation, this is Not a Finding. Not SQL-verifiable and
+      not a managed-RDS platform fact; satisfied by the Cloud.gov SSP
+      data-classification posture. Overridden to Manual (impact 0.0) in
+      controls/baseline.rb.
+  - id_pattern: "SV-270499"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270499 (AC-2(1)) organization-level authentication/account management.
+      Procedural DISA check satisfied by the Cloud.gov SSP AC-2(1) control (org
+      identity + account-management automation); not SQL-verifiable and not a
+      managed-RDS platform fact. Overridden to Manual (impact 0.0) in
+      controls/baseline.rb.
 
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270496"

@@ -43,6 +43,7 @@ here (see `../control-layers.yml`).
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout profile limits |
+| `11_session_idle.sql` | harden | set `max_idle_time` (SV-270497, org-defined minutes) |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
 | `30_audit_policies.sql` | harden | enable/verify unified audit policies |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |

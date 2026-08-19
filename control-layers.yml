@@ -137,20 +137,20 @@ controls:
       Log retention is an operational/CloudWatch policy decision; manual review
       against the CloudWatch log-group retention config.
 
-  # --- SQL hardening layer (remediated + verified in SQL) ---
+  # --- platform-layer remediation, SQL VERIFIABLE (do NOT drop the check) ---
   - id_pattern: "SV-270497"
-    set_by: sql_hardening
+    set_by: aws_rds_parameter_group
     verified_by: sql
     rationale: >-
-      SV-270497 (AC-12) automatic idle-session termination. Remediated by
-      hardening/sql/11_session_idle.sql (ALTER SYSTEM SET max_idle_time =
-      <org-defined minutes>) and SQL-verified via GV$PARAMETER (name =
-      'max_idle_time'). Customer responsibility: the minutes value is
-      organization-defined (STIG assumes 15 when undocumented). NOTE: whether
-      max_idle_time is settable via ALTER SYSTEM or must be applied through the
-      RDS DB parameter group is UNVERIFIED for the GovCloud oracle-ee-19 family;
-      confirm via `aws rds describe-engine-default-parameters` before relying on
-      the ALTER SYSTEM path.
+      SV-270497 (AC-12) automatic idle-session termination. Remediated at the
+      PLATFORM layer via the RDS DB parameter group: max_idle_time is a
+      modifiable, dynamic parameter (confirmed 2026-08-19 via
+      `aws rds describe-engine-default-parameters --db-parameter-group-family
+      oracle-se2-19` → IsModifiable=true, ApplyType=dynamic, AllowedValues
+      0-2147483647). On RDS the value is set through the parameter group, NOT
+      `ALTER SYSTEM` (RDS locks down SYS), so no SQL hardening script ships here.
+      SQL-verified via GV$PARAMETER (name = 'max_idle_time'). The minutes value
+      is organization-defined (STIG assumes 15 when undocumented).
   - text_pattern: "FAILED_LOGIN_ATTEMPTS|PASSWORD_LIFE_TIME|password.*lifetime|profile limit"
     set_by: sql_hardening
     verified_by: sql

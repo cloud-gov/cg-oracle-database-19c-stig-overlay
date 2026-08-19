@@ -195,7 +195,15 @@ run, assessed under `--all` once the customer has applied a limit.
 | Control | Intent | Why customer-owned |
 | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). |
-| SV-270497 | Automatic idle-session termination (`max_idle_time`) | Fix is `ALTER SYSTEM SET max_idle_time = <minutes>` with an org-defined value (AC-12; STIG assumes 15 min when undocumented). SQL-verified via `GV$PARAMETER`. RDS parameter-group modifiability of `max_idle_time` is unverified — confirm before applying. |
+
+> **SV-270497 (automatic idle-session termination, `max_idle_time`, AC-12) is
+> PLATFORM-remediated, not customer-owned.** `max_idle_time` is a modifiable,
+> dynamic RDS parameter (confirmed 2026-08-19 via `aws rds
+> describe-engine-default-parameters --db-parameter-group-family oracle-se2-19`
+> → `IsModifiable=true`, `ApplyType=dynamic`, `AllowedValues 0-2147483647`), so it
+> is applied through the RDS DB parameter group (not `ALTER SYSTEM`, which RDS
+> blocks). It runs in every posture and is SQL-verified via `GV$PARAMETER`; see
+> `control-layers.yml` (`set_by: aws_rds_parameter_group / verified_by: sql`).
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
 > `controls/baseline.rb` (the authoritative, executable `skip_control` list).

@@ -16,7 +16,6 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
-    skip_control 'SV-270497'  # max_idle_time — org-defined value; see docs/RESPONSIBILITY.md
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------

@@ -48,7 +48,6 @@ here (see `../control-layers.yml`).
 | `30_audit_policies.sql` | harden | enable/verify unified audit policies |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
-| `90_validate.sql` | assess | post-hardening validation summary |
 | `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `15`, `30`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script

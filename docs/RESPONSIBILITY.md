@@ -198,9 +198,10 @@ run, assessed under `--all` once the customer has applied a limit.
 
 > **SV-270497 (automatic idle-session termination, `max_idle_time`, AC-12) is
 > PLATFORM-remediated, not customer-owned.** `max_idle_time` is a modifiable,
-> dynamic RDS parameter (confirmed 2026-08-19 via `aws rds
-> describe-engine-default-parameters --db-parameter-group-family oracle-se2-19`
-> → `IsModifiable=true`, `ApplyType=dynamic`, `AllowedValues 0-2147483647`), so it
+> dynamic RDS parameter (confirmed 2026-08-19 in GovCloud us-gov-west-1 via
+> `aws rds describe-engine-default-parameters --db-parameter-group-family
+> oracle-se2-19 --region us-gov-west-1` → `IsModifiable=true`,
+> `ApplyType=dynamic`, `AllowedValues 0-2147483647`), so it
 > is applied through the RDS DB parameter group (not `ALTER SYSTEM`, which RDS
 > blocks). It runs in every posture and is SQL-verified via `GV$PARAMETER`; see
 > `control-layers.yml` (`set_by: aws_rds_parameter_group / verified_by: sql`).

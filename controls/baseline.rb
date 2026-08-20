@@ -201,4 +201,83 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'the Cloud.gov ATO); no tenant SQL assertion is applicable on managed RDS.'
     end
   end
+
+  # SV-270500 (AC-3/AC-6(10)) — enforce approved authorizations for logical
+  # access. PLATFORM responsibility. The DISA check is procedural: review the
+  # roles/profiles (or Oracle Database Vault) for appropriateness/completeness of
+  # the access permitted and denied each type of user. On brokered Cloud.gov RDS
+  # the database is provisioned by the broker with the roles/profiles reviewed and
+  # a SINGLE customer user account issued via `cf create-service`; the
+  # appropriateness of that baseline authorization set is a platform provisioning
+  # fact, satisfied at provision, not a tenant SQL assertion. (If the customer
+  # creates additional users/roles, maintaining appropriate authorizations for
+  # them becomes the customer's responsibility — see docs/RESPONSIBILITY.md.)
+  control 'SV-270500' do
+    impact 0.0
+    title 'Oracle Database must enforce approved authorizations for logical ' \
+          'access to the system in accordance with applicable policy.'
+    desc 'Platform disposition (Not a Finding). The DISA check is a procedural ' \
+         'review of roles/profiles (or Oracle Database Vault) for the ' \
+         'appropriateness and completeness of the access permitted and denied ' \
+         'each type of user. On brokered Cloud.gov RDS the database is ' \
+         'provisioned by the broker with its roles/profiles reviewed and a single ' \
+         'customer user account issued via `cf create-service`; the baseline ' \
+         'authorization set is satisfied at provision by the platform, not by a ' \
+         'tenant SQL assertion. If the customer creates additional users or roles, ' \
+         'maintaining appropriate authorizations for them is the customer\'s ' \
+         'responsibility. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'platform'
+    describe 'The implementation of this control, enforcing "approved ' \
+             'authorizations for logical access to the system in accordance with ' \
+             'applicable policy", is satisfied at provision: the broker provisions ' \
+             'the database with reviewed roles/profiles and issues a single ' \
+             'customer user account. Appropriateness of that baseline authorization ' \
+             'set is a platform fact; if the customer adds users/roles, their ' \
+             'authorization is the customer\'s responsibility.' do
+      skip 'Platform disposition: roles/profiles are reviewed and a single ' \
+           'customer user is issued at broker provision; no tenant SQL assertion ' \
+           'is applicable on managed RDS. Customer-created users/roles are the ' \
+           'customer\'s responsibility (docs/RESPONSIBILITY.md).'
+    end
+  end
+
+  # SV-270501 (AU-10/IA-2(5)) — nonrepudiation for shared accounts. PLATFORM
+  # responsibility at provision. The DISA check is procedural, opening with "If
+  # there are no shared accounts available to more than one user, this is not a
+  # finding." The broker provisions the database with a SINGLE customer user
+  # account (not a shared account), so the "no shared accounts" clause is
+  # satisfied at provision. The check's supporting audit-enabled SQL (audit_trail
+  # != NONE) remains SQL-verified elsewhere (SV-270502 inherited; control-layers
+  # audit_trail entry). If the customer creates additional users, maintaining
+  # individual attribution/nonrepudiation for them becomes the customer's
+  # responsibility (docs/RESPONSIBILITY.md).
+  control 'SV-270501' do
+    impact 0.0
+    title 'Oracle Database must protect against an individual who uses a shared ' \
+          'account falsely denying having performed a particular action.'
+    desc 'Platform disposition (Not a Finding). The DISA check opens "If there ' \
+         'are no shared accounts available to more than one user, this is not a ' \
+         'finding." On brokered Cloud.gov RDS the broker provisions the database ' \
+         'with a single customer user account issued via `cf create-service` — ' \
+         'not a shared account — so this is satisfied at provision by the ' \
+         'platform. The check\'s supporting requirement (Oracle auditing enabled, ' \
+         'audit_trail != NONE) is SQL-verified elsewhere (SV-270502 inherited; ' \
+         'control-layers.yml audit_trail entry). If the customer creates ' \
+         'additional users, maintaining individual attribution/nonrepudiation for ' \
+         'them is the customer\'s responsibility. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'platform'
+    describe 'The implementation of this control, protecting against a shared-' \
+             'account user "falsely denying having performed a particular action", ' \
+             'is satisfied at provision: the broker issues a single customer user ' \
+             'account (no shared account), satisfying the DISA check\'s "no shared ' \
+             'accounts" not-a-finding clause. Audit enablement is SQL-verified via ' \
+             'SV-270502. If the customer adds users, individual attribution for ' \
+             'them is the customer\'s responsibility.' do
+      skip 'Platform disposition: the broker issues a single customer user ' \
+           'account (no shared account) at provision; no tenant SQL assertion is ' \
+           'applicable on managed RDS. Customer-created users are the customer\'s ' \
+           'responsibility for individual attribution (docs/RESPONSIBILITY.md).'
+    end
+  end
 end

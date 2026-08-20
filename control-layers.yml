@@ -235,6 +235,33 @@ controls:
       the customer's agency; it is satisfied by the platform, not by tenant SQL.
       Overridden to a platform disposition (impact 0.0) in controls/baseline.rb.
 
+  - id_pattern: "SV-270500"
+    set_by: broker_infra
+    verified_by: compensating_control
+    rationale: >-
+      SV-270500 (AC-3 / AC-6(10)) enforce approved authorizations for logical
+      access. Procedural DISA check: review roles/profiles (or Oracle Database
+      Vault) for appropriateness/completeness of access permitted and denied each
+      user type. On brokered Cloud.gov RDS the broker provisions the database with
+      reviewed roles/profiles and issues a single customer user account via
+      `cf create-service`; the baseline authorization set is satisfied at provision
+      by the platform, not a tenant SQL assertion. Customer-created users/roles are
+      the customer's responsibility. Overridden to a platform disposition (impact
+      0.0) in controls/baseline.rb.
+  - id_pattern: "SV-270501"
+    set_by: broker_infra
+    verified_by: compensating_control
+    rationale: >-
+      SV-270501 (AU-10 / IA-2(5)) nonrepudiation for shared accounts. Procedural
+      DISA check whose opening clause is "If there are no shared accounts available
+      to more than one user, this is not a finding." The broker provisions a single
+      customer user account (not a shared account) at provision, satisfying that
+      clause. The supporting audit-enabled requirement (audit_trail != NONE) stays
+      SQL-verified via SV-270502 (inherited) and the audit_trail entry above. If the
+      customer creates additional users, individual attribution for them is the
+      customer's responsibility. Overridden to a platform disposition (impact 0.0)
+      in controls/baseline.rb.
+
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270512"
     set_by: aws_inherited

@@ -107,6 +107,11 @@ fi
 # — it is an authorized audit-store grantee on a brokered RDS. This does NOT weaken
 # the check: any OTHER grantee outside the list is still a finding. Site-authorized
 # accounts (DBAs/auditors) can be added via an input file passed after this one.
+#
+# Oracle stores grantees as UPPERCASE identifiers in DBA_TAB_PRIVS, and the check's
+# `should be_in` match is case-sensitive; uppercase DB_USER so a lower/mixed-case
+# connect user (e.g. from VCAP_SERVICES) still matches its uppercased grantee.
+DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -120,7 +125,7 @@ allowed_audit_users:
   - AUDIT_ADMIN
   - AUDIT_VIEWER
   - RDSADMIN
-  - '${DB_USER}'
+  - '${DB_USER_UC}'
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

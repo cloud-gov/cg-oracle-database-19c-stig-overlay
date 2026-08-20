@@ -185,14 +185,17 @@ controls:
       data-classification posture. Overridden to Manual (impact 0.0) in
       controls/baseline.rb.
   - id_pattern: "SV-270499"
-    set_by: manual_review
-    verified_by: manual_review
+    set_by: aws_inherited
+    verified_by: compensating_control
     rationale: >-
       SV-270499 (AC-2(1)) organization-level authentication/account management.
-      Procedural DISA check satisfied by the Cloud.gov SSP AC-2(1) control (org
-      identity + account-management automation); not SQL-verifiable and not a
-      managed-RDS platform fact. Overridden to Manual (impact 0.0) in
-      controls/baseline.rb.
+      PLATFORM responsibility, not customer. Database accounts are provisioned
+      and authenticated through the standard CloudFoundry brokered-credentials
+      model — the enterprise-level authentication/access mechanism the DISA
+      check's "not a finding" clause anticipates. That model is
+      FedRAMP-authorized/certified and is part of the ATO granted to Cloud.gov by
+      the customer's agency; it is satisfied by the platform, not by tenant SQL.
+      Overridden to a platform disposition (impact 0.0) in controls/baseline.rb.
 
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270496"

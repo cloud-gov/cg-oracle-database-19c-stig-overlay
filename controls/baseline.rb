@@ -92,26 +92,36 @@ include_controls 'oracle-database-19c-stig-baseline' do
   end
 
   # SV-270499 (AC-2(1)) — organization-level authentication/account management.
-  # Satisfied by the Cloud.gov org-level identity/account-management posture as
-  # documented in the SSP (AC-2(1)); mirrors the MySQL STIG disposition.
+  # PLATFORM responsibility, not customer. Database authentication uses the
+  # standard CloudFoundry brokered-credentials model — the enterprise-level
+  # authentication/access mechanism the DISA check's "not a finding" clause
+  # anticipates. That model is FedRAMP-authorized/certified and is part of the
+  # ATO granted to Cloud.gov by the customer's agency; the customer's separate
+  # duty (agency-approved authentication TO Cloud.gov) is out of this control's
+  # database scope.
   control 'SV-270499' do
     impact 0.0
     title 'Oracle Database must integrate with an organization-level ' \
           'authentication/access mechanism providing account management and ' \
           'automation for all users, groups, roles, and any other principals.'
-    desc 'Manual disposition. Account management and automation are provided at ' \
-         'the organization level; this is a documentation/policy determination ' \
-         'that is not SQL-verifiable and not a managed-RDS platform fact. It is ' \
-         'satisfied by the Cloud.gov SSP AC-2(1) control. See ' \
-         'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    desc 'Platform disposition (Not a Finding). Database accounts are provisioned ' \
+         'and authenticated through the standard CloudFoundry brokered-credentials ' \
+         'model, which is the organization/enterprise-level authentication and ' \
+         'account-management mechanism the DISA check\'s "not a finding" clause ' \
+         'anticipates. That model is FedRAMP-authorized/certified and is part of ' \
+         'the ATO granted to Cloud.gov by the customer\'s agency; it is satisfied ' \
+         'by the platform, not by tenant SQL. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'platform'
     describe 'The implementation of this control, integration "with an ' \
              'organization-level authentication/access mechanism providing account ' \
              'management and automation for all users, groups, roles, and any other ' \
-             'principals", is satisfied by our AC-2(1) control as described in the ' \
-             'Cloud.gov SSP.' do
-      skip 'Manual review: satisfied by the Cloud.gov SSP AC-2(1) control; no ' \
-           'SQL assertion is applicable on managed RDS.'
+             'principals", is satisfied by the FedRAMP-authorized CloudFoundry ' \
+             'brokered-credentials model that provisions and authenticates database ' \
+             'accounts as part of the Cloud.gov ATO.' do
+      skip 'Platform disposition: database authentication uses the ' \
+           'FedRAMP-authorized CloudFoundry brokered-credentials model (part of ' \
+           'the Cloud.gov ATO); no tenant SQL assertion is applicable on managed RDS.'
     end
   end
 end

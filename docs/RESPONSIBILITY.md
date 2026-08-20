@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-08-18"
+last_updated: "2026-08-20"
 ---
 
 # Control responsibility: platform vs. customer
@@ -97,6 +97,7 @@ inherited/not-applicable pairing), then record it in the table below.
 | Control | Intent | Why N/A on RDS |
 | --- | --- | --- |
 | SV-270496 | DoS attack mitigation (SC-5/AC-10) | Baseline check reads `$ORACLE_HOME/network/admin/listener.ora` for a connection `RATE_LIMIT`; the listener is AWS-managed on RDS (no OS/listener access) and the rate limit is inherited from the platform. Profile/quota DoS levers are org-defined limits on the customer-responsibility path (SV-270495), not this control's listener.ora assertion. |
+| SV-270499 | Organization-level auth / account management (AC-2(1)) | Platform-satisfied: database accounts are provisioned and authenticated through the FedRAMP-authorized CloudFoundry brokered-credentials model (part of the Cloud.gov ATO) — the enterprise-level authentication mechanism the DISA check's "not a finding" clause anticipates. Satisfied by the platform, not tenant SQL. `set_by: aws_inherited` / `verified_by: compensating_control`. |
 
 ## Manual / compensating-control dispositions
 
@@ -119,7 +120,6 @@ manual_review`, then record it in the table below.
 | Control | Intent | How satisfied |
 | --- | --- | --- |
 | SV-270498 | Security labels on data in storage (AC-16) | Procedural: if no data is classified sensitive/CUI or labeling is not required per system documentation, this is Not a Finding. Satisfied by the Cloud.gov SSP data-classification (AC-16) posture. |
-| SV-270499 | Organization-level auth / account management (AC-2(1)) | Satisfied by the Cloud.gov SSP AC-2(1) control (org identity + account-management automation). Mirrors the MySQL STIG disposition. |
 
 ## Run postures
 

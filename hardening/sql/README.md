@@ -14,7 +14,7 @@ here (see `../control-layers.yml`).
 ## Principles
 
 - **Assessment-first.** `*_assess.sql` and `01_inventory.sql` only *read* state.
-- **Idempotent (mostly).** Re-running `10`/`30` changes nothing on an
+- **Idempotent (mostly).** Re-running `10`/`15`/`30` changes nothing on an
   already-hardened DB. **`20` is idempotent only against accounts it left locked**
   — if an operator deliberately unlocks a sample account, re-running `20` will
   re-lock it (it acts on OPEN / expired-unlocked accounts). Document that intent
@@ -43,12 +43,12 @@ here (see `../control-layers.yml`).
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout profile limits |
+| `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
 | `30_audit_policies.sql` | harden | enable/verify unified audit policies |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
-| `90_validate.sql` | assess | post-hardening validation summary |
-| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `30`; `20` is only partially reversible — see below) |
+| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `15`, `30`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script
 > currently only **locks/expires sample accounts**. Role/privilege tightening is a
@@ -59,6 +59,10 @@ here (see `../control-layers.yml`).
 - `rollback/10_profiles_rollback.sql` — resets DEFAULT profile to Oracle **19c
   vendor defaults** (not this DB's pre-hardening values; capture those from
   `01_inventory` first for a true restore).
+- `rollback/15_concurrent_sessions_rollback.sql` — resets DEFAULT
+  `SESSIONS_PER_USER` to the Oracle **19c vendor default (`UNLIMITED`)**; this
+  **re-opens the SV-270495 finding** and is not this DB's pre-hardening value
+  (capture from `01_inventory` for a true restore).
 - `rollback/20_users_rollback.sql` — **unlocks** the sample accounts, but
   **cannot un-expire** a password (Oracle limitation); owner must reset it.
 - `rollback/30_audit_policies_rollback.sql` — `NOAUDIT` the two policies (reduces

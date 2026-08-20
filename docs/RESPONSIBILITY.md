@@ -124,16 +124,19 @@ canonical example:
 - The **fix** is `ALTER PROFILE <profile_name> LIMIT SESSIONS_PER_USER <integer>`
   — database-altering SQL whose `<integer>` is **organization-defined** (the STIG
   itself says the number is site-specific). Cloud.gov cannot choose it for the
-  tenant; `hardening/sql/10_profiles.sql` is sample remediation only.
+  tenant; `hardening/sql/15_concurrent_sessions.sql` is sample remediation only
+  (it sets a high per-user cap of instance `SESSIONS` − headroom — sized for the
+  single-app-user backend case these DBs serve — which the tenant MUST review; a
+  multi-account tenant may need a tighter cap on its own profile).
 
 Therefore SV-270495 is a **customer responsibility**: skipped on a platform-only
 run, assessed under `--all` once the customer has applied a limit.
 
 ## Current customer-responsibility controls
 
-| Control | Intent | Why customer-owned |
-| --- | --- | --- |
-| SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). |
+| Control | Intent | Why customer-owned | Remediation step |
+| --- | --- | --- | --- |
+| SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
 > `controls/baseline.rb` (the authoritative, executable `skip_control` list).

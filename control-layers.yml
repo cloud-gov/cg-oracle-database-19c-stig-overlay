@@ -166,6 +166,30 @@ controls:
     rationale: Version is AWS-managed but readable via V$INSTANCE/V$VERSION.
 
   # --- detect-first (assessment only; never auto-remediated) ---
+  - id_pattern: "SV-270510"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: >-
+      SV-270510 (AU-9) protect the audit store from unauthorized access. Because
+      the broker sets audit_trail=DB,EXTENDED (aws-broker
+      services/rds/baselines/oracle19c/parameters.yml — DB destination = STANDARD
+      auditing → AUD$), audit records live IN the database and the DISA check's
+      SQL portion IS verifiable: enumerate object grants on the audit store
+      (DBA_TAB_PRIVS on AUD$ for standard auditing, on AUDSYS-owned tables for
+      unified auditing) and fail on any grantee outside the org-defined
+      allowed_audit_users allowlist. The OS-level portions (audit_file_dest
+      directory perms, %ORACLE_HOME% comparison) are not_applicable_rds. The SQL
+      check was written upstream in the mitre-baseline (baseline_status: fixed),
+      so the overlay inherits it as-is (overlay_status: inherited).
+      NO aws-broker remediation step is required: (1) the only platform action —
+      routing audit to a DB destination — is already set by the parameter group
+      above; (2) a stock RDS instance grants no AUD$/AUDSYS access outside
+      SYS/SYSTEM/DBA, so it passes by default (this is detect-first, not
+      applied); (3) the DISA fix is REVOKE ... ON AUD$/AUDSYS FROM <grantee> —
+      db-altering SQL against an org-defined grantee list (the SV-270495
+      customer-responsibility pattern, remediated via hardening/sql/, not the
+      broker), and RDS locks down SYS so the broker could not run it at provision
+      anyway.
   - text_pattern: "granted to PUBLIC|PUBLIC grant|revoke.*public"
     set_by: sql_assessment_only
     verified_by: sql
@@ -198,6 +222,32 @@ controls:
       Overridden to a platform disposition (impact 0.0) in controls/baseline.rb.
 
   # --- not applicable / inherited on RDS ---
+  - id_pattern: "SV-270512"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270512 (CM-5) logical access restrictions on DBMS configuration/software.
+      DISA check is OS/filesystem only (`ls -ld` on the Oracle software install
+      directory; fix sets the software-owner umask) and the tenant has no OS/host
+      access on managed RDS — the Oracle Home and its permissions are AWS-managed
+      and unreachable. The inherited baseline `command('umask')` assertion would
+      reflect the InSpec runner host, not the DB server, so it is not a valid
+      signal. Access restrictions to the DBMS software are inherited from the AWS
+      platform. Overridden to N/A (impact 0.0) in controls/baseline.rb.
+  - id_pattern: "SV-270515"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270515 (CM-5(6)) OS privileges over DBMS software libraries. DISA check
+      enumerates OS accounts with access to the software library (`cat /etc/group
+      | grep -i dba`, `cat /etc/passwd`) — an OS/host review unreachable on managed
+      RDS (no OS access; software library, /etc/group, /etc/passwd are
+      AWS-managed). The inherited baseline body substitutes a mismatched SQL check
+      (DBA-role grantees via dba_role_privs) that does NOT assess the STIG's OS
+      software-library file permissions (references/HANDOFF.md §6 needs_fix seed);
+      DBA-role membership is covered by the dedicated account/role controls. The
+      software-library privilege restriction is inherited from the AWS platform.
+      Overridden to N/A (impact 0.0) in controls/baseline.rb.
   - id_pattern: "SV-270496"
     set_by: aws_inherited
     verified_by: not_applicable_rds

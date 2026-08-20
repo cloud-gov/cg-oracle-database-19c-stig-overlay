@@ -31,6 +31,83 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # customer-responsibility profile-hardening path as SV-270495; they are not the
   # baseline check's assertion and are not re-implemented here. Override the
   # inherited control to N/A so an RDS run is not misled by a missing listener.ora.
+  # SV-270512 (CM-5) — logical access restrictions on DBMS configuration/software.
+  # The DISA check is purely OS/filesystem: `ls -ld` on the Oracle software
+  # install directory (Unix) or the install directory ACLs (Windows), and the fix
+  # sets the software-owner account umask. On managed RDS the tenant has no OS or
+  # filesystem access — the Oracle Home and its permissions are AWS-managed and
+  # unreachable — so neither the check nor the fix is tenant-applicable or
+  # SQL-verifiable. The inherited baseline body runs `command('umask')`, which on
+  # RDS reflects the InSpec RUNNER's shell, not the database host, producing a
+  # meaningless result. control-layers.yml classifies the OS/filesystem path as
+  # set_by: aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270512' do
+    impact 0.0
+    title 'Oracle Database must support enforcement of logical access ' \
+          'restrictions associated with changes to the database management ' \
+          'system (DBMS) configuration and to the database itself.'
+    desc 'Not Applicable on managed AWS RDS. The baseline check inspects OS ' \
+         'filesystem permissions on the Oracle software install directory ' \
+         '(`ls -ld [pathname]`) and the fix sets the software-owner account ' \
+         'umask — both require host/OS access the tenant does not have on ' \
+         'managed RDS. The Oracle Home and its permissions are AWS-managed and ' \
+         'unreachable; the inherited `command(\'umask\')` assertion would reflect ' \
+         'the InSpec runner host, not the database server, so it is not a valid ' \
+         'signal. Access restrictions to the DBMS software are inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270512 (logical access restrictions on DBMS config/software) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads OS filesystem ' \
+           'permissions on the Oracle software directory and the fix sets the ' \
+           'owner-account umask; the host/OS is AWS-managed on RDS with no tenant ' \
+           'access, and the inherited umask assertion reflects the runner host, ' \
+           'not the DB server. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270515 (CM-5(6)) — OS must limit privileges to change DBMS software in the
+  # software libraries. The DISA check is purely OS-level: enumerate accounts with
+  # access to the software library via `cat /etc/group | grep dba` and
+  # `cat /etc/passwd`. On managed RDS the tenant has no OS access — the software
+  # library, /etc/group, and /etc/passwd on the DB host are AWS-managed and
+  # unreachable. NOTE: the inherited baseline body substitutes a DIFFERENT check
+  # (querying dba_role_privs for DBA-role grantees), which does not assess the
+  # STIG's OS software-library permissions at all (see references/HANDOFF.md §6,
+  # the SV-270515 needs_fix seed case). Rather than run that mismatched SQL, the
+  # overlay overrides to N/A: the actual control target (OS software-library file
+  # permissions) is unreachable on RDS and inherited from the AWS platform.
+  # DBA-role membership is separately assessed by the account/role controls.
+  control 'SV-270515' do
+    impact 0.0
+    title 'The OS must limit privileges to change the database management ' \
+          'system (DBMS) software resident within software libraries ' \
+          '(including privileged programs).'
+    desc 'Not Applicable on managed AWS RDS. The DISA check enumerates OS ' \
+         'accounts with access to the DBMS software library (`cat /etc/group | ' \
+         'grep -i dba`, `cat /etc/passwd`) — an OS/host review the tenant cannot ' \
+         'perform on managed RDS (no OS access; the software library, ' \
+         '/etc/group, and /etc/passwd on the DB host are AWS-managed and ' \
+         'unreachable). The inherited baseline body substitutes a mismatched SQL ' \
+         'check (DBA-role grantees via dba_role_privs) that does not assess the ' \
+         'STIG\'s OS software-library file permissions; DBA-role membership is ' \
+         'covered by the dedicated account/role controls. The software-library ' \
+         'privilege restriction is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270515 (OS privileges over DBMS software libraries) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check enumerates OS ' \
+           'accounts (/etc/group, /etc/passwd) with access to the DBMS software ' \
+           'library; the host/OS is AWS-managed on RDS with no tenant access. ' \
+           'The inherited body\'s dba_role_privs query does not assess the OS ' \
+           'software-library permissions this control targets. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
   control 'SV-270496' do
     impact 0.0
     title 'Oracle Database must protect against or limit the effects of ' \

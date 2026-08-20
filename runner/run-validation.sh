@@ -98,6 +98,14 @@ fi
 # Inputs the overlay/baseline profile expects. oracledb_session shells out to the
 # pure-Go wrapper via sqlplus_bin. skip_customer_responsibility_controls drives the
 # responsibility gate in controls/baseline.rb.
+#
+# allowed_audit_users (SV-270510, AU-9): the overlay inspec.yml defaults this to
+# the always-present RDSADMIN platform account. The broker-provisioned application
+# user is per-instance (its name is not known until connect time), so append the
+# connecting DB_USER here — it is an authorized audit-store grantee on a brokered
+# RDS. This does NOT weaken the check: any OTHER grantee outside the list is still
+# a finding. Site-authorized accounts (DBAs/auditors) can be added via an input
+# file passed after this one on the CLI.
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -106,6 +114,9 @@ service: '${DB_SERVICE}'
 port: ${DB_PORT}
 sqlplus_bin: '${ORAQUERY_BIN}'
 skip_customer_responsibility_controls: ${SKIP_CUSTOMER_CONTROLS}
+allowed_audit_users:
+  - RDSADMIN
+  - '${DB_USER}'
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

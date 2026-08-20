@@ -68,3 +68,21 @@ inputs:
       When true, skip customer-responsibility controls (docs/RESPONSIBILITY.md).
       When false (default), run the full baseline.
     value: false
+  # Authorized grantees on the database audit store (AUD$ / AUDSYS tables) for
+  # SV-270510 (AU-9). On a brokered Cloud.gov RDS Oracle instance two grantees are
+  # always present and authorized:
+  #   - RDSADMIN — the AWS-managed RDS administrative account (defaulted here).
+  #   - the broker-provisioned application user — its exact name is per-instance
+  #     (e.g. U0NUFB6OO3Y0ZJUE), so it is NOT hardcoded here; run-validation.sh
+  #     appends the connecting DB_USER to this list at scan time.
+  # Any additional site-authorized grantees (DBAs, auditors) can be appended via
+  # an input file at scan time. A grantee outside this list is a real finding.
+  - name: allowed_audit_users
+    description: >-
+      Grantees authorized to hold privileges on the audit store (AUD$/AUDSYS).
+      Defaults to the always-present RDSADMIN platform account; the runner also
+      appends the broker-provisioned DB_USER at scan time. Append site-authorized
+      accounts via an input file.
+    type: Array
+    value:
+      - RDSADMIN

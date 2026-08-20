@@ -100,12 +100,13 @@ fi
 # responsibility gate in controls/baseline.rb.
 #
 # allowed_audit_users (SV-270510, AU-9): the overlay inspec.yml defaults this to
-# the always-present RDSADMIN platform account. The broker-provisioned application
-# user is per-instance (its name is not known until connect time), so append the
-# connecting DB_USER here — it is an authorized audit-store grantee on a brokered
-# RDS. This does NOT weaken the check: any OTHER grantee outside the list is still
-# a finding. Site-authorized accounts (DBAs/auditors) can be added via an input
-# file passed after this one on the CLI.
+# the Oracle built-in audit roles + the RDSADMIN platform account. RDS runs
+# unified auditing in mixed mode, so SV-270510 assesses the AUDSYS (unified) store;
+# the broker-provisioned application user holds RDS-default grants there (its name
+# is per-instance, not known until connect time), so append the connecting DB_USER
+# — it is an authorized audit-store grantee on a brokered RDS. This does NOT weaken
+# the check: any OTHER grantee outside the list is still a finding. Site-authorized
+# accounts (DBAs/auditors) can be added via an input file passed after this one.
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -115,6 +116,9 @@ port: ${DB_PORT}
 sqlplus_bin: '${ORAQUERY_BIN}'
 skip_customer_responsibility_controls: ${SKIP_CUSTOMER_CONTROLS}
 allowed_audit_users:
+  - EXECUTE_CATALOG_ROLE
+  - AUDIT_ADMIN
+  - AUDIT_VIEWER
   - RDSADMIN
   - '${DB_USER}'
 EOF

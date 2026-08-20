@@ -181,15 +181,29 @@ controls:
       directory perms, %ORACLE_HOME% comparison) are not_applicable_rds. The SQL
       check was written upstream in the mitre-baseline (baseline_status: fixed),
       so the overlay inherits it as-is (overlay_status: inherited).
+      AUDITING MODE: RDS for Oracle runs UNIFIED auditing in MIXED mode (pure mode
+      needs a binary relink with uniaud_on, unsupported on RDS — AWS "Security
+      auditing in Amazon RDS for Oracle, Part 1"). The overlay therefore sets
+      standard_auditing_used=false / unified_auditing_used=true so SV-270510
+      assesses the UNIFIED store (AUDSYS-owned AUD$UNIFIED / *UNIFIED_AUDIT_TRAIL).
+      allowed_audit_users defaults to the Oracle built-in audit roles
+      (EXECUTE_CATALOG_ROLE, AUDIT_ADMIN, AUDIT_VIEWER) + RDSADMIN; run-validation.sh
+      appends the connecting broker DB_USER (per-instance name).
+      KNOWN DEVIATION (accepted): on RDS the master/broker user is granted SELECT
+      and DELETE on AUD$UNIFIED by the RDS-default unified-audit setup. DELETE on
+      the audit store is an AU-9 concern, but it is an RDS platform default the
+      tenant cannot REVOKE (AWS manages AUDSYS on RDS); accepted as a documented
+      deviation (allowlisted by grantee), not a remediable finding. Any grantee
+      OUTSIDE the allowlist is still a real finding.
       NO aws-broker remediation step is required: (1) the only platform action —
       routing audit to a DB destination — is already set by the parameter group
-      above; (2) a stock RDS instance grants no AUD$/AUDSYS access outside
-      SYS/SYSTEM/DBA, so it passes by default (this is detect-first, not
-      applied); (3) the DISA fix is REVOKE ... ON AUD$/AUDSYS FROM <grantee> —
-      db-altering SQL against an org-defined grantee list (the SV-270495
-      customer-responsibility pattern, remediated via hardening/sql/, not the
-      broker), and RDS locks down SYS so the broker could not run it at provision
-      anyway.
+      above; (2) a stock RDS instance grants AUDSYS access only to the built-in
+      audit roles, RDSADMIN, and the master user, so it passes with the default
+      allowlist (this is detect-first, not applied); (3) the DISA fix is
+      REVOKE ... FROM <grantee> — db-altering SQL against an org-defined grantee
+      list (the SV-270495 customer-responsibility pattern, remediated via
+      hardening/sql/, not the broker), and on RDS AUDSYS is AWS-managed so the
+      broker could not run it at provision anyway.
   - text_pattern: "granted to PUBLIC|PUBLIC grant|revoke.*public"
     set_by: sql_assessment_only
     verified_by: sql

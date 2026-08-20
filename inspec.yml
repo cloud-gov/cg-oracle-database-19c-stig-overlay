@@ -68,21 +68,49 @@ inputs:
       When true, skip customer-responsibility controls (docs/RESPONSIBILITY.md).
       When false (default), run the full baseline.
     value: false
-  # Authorized grantees on the database audit store (AUD$ / AUDSYS tables) for
-  # SV-270510 (AU-9). On a brokered Cloud.gov RDS Oracle instance two grantees are
-  # always present and authorized:
-  #   - RDSADMIN — the AWS-managed RDS administrative account (defaulted here).
-  #   - the broker-provisioned application user — its exact name is per-instance
-  #     (e.g. U0NUFB6OO3Y0ZJUE), so it is NOT hardcoded here; run-validation.sh
-  #     appends the connecting DB_USER to this list at scan time.
-  # Any additional site-authorized grantees (DBAs, auditors) can be appended via
-  # an input file at scan time. A grantee outside this list is a real finding.
+  # --- Auditing posture (SV-270510 audit-store checks) -----------------------
+  # RDS for Oracle runs UNIFIED auditing in MIXED mode. Pure-mode unified auditing
+  # needs a binary relink with uniaud_on, which RDS does not support (AWS
+  # "Security auditing in Amazon RDS for Oracle, Part 1"). Our compliance posture
+  # assesses the UNIFIED trail (AUDSYS-owned objects: AUD$UNIFIED and the
+  # *UNIFIED_AUDIT_TRAIL views), so SV-270510 checks AUDSYS grants only.
+  - name: standard_auditing_used
+    description: >-
+      Assess standard-auditing store (SYS.AUD$). False on RDS: we use unified
+      auditing (mixed mode), so the AUD$ trail is not our compliance store.
+    type: Boolean
+    value: false
+  - name: unified_auditing_used
+    description: >-
+      Assess unified-auditing store (AUDSYS-owned AUD$UNIFIED / UNIFIED_AUDIT_TRAIL).
+      True on RDS (mixed-mode unified auditing).
+    type: Boolean
+    value: true
+  # Authorized grantees on the UNIFIED audit store (AUDSYS-owned objects) for
+  # SV-270510 (AU-9). Observed on a stock brokered RDS instance (DBA_TAB_PRIVS
+  # where owner='AUDSYS'):
+  #   - Oracle built-in audit roles — EXECUTE_CATALOG_ROLE, AUDIT_ADMIN,
+  #     AUDIT_VIEWER (default Oracle grants; EXECUTE on DBMS_AUDIT_MGMT, READ on
+  #     the *_UNIFIED_AUDIT_TRAIL / *_XS_AUDIT_TRAIL views).
+  #   - RDSADMIN — the AWS-managed RDS administrative account.
+  #   - the broker-provisioned application user — per-instance name (e.g.
+  #     U0NUFB6OO3Y0ZJUE); run-validation.sh appends the connecting DB_USER.
+  # KNOWN DEVIATION (accepted): on RDS the master/broker user is granted SELECT +
+  # DELETE on AUD$UNIFIED by the RDS-default audit setup. DELETE on the audit
+  # store is an AU-9 concern, but it is an RDS platform default the tenant cannot
+  # REVOKE (RDS manages AUDSYS); accepted as a documented deviation, not a
+  # remediable finding. See control-layers.yml SV-270510 and docs/RESPONSIBILITY.md.
+  # Any grantee OUTSIDE this list is still a real finding.
   - name: allowed_audit_users
     description: >-
-      Grantees authorized to hold privileges on the audit store (AUD$/AUDSYS).
-      Defaults to the always-present RDSADMIN platform account; the runner also
+      Grantees authorized to hold privileges on the unified audit store
+      (AUDSYS-owned AUD$UNIFIED / UNIFIED_AUDIT_TRAIL). Defaults to the Oracle
+      built-in audit roles plus the RDSADMIN platform account; the runner also
       appends the broker-provisioned DB_USER at scan time. Append site-authorized
       accounts via an input file.
     type: Array
     value:
+      - EXECUTE_CATALOG_ROLE
+      - AUDIT_ADMIN
+      - AUDIT_VIEWER
       - RDSADMIN

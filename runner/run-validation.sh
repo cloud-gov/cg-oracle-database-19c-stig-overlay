@@ -111,6 +111,20 @@ fi
 # Oracle stores grantees as UPPERCASE identifiers in DBA_TAB_PRIVS, and the check's
 # `should be_in` match is case-sensitive; uppercase DB_USER so a lower/mixed-case
 # connect user (e.g. from VCAP_SERVICES) still matches its uppercased grantee.
+#
+# allowed_dbadmin_users (SV-270519/527/529/556, CM-5(6)/AC-6): accounts authorized
+# to hold directly-assigned administrative privileges AFTER the baseline queries
+# exclude the Oracle-supplied predefined accounts/roles (the STIG's '<list of
+# nonapplicable accounts>'). On a brokered RDS instance the remaining authorized
+# admins are the AWS/Oracle platform accounts (RDSADMIN, SYSRAC) plus the
+# broker-provisioned application user (per-instance name, uppercased DB_USER).
+# Seed those three so a stock brokered instance passes; any OTHER grantee outside
+# the list is still a finding.
+#
+# allowed_users_dba_role (SV-270533): accounts authorized to hold an application-
+# administration (DBA) role by default. Same brokered-RDS seed — the broker app
+# user + platform accounts; site-authorized DBAs appended via an input file.
+# Both allowlists can be extended via an input file passed after this one.
 DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
@@ -125,6 +139,14 @@ allowed_audit_users:
   - AUDIT_ADMIN
   - AUDIT_VIEWER
   - RDSADMIN
+  - '${DB_USER_UC}'
+allowed_dbadmin_users:
+  - RDSADMIN
+  - SYSRAC
+  - '${DB_USER_UC}'
+allowed_users_dba_role:
+  - RDSADMIN
+  - SYSRAC
   - '${DB_USER_UC}'
 EOF
 

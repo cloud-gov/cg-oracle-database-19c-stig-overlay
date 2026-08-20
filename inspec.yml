@@ -50,6 +50,17 @@ inputs:
     description: 'Path to the query client binary (sqlplus / go-ora shim)'
     value: ''
     sensitive: true
+  # Org-defined session idle-termination limit (minutes) for SV-270497
+  # (max_idle_time). The STIG says assume 15 when the organization has not
+  # documented a value. Applied at the PLATFORM layer via the RDS DB parameter
+  # group (max_idle_time is a modifiable, dynamic RDS parameter); this input is
+  # the org-defined target the GV$PARAMETER verification checks against.
+  - name: max_idle_time_minutes
+    description: >-
+      Organization-defined maximum idle minutes before Oracle terminates a
+      session (SV-270497 / max_idle_time). Defaults to 15 per the STIG when no
+      site value is documented.
+    value: 15
   # Responsibility gate — see docs/RESPONSIBILITY.md. Set at scan time by
   # run-validation.sh --skip-customer-controls (or SKIP_CUSTOMER_CONTROLS=1).
   - name: skip_customer_responsibility_controls

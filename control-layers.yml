@@ -137,7 +137,21 @@ controls:
       Log retention is an operational/CloudWatch policy decision; manual review
       against the CloudWatch log-group retention config.
 
-  # --- SQL hardening layer (remediated + verified in SQL) ---
+  # --- platform-layer remediation, SQL VERIFIABLE (do NOT drop the check) ---
+  - id_pattern: "SV-270497"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: >-
+      SV-270497 (AC-12) automatic idle-session termination. Remediated at the
+      PLATFORM layer via the RDS DB parameter group: max_idle_time is a
+      modifiable, dynamic parameter (confirmed 2026-08-19 in GovCloud
+      us-gov-west-1 via `aws rds describe-engine-default-parameters
+      --db-parameter-group-family oracle-se2-19 --region us-gov-west-1` →
+      IsModifiable=true, ApplyType=dynamic, AllowedValues 0-2147483647). On RDS
+      the value is set through the parameter group, NOT `ALTER SYSTEM` (RDS locks
+      down SYS), so no SQL hardening script ships here. SQL-verified via
+      GV$PARAMETER (name = 'max_idle_time'). The minutes value is
+      organization-defined (STIG assumes 15 when undocumented).
   - text_pattern: "FAILED_LOGIN_ATTEMPTS|PASSWORD_LIFE_TIME|password.*lifetime|profile limit"
     set_by: sql_hardening
     verified_by: sql
@@ -159,7 +173,45 @@ controls:
       PUBLIC grants are detected (40_public_grants_assess.sql) but never
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
 
+  # --- manual / compensating-control dispositions (documentation / SSP) ---
+  - id_pattern: "SV-270498"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270498 (AC-16) security labels on data in storage. Procedural DISA
+      check: if no data is classified sensitive/CUI or labeling is not required
+      per system documentation, this is Not a Finding. Not SQL-verifiable and
+      not a managed-RDS platform fact; satisfied by the Cloud.gov SSP
+      data-classification posture. Overridden to Manual (impact 0.0) in
+      controls/baseline.rb.
+  - id_pattern: "SV-270499"
+    set_by: aws_inherited
+    verified_by: compensating_control
+    rationale: >-
+      SV-270499 (AC-2(1)) organization-level authentication/account management.
+      PLATFORM responsibility, not customer. Database accounts are provisioned
+      and authenticated through the standard CloudFoundry brokered-credentials
+      model — the enterprise-level authentication/access mechanism the DISA
+      check's "not a finding" clause anticipates. That model is
+      FedRAMP-authorized/certified and is part of the ATO granted to Cloud.gov by
+      the customer's agency; it is satisfied by the platform, not by tenant SQL.
+      Overridden to a platform disposition (impact 0.0) in controls/baseline.rb.
+
   # --- not applicable / inherited on RDS ---
+  - id_pattern: "SV-270496"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      DoS mitigation (SC-5/AC-10). Baseline check reads
+      $ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT /
+      CONNECTION_RATE_LISTENER; the listener is AWS-managed on RDS and
+      unreachable by the tenant (no OS/listener access). The listener-level DoS
+      rate limit is inherited from the AWS platform and is not SQL-verifiable.
+      The STIG's other DoS levers (profile CPU_PER_CALL/IDLE_TIME/LOGICAL_READS,
+      tablespace quotas) are org-defined resource limits on the
+      customer-responsibility profile-hardening path (see SV-270495), not this
+      control's listener.ora assertion. Overridden to N/A (impact 0.0) in
+      controls/baseline.rb.
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

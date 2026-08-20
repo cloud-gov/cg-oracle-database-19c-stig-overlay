@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-08-18"
+last_updated: "2026-08-20"
 ---
 
 # Control responsibility: platform vs. customer
@@ -59,6 +59,67 @@ classified in [`control-layers.yml`](../control-layers.yml) via its `set_by` /
 - **`tag responsibility:`** — the DISA baseline metadata carries a bare
   `tag 'responsibility'`; overlay controls that document a platform disposition
   may use `tag responsibility: 'platform'`.
+
+## Platform not-applicable overrides (not_applicable_rds)
+
+Distinct from the customer-responsibility *skip*, some inherited controls have a
+**platform disposition of `not_applicable_rds`**: their baseline check targets
+the OS, host, or listener, which the tenant cannot reach on managed RDS. Running
+such a check on RDS produces a *misleading* failure (e.g. reading a
+`listener.ora` that does not exist under the tenant's `$ORACLE_HOME`).
+
+For those, the overlay **overrides the inherited control in-place** and marks it
+Not Applicable (`impact 0.0`) with a documented rationale, so the control is
+reported once, honestly, as N/A rather than failed. Unlike the
+customer-responsibility skip, this override applies in **both** run postures (it
+is a platform fact, not a posture choice).
+
+```ruby
+include_controls 'oracle-database-19c-stig-baseline' do
+  control 'SV-2704XX' do
+    impact 0.0
+    title '...'                      # required by the linter on an override
+    desc  'Not Applicable on managed AWS RDS ...'
+    tag responsibility: 'platform'
+    describe '... is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): ...'
+    end
+  end
+end
+```
+
+Confirm the control's `control-layers.yml` entry is
+`set_by: aws_inherited` / `verified_by: not_applicable_rds` (or an equivalent
+inherited/not-applicable pairing), then record it in the table below.
+
+### Current platform not-applicable overrides
+
+| Control | Intent | Why N/A on RDS |
+| --- | --- | --- |
+| SV-270496 | DoS attack mitigation (SC-5/AC-10) | Baseline check reads `$ORACLE_HOME/network/admin/listener.ora` for a connection `RATE_LIMIT`; the listener is AWS-managed on RDS (no OS/listener access) and the rate limit is inherited from the platform. Profile/quota DoS levers are org-defined limits on the customer-responsibility path (SV-270495), not this control's listener.ora assertion. |
+| SV-270499 | Organization-level auth / account management (AC-2(1)) | Platform-satisfied: database accounts are provisioned and authenticated through the FedRAMP-authorized CloudFoundry brokered-credentials model (part of the Cloud.gov ATO) — the enterprise-level authentication mechanism the DISA check's "not a finding" clause anticipates. Satisfied by the platform, not tenant SQL. `set_by: aws_inherited` / `verified_by: compensating_control`. |
+
+## Manual / compensating-control dispositions
+
+Some DISA checks are **procedural**: the check procedure directs a reviewer to
+inspect system documentation or organizational policy rather than query the
+database. These are neither SQL-verifiable nor a managed-RDS platform fact, so
+they are satisfied by **documentation or a compensating control** (typically a
+Cloud.gov SSP control).
+
+Like the platform not-applicable overrides, the overlay **overrides these
+in-place** (`impact 0.0`) with a documented rationale so the control is reported
+once, honestly, as a manual disposition rather than a zero-test pass or a
+misleading failure. The override applies in **both** run postures (it is a
+documentation fact, not a posture choice). Confirm the control's
+`control-layers.yml` entry is `set_by: manual_review` / `verified_by:
+manual_review`, then record it in the table below.
+
+### Current manual / compensating-control overrides
+
+| Control | Intent | How satisfied |
+| --- | --- | --- |
+| SV-270498 | Security labels on data in storage (AC-16) | Procedural: if no data is classified sensitive/CUI or labeling is not required per system documentation, this is Not a Finding. Satisfied by the Cloud.gov SSP data-classification (AC-16) posture. |
 
 ## Run postures
 
@@ -137,6 +198,16 @@ run, assessed under `--all` once the customer has applied a limit.
 | Control | Intent | Why customer-owned | Remediation step |
 | --- | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
+
+> **SV-270497 (automatic idle-session termination, `max_idle_time`, AC-12) is
+> PLATFORM-remediated, not customer-owned.** `max_idle_time` is a modifiable,
+> dynamic RDS parameter (confirmed 2026-08-19 in GovCloud us-gov-west-1 via
+> `aws rds describe-engine-default-parameters --db-parameter-group-family
+> oracle-se2-19 --region us-gov-west-1` → `IsModifiable=true`,
+> `ApplyType=dynamic`, `AllowedValues 0-2147483647`), so it
+> is applied through the RDS DB parameter group (not `ALTER SYSTEM`, which RDS
+> blocks). It runs in every posture and is SQL-verified via `GV$PARAMETER`; see
+> `control-layers.yml` (`set_by: aws_rds_parameter_group / verified_by: sql`).
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
 > `controls/baseline.rb` (the authoritative, executable `skip_control` list).

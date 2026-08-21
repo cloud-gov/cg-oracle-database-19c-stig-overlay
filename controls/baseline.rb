@@ -16,6 +16,7 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
+    skip_control 'SV-270504'  # DoD-selected audit-event set — org-defined unified-audit policies; see docs/RESPONSIBILITY.md
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -278,6 +279,191 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'account (no shared account) at provision; no tenant SQL assertion is ' \
            'applicable on managed RDS. Customer-created users are the customer\'s ' \
            'responsibility for individual attribution (docs/RESPONSIBILITY.md).'
+    end
+  end
+
+  # SV-270503 (AU-12 b) — designated personnel can SELECT which auditable events
+  # are audited. The DISA check is procedural ("Check DBMS settings and
+  # documentation to determine whether designated personnel are able to select
+  # which auditable events are being audited"); there is no pass/fail SQL query in
+  # the check. In Oracle this capability is inherent — a user with AUDIT SYSTEM /
+  # AUDIT ANY (and any user for their own schema) can configure auditing via the
+  # AUDIT/CREATE AUDIT POLICY statements. On brokered Cloud.gov RDS the broker
+  # issues the customer a privileged account able to manage unified-audit policies
+  # (the customer-responsibility audit hardening path, SV-270504 /
+  # hardening/sql/30_audit_policies.sql), which is exactly the "designated
+  # personnel can select auditable events" capability this control asks for. The
+  # determination is a documentation/policy fact, not a tenant SQL assertion, so
+  # the overlay records a Manual disposition rather than a zero-test pass.
+  control 'SV-270503' do
+    impact 0.0
+    title 'Oracle Database must allow designated organizational personnel to ' \
+          'select which auditable events are to be audited by the database.'
+    desc 'Manual disposition. The DISA check is procedural: verify (via DBMS ' \
+         'settings and documentation) that designated personnel are able to ' \
+         'select which auditable events are audited — there is no pass/fail SQL ' \
+         'query. In Oracle this capability is inherent: any user can configure ' \
+         'auditing for objects in their own schema, and AUDIT ANY / AUDIT SYSTEM ' \
+         'privileges (plus AUDIT_ADMIN for unified auditing) allow designated ' \
+         'personnel to select audited events. On brokered Cloud.gov RDS the broker ' \
+         'issues the customer a privileged account able to manage unified-audit ' \
+         'policies (the customer-responsibility audit path — SV-270504, ' \
+         'hardening/sql/30_audit_policies.sql), satisfying this capability. The ' \
+         'determination is a documentation/policy fact (audit-management ' \
+         'authorization), not a tenant SQL assertion. See docs/RESPONSIBILITY.md ' \
+         'and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, allowing "designated ' \
+             'organizational personnel to select which auditable events are to be ' \
+             'audited by the database", is a manual/documentation determination: ' \
+             'Oracle inherently lets AUDIT ANY / AUDIT SYSTEM (and AUDIT_ADMIN for ' \
+             'unified auditing) holders select audited events, and the broker ' \
+             'issues the customer a privileged account able to manage audit ' \
+             'policies. It is satisfied by documentation of that audit-management ' \
+             'authorization, not by an automated SQL assertion.' do
+      skip 'Manual review: Oracle inherently supports selecting auditable events ' \
+           'via AUDIT / CREATE AUDIT POLICY under AUDIT ANY / AUDIT SYSTEM / ' \
+           'AUDIT_ADMIN; the broker issues a privileged customer account able to ' \
+           'manage audit policies. Satisfied by documentation of audit-management ' \
+           'authorization; no SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270505 (AU-3(1)) — organization-defined ADDITIONAL, more detailed
+  # information in audit records for events identified by type/location/subject.
+  # The DISA check is explicitly conditional and procedural: "Review the system
+  # documentation to identify additional site-specific information not covered by
+  # the default audit options... If there are none, this is not a finding." Only
+  # IF the organization has defined additional detailed-audit requirements does the
+  # check then compare them against existing Fine-Grained Auditing (FGA) specs. On
+  # Cloud.gov RDS no additional site-specific detailed-audit requirement beyond the
+  # default unified-audit options is defined in the system documentation, so the
+  # DISA "if there are none, this is not a finding" clause is satisfied. This is a
+  # documentation/policy determination, not a tenant SQL assertion. NOTE: the
+  # inherited baseline body runs an FGA-count SQL check unconditionally, which
+  # would FAIL on RDS whenever no FGA policy exists even though the STIG says that
+  # is Not a Finding when no additional requirements are defined — a misleading
+  # failure. The overlay overrides to Manual so an RDS run reports it honestly.
+  control 'SV-270505' do
+    impact 0.0
+    title 'Oracle Database must include organization-defined additional, more ' \
+          'detailed information in the audit records for audit events identified ' \
+          'by type, location, or subject.'
+    desc 'Manual disposition. The DISA check is conditional and procedural: ' \
+         '"Review the system documentation to identify additional site-specific ' \
+         'information not covered by the default audit options... If there are ' \
+         'none, this is not a finding." Only if additional detailed-audit ' \
+         'requirements are defined does it then compare them against existing ' \
+         'Fine-Grained Auditing (FGA) specifications. On Cloud.gov RDS no ' \
+         'additional site-specific detailed-audit requirement beyond the default ' \
+         'unified-audit options is defined in the system documentation, so the ' \
+         '"if there are none, this is not a finding" clause is satisfied — a ' \
+         'documentation/policy determination, not a tenant SQL assertion. The ' \
+         'inherited baseline body runs an unconditional FGA-count query that would ' \
+         'FAIL whenever no FGA policy exists, even though the STIG treats that as ' \
+         'Not a Finding absent additional requirements; the overlay overrides to ' \
+         'Manual to avoid that misleading failure. If the organization later ' \
+         'defines additional detailed-audit requirements, deploying/verifying FGA ' \
+         'to cover them becomes the customer\'s responsibility. See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, including "organization-defined ' \
+             'additional, more detailed information in the audit records", is a ' \
+             'manual/documentation determination: per the DISA check, if no ' \
+             'additional site-specific detailed-audit information beyond the ' \
+             'default audit options is defined in the system documentation, this ' \
+             'is Not a Finding. No such additional requirement is defined for ' \
+             'Cloud.gov RDS. If one is later defined, deploying/verifying ' \
+             'Fine-Grained Auditing to cover it is the customer\'s responsibility.' do
+      skip 'Manual review: per the DISA check, absent any organization-defined ' \
+           'additional detailed-audit requirement beyond the default audit ' \
+           'options, this is Not a Finding. None is defined for Cloud.gov RDS. ' \
+           'Satisfied by system documentation; no SQL assertion is applicable ' \
+           '(the inherited unconditional FGA-count query would mislead on RDS).'
+    end
+  end
+
+  # SV-270506 (AU-4) — allocate audit record STORAGE CAPACITY per org-defined
+  # requirements. PLATFORM disposition. The DISA check assesses where the audit
+  # store lives (AUD$ tablespace not SYSTEM; AUDSYS tablespace not USERS),
+  # audit_file_dest space, and whether the DBMS has ever run out of audit-log
+  # space — all storage-capacity facts that on managed RDS are owned by AWS/the
+  # broker, not the tenant. On RDS: (1) DB storage is broker-provisioned and RDS
+  # storage autoscaling grows capacity automatically; (2) AUDSYS/AUD$ tablespace
+  # placement is managed under SYS/AUDSYS, which AWS controls (the tenant cannot
+  # run dbms_audit_mgmt.move_dbaudit_tables against AWS-managed AUDSYS, and the
+  # `audit_file_dest` OS path is not tenant-reachable). The remediation
+  # (move audit tablespace, size disk) requires SYS/OS access the tenant does not
+  # have. control-layers.yml classifies this as set_by aws_inherited /
+  # verified_by not_applicable_rds. Override to N/A so an RDS run is not misled.
+  control 'SV-270506' do
+    impact 0.0
+    title 'Oracle Database must allocate audit record storage capacity in ' \
+          'accordance with organization-defined audit record storage ' \
+          'requirements.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check assesses ' \
+         'audit-storage capacity facts — the AUD$/AUDSYS tablespace placement ' \
+         '(must not be SYSTEM/USERS), the `audit_file_dest` OS location and its ' \
+         'free space, and whether the DBMS has ever run out of audit-log space. ' \
+         'On managed RDS these are AWS/broker-owned: DB storage is ' \
+         'broker-provisioned with RDS storage autoscaling, and the AUDSYS/AUD$ ' \
+         'tablespaces plus `audit_file_dest` live under SYS/AUDSYS and the DB ' \
+         'host OS, which AWS manages and the tenant cannot reach. The DISA fix ' \
+         '(`dbms_audit_mgmt.move_dbaudit_tables`, resize disk) needs SYS/OS ' \
+         'access the tenant does not have on RDS. Audit-storage capacity is ' \
+         'inherited from the AWS platform (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270506 (audit record storage capacity, AU-4) is Not Applicable ' \
+             'on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): audit-store tablespace ' \
+           'placement, audit_file_dest, and disk capacity are AWS/broker-managed ' \
+           'on RDS (broker-provisioned storage + RDS autoscaling; AUDSYS is ' \
+           'AWS-controlled). The DISA fix (move_dbaudit_tables / resize) needs ' \
+           'SYS/OS access the tenant lacks. See control-layers.yml and ' \
+           'docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270507 (AU-4(1)) — OFF-LOAD audit data to a separate/centralized log
+  # management facility, continuous/near-real-time when networked. PLATFORM
+  # disposition. The DISA check is procedural: "Review the system documentation
+  # for a description of how audit records are off-loaded... If there is no
+  # centralized audit log management system... this is a finding." On managed RDS
+  # audit off-loading is an AWS platform capability: RDS for Oracle publishes the
+  # audit trail to Amazon CloudWatch Logs (continuous, near-real-time) via the DB
+  # instance's log exports — a broker/platform integration, not a tenant SQL
+  # setting, and not something the tenant configures inside the database. The
+  # centralized log-management facility (CloudWatch Logs, and downstream Cloud.gov
+  # logging) is part of the platform's AU-4(1)/AU-6 posture. Not SQL-verifiable by
+  # the tenant and not a database-level fact; satisfied by the AWS/Cloud.gov
+  # platform. Override to N/A (platform).
+  control 'SV-270507' do
+    impact 0.0
+    title 'Oracle Database must off-load audit data to a separate log management ' \
+          'facility; this must be continuous and in near-real-time for systems ' \
+          'with a network connection to the storage facility, and weekly or more ' \
+          'often for stand-alone systems.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'is procedural — review the system documentation for how audit records ' \
+         'are off-loaded to a centralized log management system. On managed RDS ' \
+         'audit off-loading is an AWS platform capability: RDS for Oracle ' \
+         'publishes the audit trail to Amazon CloudWatch Logs continuously and in ' \
+         'near-real-time via the DB instance log exports, feeding the Cloud.gov ' \
+         'centralized logging posture (AU-4(1)/AU-6). This is a broker/platform ' \
+         'integration configured outside the database, not a tenant SQL setting, ' \
+         'and it is not SQL-verifiable by the tenant. Audit off-loading is ' \
+         'inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270507 (off-load audit data to a central log facility, AU-4(1)) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): RDS for Oracle off-loads the ' \
+           'audit trail to Amazon CloudWatch Logs (continuous, near-real-time) ' \
+           'via DB instance log exports — an AWS/platform integration configured ' \
+           'outside the database, feeding the Cloud.gov centralized logging ' \
+           'posture. Not a tenant SQL setting and not SQL-verifiable. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
 end

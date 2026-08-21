@@ -222,6 +222,41 @@ controls:
       not a managed-RDS platform fact; satisfied by the Cloud.gov SSP
       data-classification posture. Overridden to Manual (impact 0.0) in
       controls/baseline.rb.
+  - id_pattern: "SV-270503"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270503 (AU-12 b) designated personnel can SELECT which auditable events
+      are audited. Procedural DISA check with no pass/fail SQL query: verify (via
+      DBMS settings + documentation) that designated personnel can select audited
+      events. In Oracle the capability is inherent — AUDIT ANY / AUDIT SYSTEM
+      (and AUDIT_ADMIN for unified auditing) holders configure auditing via
+      AUDIT / CREATE AUDIT POLICY; any user can audit their own schema. The broker
+      issues the customer a privileged account able to manage unified-audit
+      policies (the customer-responsibility audit path, SV-270504 /
+      hardening/sql/30_audit_policies.sql), satisfying this capability. A
+      documentation/policy determination (audit-management authorization), not a
+      tenant SQL assertion. Overridden to Manual (impact 0.0) in
+      controls/baseline.rb.
+  - id_pattern: "SV-270505"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270505 (AU-3(1)) organization-defined additional, more detailed audit
+      information. Conditional/procedural DISA check: "Review the system
+      documentation to identify additional site-specific information not covered
+      by the default audit options... If there are none, this is not a finding."
+      Only if additional detailed-audit requirements are defined does it compare
+      them against existing Fine-Grained Auditing (FGA) specs. No additional
+      site-specific detailed-audit requirement beyond the default unified-audit
+      options is defined for Cloud.gov RDS, so the not-a-finding clause is
+      satisfied — a documentation/policy determination, not a tenant SQL
+      assertion. The inherited baseline body runs an UNCONDITIONAL FGA-count
+      query that would FAIL whenever no FGA policy exists (misleading on RDS,
+      since the STIG treats that as Not a Finding absent additional
+      requirements). Overridden to Manual (impact 0.0) in controls/baseline.rb.
+      If additional detailed-audit requirements are later defined, deploying and
+      verifying FGA becomes the customer's responsibility.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control
@@ -263,6 +298,34 @@ controls:
       in controls/baseline.rb.
 
   # --- not applicable / inherited on RDS ---
+  - id_pattern: "SV-270506"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270506 (AU-4) audit record storage capacity. DISA check assesses the
+      AUD$/AUDSYS tablespace placement (must not be SYSTEM/USERS), the
+      audit_file_dest OS location and its free space, and whether the DBMS ever
+      ran out of audit-log space — all storage-capacity facts that on managed RDS
+      are AWS/broker-owned: DB storage is broker-provisioned with RDS storage
+      autoscaling, and the AUDSYS/AUD$ tablespaces plus audit_file_dest live under
+      SYS/AUDSYS and the DB host OS, AWS-managed and tenant-unreachable. The DISA
+      fix (dbms_audit_mgmt.move_dbaudit_tables, resize disk) needs SYS/OS access
+      the tenant lacks. Inherited from the AWS platform. Overridden to N/A
+      (impact 0.0) in controls/baseline.rb.
+  - id_pattern: "SV-270507"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270507 (AU-4(1)) off-load audit data to a centralized log management
+      facility, continuous/near-real-time when networked. Procedural DISA check
+      (review system documentation for how audit records are off-loaded). On
+      managed RDS this is an AWS platform capability: RDS for Oracle publishes the
+      audit trail to Amazon CloudWatch Logs continuously/near-real-time via the DB
+      instance log exports, feeding the Cloud.gov centralized logging posture
+      (AU-4(1)/AU-6). A broker/platform integration configured outside the
+      database, not a tenant SQL setting and not SQL-verifiable. Inherited from
+      the AWS/Cloud.gov platform. Overridden to N/A (impact 0.0) in
+      controls/baseline.rb.
   - id_pattern: "SV-270512"
     set_by: aws_inherited
     verified_by: not_applicable_rds

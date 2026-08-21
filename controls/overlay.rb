@@ -16,7 +16,6 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
-    skip_control 'SV-270504'  # DoD-selected audit-event set — org-defined unified-audit policies; see docs/RESPONSIBILITY.md
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -326,6 +325,109 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'AUDIT_ADMIN; the broker issues a privileged customer account able to ' \
            'manage audit policies. Satisfied by documentation of audit-management ' \
            'authorization; no SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270504 (AU-12 c) — generate audit records for the DOD-selected list of
+  # auditable events. The generic baseline marks this a Manual Review because the
+  # full DOD event set is organization-defined/documentable and has no single
+  # portable SQL predicate (see mitre-baseline/controls/SV-270504.rb). On managed
+  # AWS RDS the audit-policy posture is SQL-verifiable in two layers:
+  #
+  #   1. PLATFORM (both postures): RDS for Oracle enables the Oracle-provided
+  #      ORA_SECURECONFIG and ORA_LOGON_FAILURES unified-audit policies BY DEFAULT
+  #      once the broker's audit_trail parameters are set (RDS parameter group) —
+  #      no tenant step. Those cover privilege GRANT, security-config/DDL, most
+  #      account administration (CREATE/ALTER/DROP USER), ALTER SYSTEM/DATABASE, and
+  #      LOGON. Asserted via the required_audit_policies input in every posture.
+  #
+  #   2. CUSTOMER (--all posture only): the events the RDS defaults MISS — REVOKE,
+  #      CHANGE PASSWORD, LOGOFF, CREATE SPFILE — are covered by
+  #      a tenant-owned policy (CG_AUDIT_POLICY) created/enabled by
+  #      hardening/sql/30_audit_policies.sql. This is customer-responsibility
+  #      remediation, so it is asserted ONLY when skip_customer_responsibility_controls
+  #      is false (the --all / post-hardening posture). The site policy name(s) are
+  #      org-defined via the customer_audit_policies input; an empty list skips the
+  #      second assertion (a site that has not declared its policies is not falsely
+  #      failed here — see docs/RESPONSIBILITY.md).
+  #
+  # Both layers assert the policies are ENABLED (present in
+  # AUDIT_UNIFIED_ENABLED_POLICIES). detect-first: this control never enables a
+  # policy; remediation is the hardening SQL.
+  control 'SV-270504' do
+    impact 0.5
+    title 'Oracle Database must generate audit records for the DOD-selected list ' \
+          'of auditable events, when successfully accessed, added, modified, or ' \
+          'deleted, to the extent such information is available.'
+    desc 'AWS RDS overlay of the DOD-audit-event-set control. The generic baseline ' \
+         'is a Manual Review because the DOD event set is organization-defined and ' \
+         'has no single portable SQL predicate. On managed RDS the audit-policy ' \
+         'posture is SQL-verifiable in two layers. PLATFORM (both postures): the ' \
+         'Oracle-provided unified-audit policies ORA_SECURECONFIG (privilege ' \
+         'grants, security configuration and DDL, account administration, ' \
+         'parameter changes) and ORA_LOGON_FAILURES (logon events) are enabled BY ' \
+         'DEFAULT on RDS for Oracle once the broker\'s audit_trail parameters are ' \
+         'set (the RDS parameter group). CUSTOMER (--all posture only): the events ' \
+         'the RDS defaults MISS — REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE ' \
+         '— are covered by a tenant-owned policy ' \
+         '(CG_AUDIT_POLICY) created and enabled by ' \
+         'hardening/sql/30_audit_policies.sql, and are asserted only when ' \
+         'customer-responsibility controls are in scope. Both layers assert the ' \
+         'policies are ENABLED (present in AUDIT_UNIFIED_ENABLED_POLICIES). The ' \
+         'required_audit_policies and customer_audit_policies inputs are ' \
+         'org-defined; an empty customer list skips the customer-posture ' \
+         'assertion. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'platform'
+    tag cci: ['CCI-000172']
+    tag nist: ['AU-12 c']
+
+    # Inline value: defaults so the control is self-contained. This control lives
+    # in the depended-on baseline (via include_controls), whose input namespace
+    # does NOT see the overlay inspec.yml defaults; without an inline default the
+    # resolver warns and returns nil on a bare run. run-validation.sh still writes
+    # both keys into /tmp/inputs.yml so operators can override them centrally.
+    required_policies = input('required_audit_policies',
+                              value: %w[ORA_SECURECONFIG ORA_LOGON_FAILURES])
+    customer_policies = input('customer_audit_policies', value: %w[CG_AUDIT_POLICY])
+    sql = oracledb_session(user: input('user'), password: input('password'),
+                           host: input('host'), port: input('port'),
+                           service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+
+    enabled_policies = sql.query(
+      "SELECT DISTINCT policy_name FROM audit_unified_enabled_policies;"
+    ).column('policy_name').map(&:upcase)
+
+    # Layer 1 — PLATFORM defaults (asserted in every posture).
+    required_policies.each do |policy|
+      describe "Platform unified audit policy required for the DOD event set: #{policy}" do
+        subject { enabled_policies }
+        it 'is enabled (present in AUDIT_UNIFIED_ENABLED_POLICIES)' do
+          expect(enabled_policies).to include(policy.upcase)
+        end
+      end
+    end
+
+    # Layer 2 — CUSTOMER-owned policies covering events the RDS defaults miss.
+    # Asserted only in the customer/--all posture; skipped (not failed) when the
+    # site has not declared any customer_audit_policies.
+    unless skip_customer
+      if customer_policies.nil? || customer_policies.empty?
+        describe 'Customer-responsibility unified audit policies (SV-270504)' do
+          skip 'No customer_audit_policies declared; skipping the ' \
+               'customer-posture assertion. Set customer_audit_policies (default ' \
+               'CG_AUDIT_POLICY) and apply hardening/sql/30_audit_policies.sql. ' \
+               'See docs/RESPONSIBILITY.md.'
+        end
+      else
+        customer_policies.each do |policy|
+          describe "Customer unified audit policy required for the DOD event set: #{policy}" do
+            subject { enabled_policies }
+            it 'is enabled (present in AUDIT_UNIFIED_ENABLED_POLICIES)' do
+              expect(enabled_policies).to include(policy.upcase)
+            end
+          end
+        end
+      end
     end
   end
 

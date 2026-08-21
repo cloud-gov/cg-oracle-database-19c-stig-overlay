@@ -127,7 +127,7 @@ manual_review`, then record it in the table below.
 | Control | Intent | How satisfied |
 | --- | --- | --- |
 | SV-270498 | Security labels on data in storage (AC-16) | Procedural: if no data is classified sensitive/CUI or labeling is not required per system documentation, this is Not a Finding. Satisfied by the Cloud.gov SSP data-classification (AC-16) posture. |
-| SV-270503 | Select which auditable events are audited (AU-12 b) | Procedural, no pass/fail SQL: verify designated personnel can select audited events. Oracle inherently allows this via `AUDIT` / `CREATE AUDIT POLICY` under `AUDIT ANY` / `AUDIT SYSTEM` / `AUDIT_ADMIN`; the broker issues the customer a privileged account able to manage unified-audit policies (the SV-270504 customer-responsibility audit path). Satisfied by documentation of that audit-management authorization. |
+| SV-270503 | Select which auditable events are audited (AU-12 b) | Procedural, no pass/fail SQL: verify designated personnel can select audited events. Oracle inherently allows this via `AUDIT` / `CREATE AUDIT POLICY` under `AUDIT ANY` / `AUDIT SYSTEM` / `AUDIT_ADMIN`; the broker issues the customer a privileged account able to manage unified-audit policies (SV-270504 — the DoD event policies are platform-set on RDS). Satisfied by documentation of that audit-management authorization. |
 | SV-270505 | Additional detailed audit info (AU-3(1)) | Conditional/procedural: "if there are none [additional site-specific detailed-audit requirements], this is not a finding." None defined for Cloud.gov RDS, so the not-a-finding clause is satisfied. The inherited baseline body runs an unconditional FGA-count query that would mislead on RDS; overridden to Manual. If additional detailed-audit requirements are later defined, deploying/verifying Fine-Grained Auditing is the customer's responsibility. |
 
 ## Run postures
@@ -207,7 +207,34 @@ run, assessed under `--all` once the customer has applied a limit.
 | Control | Intent | Why customer-owned | Remediation step |
 | --- | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
-| SV-270504 | DoD-selected audit-event set (AU-12 c) | Fix creates/enables org-defined unified-audit policies (`CREATE AUDIT POLICY ... ACTIONS ...`; `AUDIT POLICY ...`) — db-altering SQL against an org-defined event list. The DoD-required event set is site-selected; the broker parameter group only routes `audit_trail` to a DB destination (SV-270510), it does not enable the DoD event policies. | run `30_audit_policies.sql` (enables `ORA_SECURECONFIG` / `ORA_LOGON_FAILURES`; extend per site) |
+| SV-270504 (customer layer) | DoD-selected audit-event set — events the RDS defaults MISS (AU-12 c) | The RDS defaults (`ORA_SECURECONFIG` / `ORA_LOGON_FAILURES`) do not cover `REVOKE`, `CHANGE PASSWORD`, `SET USER PASSWORD`, `LOGOFF`, `CREATE SPFILE`. Enabling a tenant policy that adds them is db-altering SQL against an org-defined action set. | run `30_audit_policies.sql` (creates/enables `CG_AUDIT_POLICY`) |
+
+> **SV-270504 (DoD-selected audit-event set, AU-12 c) has two layers.** The
+> control is tagged `responsibility: platform` (its base disposition) but runs a
+> **second, customer-responsibility assertion** only in the `--all` posture:
+>
+> - **Platform layer (both postures):** the Oracle-provided policies
+>   `ORA_SECURECONFIG` and `ORA_LOGON_FAILURES` are enabled **by default** on RDS
+>   once the broker's `audit_trail` parameters are set (RDS parameter group), so
+>   they cover the DoD categories they capture (privilege GRANT, security-config/
+>   DDL, most account administration, ALTER SYSTEM/DATABASE, LOGON) with no tenant
+>   step. Asserted via the `required_audit_policies` input (default
+>   `ORA_SECURECONFIG` + `ORA_LOGON_FAILURES`).
+> - **Customer layer (`--all` only):** the events the RDS defaults MISS — `REVOKE`,
+>   `CHANGE PASSWORD`, `SET USER PASSWORD`, `LOGOFF`, `CREATE SPFILE` — are covered
+>   by a tenant-owned policy (`CG_AUDIT_POLICY`) created and enabled by
+>   `hardening/sql/30_audit_policies.sql`. This assertion is **skipped on a
+>   platform-only run** (`--skip-customer-controls`) and runs on `--all`. The site
+>   policy name(s) are org-defined via the `customer_audit_policies` input (default
+>   `CG_AUDIT_POLICY`); an **empty list skips** the customer assertion rather than
+>   failing a site that has not declared its policies.
+>
+> Both layers are **detect-first** (this control never enables a policy). The
+> generic mitre-baseline control remains a **Manual Review**; the overlay overrides
+> it in-place. A site that uses a different policy name changes the
+> `customer_audit_policies` default in `inspec.yml` (the runner is baked into the
+> image, so inputs are not supplied at runtime). See `control-layers.yml`
+> (`set_by: aws_rds_parameter_group / verified_by: sql`).
 
 > **SV-270497 (automatic idle-session termination, `max_idle_time`, AC-12) is
 > PLATFORM-remediated, not customer-owned.** `max_idle_time` is a modifiable,

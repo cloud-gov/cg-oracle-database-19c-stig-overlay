@@ -114,3 +114,46 @@ inputs:
       - AUDIT_ADMIN
       - AUDIT_VIEWER
       - RDSADMIN
+  # --- DOD-selected audit event set (SV-270504) ------------------------------
+  # Org-defined set of unified-audit policies that must be ENABLED (present in
+  # AUDIT_UNIFIED_ENABLED_POLICIES) to cover the DOD-selected auditable-event list
+  # (AU-12 c). On RDS the Oracle-provided policies below are enabled BY DEFAULT
+  # once the broker's audit_trail parameters are set (RDS parameter group) — a
+  # PLATFORM fact, not a tenant hardening step:
+  #   - ORA_SECURECONFIG   — privilege GRANT/REVOKE, security-config/DDL, account
+  #                          administration, ALTER SYSTEM/DATABASE parameter changes
+  #   - ORA_LOGON_FAILURES — logon success/failure events
+  # Extend this list to add site-specific object/FGA policies (which would then be
+  # tenant-owned) without editing the SV-270504 overlay control.
+  - name: required_audit_policies
+    description: >-
+      Unified-audit policies that must be enabled to cover the DOD-selected
+      auditable-event set (SV-270504 / AU-12 c). Defaults to the Oracle-provided
+      ORA_SECURECONFIG and ORA_LOGON_FAILURES policies, which are enabled by
+      default on RDS once the audit_trail parameters are set; extend with
+      site-specific policies as needed.
+    type: Array
+    value:
+      - ORA_SECURECONFIG
+      - ORA_LOGON_FAILURES
+  # Customer-responsibility unified-audit policies checked ONLY in the
+  # customer/--all posture (skip_customer_responsibility_controls=false). These are
+  # the site/tenant-owned policies that cover the STIG-required auditable events the
+  # RDS default policies MISS (SV-270504 / AU-12 c). hardening/sql/30_audit_policies.sql
+  # creates and enables CG_AUDIT_POLICY (REVOKE, CHANGE PASSWORD, SET USER PASSWORD,
+  # LOGOFF, CREATE SPFILE). A platform-only run does not assert these (the tenant
+  # has not yet applied its hardening); a customer/--all run does. The default below
+  # matches 30_audit_policies.sql; a site that names its policy differently changes
+  # this default (the runner is baked into the image, so inputs are not supplied at
+  # runtime). When empty, the second assertion is skipped.
+  - name: customer_audit_policies
+    description: >-
+      Site/tenant-owned unified-audit policies that must be enabled to cover the
+      STIG-required auditable events missing from the RDS defaults (SV-270504 /
+      AU-12 c). Asserted ONLY in the customer/--all posture. Defaults to the
+      CG_AUDIT_POLICY created by hardening/sql/30_audit_policies.sql; a site that
+      uses a different policy name sets that here. Empty skips the customer-posture
+      assertion.
+    type: Array
+    value:
+      - CG_AUDIT_POLICY

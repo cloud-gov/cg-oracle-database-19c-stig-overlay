@@ -4,5 +4,5 @@ depends:
 - name: oracle-database-19c-stig-baseline
   resolved_source:
     git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git
-    ref: 81a929e0281fc6764d098d29971f13ce930e9f7b
+    ref: 910bfd5ca6ad153c889cdd06d50e3d85fd71cbea
   version_constraints: []

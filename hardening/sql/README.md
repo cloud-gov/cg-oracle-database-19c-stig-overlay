@@ -45,7 +45,7 @@ here (see `../control-layers.yml`).
 | `10_profiles.sql` | harden | enforce password/lockout profile limits |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
-| `30_audit_policies.sql` | harden | create + enable `CG_AUDIT_POLICY` for events the RDS default policies miss (REVOKE, CHANGE PASSWORD, SET USER PASSWORD, LOGOFF, CREATE SPFILE) |
+| `30_audit_policies.sql` | harden | create + enable `CG_AUDIT_POLICY` for events the RDS default policies miss (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE) |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
 | `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `15`, `30`; `20` is only partially reversible — see below) |

@@ -1,8 +1,8 @@
 -- rollback/30_audit_policies_rollback.sql — reverses 30_audit_policies.sql by
 -- disabling (NOAUDIT) and dropping the tenant CG_AUDIT_POLICY it creates. Use in
 -- local/dev only; removing this policy on a real system REDUCES the STIG posture
--- (drops auditing of REVOKE, CHANGE PASSWORD, SET USER PASSWORD, LOGOFF,
--- CREATE SPFILE) and should be a deliberate, reviewed action.
+-- (drops auditing of REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE) and should
+-- be a deliberate, reviewed action.
 --
 -- Does NOT touch the RDS-default policies (ORA_SECURECONFIG, ORA_LOGON_FAILURES):
 -- those are platform-set and were never enabled by 30_audit_policies.sql.

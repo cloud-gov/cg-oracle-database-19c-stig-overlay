@@ -342,7 +342,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
   #      LOGON. Asserted via the required_audit_policies input in every posture.
   #
   #   2. CUSTOMER (--all posture only): the events the RDS defaults MISS — REVOKE,
-  #      CHANGE PASSWORD, SET USER PASSWORD, LOGOFF, CREATE SPFILE — are covered by
+  #      CHANGE PASSWORD, LOGOFF, CREATE SPFILE — are covered by
   #      a tenant-owned policy (CG_AUDIT_POLICY) created/enabled by
   #      hardening/sql/30_audit_policies.sql. This is customer-responsibility
   #      remediation, so it is asserted ONLY when skip_customer_responsibility_controls
@@ -368,8 +368,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'parameter changes) and ORA_LOGON_FAILURES (logon events) are enabled BY ' \
          'DEFAULT on RDS for Oracle once the broker\'s audit_trail parameters are ' \
          'set (the RDS parameter group). CUSTOMER (--all posture only): the events ' \
-         'the RDS defaults MISS — REVOKE, CHANGE PASSWORD, SET USER PASSWORD, ' \
-         'LOGOFF, CREATE SPFILE — are covered by a tenant-owned policy ' \
+         'the RDS defaults MISS — REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE ' \
+         '— are covered by a tenant-owned policy ' \
          '(CG_AUDIT_POLICY) created and enabled by ' \
          'hardening/sql/30_audit_policies.sql, and are asserted only when ' \
          'customer-responsibility controls are in scope. Both layers assert the ' \
@@ -381,8 +381,14 @@ include_controls 'oracle-database-19c-stig-baseline' do
     tag cci: ['CCI-000172']
     tag nist: ['AU-12 c']
 
-    required_policies = input('required_audit_policies')
-    customer_policies = input('customer_audit_policies')
+    # Inline value: defaults so the control is self-contained. This control lives
+    # in the depended-on baseline (via include_controls), whose input namespace
+    # does NOT see the overlay inspec.yml defaults; without an inline default the
+    # resolver warns and returns nil on a bare run. run-validation.sh still writes
+    # both keys into /tmp/inputs.yml so operators can override them centrally.
+    required_policies = input('required_audit_policies',
+                              value: %w[ORA_SECURECONFIG ORA_LOGON_FAILURES])
+    customer_policies = input('customer_audit_policies', value: %w[CG_AUDIT_POLICY])
     sql = oracledb_session(user: input('user'), password: input('password'),
                            host: input('host'), port: input('port'),
                            service: input('service'), sqlplus_bin: input('sqlplus_bin'))

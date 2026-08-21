@@ -9,10 +9,16 @@
 -- RDS DEFAULTS (do NOT re-enable here): RDS for Oracle enables ORA_SECURECONFIG
 -- and ORA_LOGON_FAILURES BY DEFAULT once audit_trail is routed to a DB
 -- destination. Those cover privilege GRANT, security-config/DDL, most account
--- administration (CREATE/ALTER/DROP USER), ALTER SYSTEM/DATABASE, and LOGON. This
--- script therefore only adds the events the defaults MISS (SV-270504 / AU-12 c):
---   REVOKE, CHANGE PASSWORD, SET USER PASSWORD, LOGOFF, CREATE SPFILE
--- These are the Oracle unified-audit *action* names (AUDITABLE_SYSTEM_ACTIONS).
+-- administration (CREATE/ALTER/DROP USER, incl. admin password changes via
+-- ALTER USER), ALTER SYSTEM/DATABASE, and LOGON. This script therefore only adds
+-- the events the defaults MISS (SV-270504 / AU-12 c):
+--   REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE
+-- These are Oracle unified-audit standard *action* names (AUDITABLE_SYSTEM_ACTIONS),
+-- confirmed valid + not covered by the RDS defaults on live RDS 19c SE2. Oracle
+-- auto-expands the XS-namespace variants (e.g. REVOKE -> REVOKE ROLE / REVOKE
+-- SYSTEM PRIVILEGE, CHANGE PASSWORD -> SET USER PASSWORD) when the policy is
+-- created; those appear as AUDIT_OPTION_TYPE='XS ACTION' rows and need not be
+-- specified (specifying SET USER PASSWORD directly fails ORA-46356).
 SET SERVEROUTPUT ON
 SET DEFINE OFF
 SET FEEDBACK OFF
@@ -31,7 +37,7 @@ DECLARE
   -- Actions missing from the RDS default policies. Kept as one CREATE so the
   -- policy is defined atomically; each name is a documented auditable action.
   c_actions   CONSTANT VARCHAR2(200) :=
-    'REVOKE, CHANGE PASSWORD, SET USER PASSWORD, LOGOFF, CREATE SPFILE';
+    'REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE';
 BEGIN
   -- 1) Create the policy if it does not already exist.
   BEGIN

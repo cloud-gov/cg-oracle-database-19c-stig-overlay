@@ -115,6 +115,12 @@ inputs:
       - AUDIT_VIEWER
       - RDSADMIN
   # --- DOD-selected audit event set (SV-270504) ------------------------------
+  # NOTE: SV-270504 runs inside the depended-on baseline (via include_controls),
+  # whose input namespace does NOT see these overlay defaults. So these values are
+  # ALSO written into /tmp/inputs.yml by run-validation.sh (a runtime --input-file
+  # is cross-profile) and the control carries inline value: defaults as a backstop.
+  # These inspec.yml entries document the intended defaults and type; do not rely
+  # on them alone to reach the control.
   # Org-defined set of unified-audit policies that must be ENABLED (present in
   # AUDIT_UNIFIED_ENABLED_POLICIES) to cover the DOD-selected auditable-event list
   # (AU-12 c). On RDS the Oracle-provided policies below are enabled BY DEFAULT
@@ -140,8 +146,8 @@ inputs:
   # customer/--all posture (skip_customer_responsibility_controls=false). These are
   # the site/tenant-owned policies that cover the STIG-required auditable events the
   # RDS default policies MISS (SV-270504 / AU-12 c). hardening/sql/30_audit_policies.sql
-  # creates and enables CG_AUDIT_POLICY (REVOKE, CHANGE PASSWORD, SET USER PASSWORD,
-  # LOGOFF, CREATE SPFILE). A platform-only run does not assert these (the tenant
+  # creates and enables CG_AUDIT_POLICY (REVOKE, CHANGE PASSWORD, LOGOFF,
+  # CREATE SPFILE). A platform-only run does not assert these (the tenant
   # has not yet applied its hardening); a customer/--all run does. The default below
   # matches 30_audit_policies.sql; a site that names its policy differently changes
   # this default (the runner is baked into the image, so inputs are not supplied at

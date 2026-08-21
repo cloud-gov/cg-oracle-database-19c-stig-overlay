@@ -207,7 +207,7 @@ run, assessed under `--all` once the customer has applied a limit.
 | Control | Intent | Why customer-owned | Remediation step |
 | --- | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
-| SV-270504 (customer layer) | DoD-selected audit-event set — events the RDS defaults MISS (AU-12 c) | The RDS defaults (`ORA_SECURECONFIG` / `ORA_LOGON_FAILURES`) do not cover `REVOKE`, `CHANGE PASSWORD`, `SET USER PASSWORD`, `LOGOFF`, `CREATE SPFILE`. Enabling a tenant policy that adds them is db-altering SQL against an org-defined action set. | run `30_audit_policies.sql` (creates/enables `CG_AUDIT_POLICY`) |
+| SV-270504 (customer layer) | DoD-selected audit-event set — events the RDS defaults MISS (AU-12 c) | The RDS defaults (`ORA_SECURECONFIG` / `ORA_LOGON_FAILURES`) do not cover `REVOKE`, `CHANGE PASSWORD`, `LOGOFF`, `CREATE SPFILE`. Enabling a tenant policy that adds them is db-altering SQL against an org-defined action set. | run `30_audit_policies.sql` (creates/enables `CG_AUDIT_POLICY`) |
 
 > **SV-270504 (DoD-selected audit-event set, AU-12 c) has two layers.** The
 > control is tagged `responsibility: platform` (its base disposition) but runs a
@@ -221,7 +221,7 @@ run, assessed under `--all` once the customer has applied a limit.
 >   step. Asserted via the `required_audit_policies` input (default
 >   `ORA_SECURECONFIG` + `ORA_LOGON_FAILURES`).
 > - **Customer layer (`--all` only):** the events the RDS defaults MISS — `REVOKE`,
->   `CHANGE PASSWORD`, `SET USER PASSWORD`, `LOGOFF`, `CREATE SPFILE` — are covered
+>   `CHANGE PASSWORD`, `LOGOFF`, `CREATE SPFILE` — are covered
 >   by a tenant-owned policy (`CG_AUDIT_POLICY`) created and enabled by
 >   `hardening/sql/30_audit_policies.sql`. This assertion is **skipped on a
 >   platform-only run** (`--skip-customer-controls`) and runs on `--all`. The site

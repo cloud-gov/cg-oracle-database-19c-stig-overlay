@@ -175,8 +175,8 @@ controls:
       (the RDS parameter group) — no tenant step. Asserted via the
       required_audit_policies input (default ORA_SECURECONFIG / ORA_LOGON_FAILURES).
       LAYER 2 (customer, --all posture only): the STIG-required events the RDS
-      defaults MISS — REVOKE, CHANGE PASSWORD, SET USER PASSWORD, LOGOFF,
-      CREATE SPFILE — are covered by a tenant-owned policy (CG_AUDIT_POLICY) created
+      defaults MISS — REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE — are
+      covered by a tenant-owned policy (CG_AUDIT_POLICY) created
       and enabled by hardening/sql/30_audit_policies.sql. Asserted via the
       org-defined customer_audit_policies input (default CG_AUDIT_POLICY) only when
       skip_customer_responsibility_controls is false; an empty list skips (does not
@@ -193,8 +193,8 @@ controls:
       Unified audit policies ORA_SECURECONFIG / ORA_LOGON_FAILURES are enabled by
       default on RDS for Oracle once the broker's audit_trail parameters are set
       (RDS parameter group); SQL-verified via AUDIT_UNIFIED_ENABLED_POLICIES. The
-      events those defaults MISS (REVOKE, CHANGE PASSWORD, SET USER PASSWORD,
-      LOGOFF, CREATE SPFILE) are added by hardening/sql/30_audit_policies.sql via
+      events those defaults MISS (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE)
+      are added by hardening/sql/30_audit_policies.sql via
       the tenant-owned CG_AUDIT_POLICY — customer-responsibility remediation
       asserted only in the --all posture (see the SV-270504 id_pattern above).
   - text_pattern: "instance name.*version|Oracle version number|V\\$INSTANCE"

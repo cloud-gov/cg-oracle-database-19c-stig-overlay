@@ -97,7 +97,7 @@ fi
 
 # Inputs the overlay/baseline profile expects. oracledb_session shells out to the
 # pure-Go wrapper via sqlplus_bin. skip_customer_responsibility_controls drives the
-# responsibility gate in controls/baseline.rb.
+# responsibility gate in controls/overlay.rb.
 #
 # allowed_audit_users (SV-270510, AU-9): the overlay inspec.yml defaults this to
 # the Oracle built-in audit roles + the RDSADMIN platform account. RDS runs

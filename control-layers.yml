@@ -221,7 +221,7 @@ controls:
       per system documentation, this is Not a Finding. Not SQL-verifiable and
       not a managed-RDS platform fact; satisfied by the Cloud.gov SSP
       data-classification posture. Overridden to Manual (impact 0.0) in
-      controls/baseline.rb.
+      controls/overlay.rb.
   - id_pattern: "SV-270503"
     set_by: manual_review
     verified_by: manual_review
@@ -237,7 +237,7 @@ controls:
       hardening/sql/30_audit_policies.sql), satisfying this capability. A
       documentation/policy determination (audit-management authorization), not a
       tenant SQL assertion. Overridden to Manual (impact 0.0) in
-      controls/baseline.rb.
+      controls/overlay.rb.
   - id_pattern: "SV-270505"
     set_by: manual_review
     verified_by: manual_review
@@ -254,7 +254,7 @@ controls:
       assertion. The inherited baseline body runs an UNCONDITIONAL FGA-count
       query that would FAIL whenever no FGA policy exists (misleading on RDS,
       since the STIG treats that as Not a Finding absent additional
-      requirements). Overridden to Manual (impact 0.0) in controls/baseline.rb.
+      requirements). Overridden to Manual (impact 0.0) in controls/overlay.rb.
       If additional detailed-audit requirements are later defined, deploying and
       verifying FGA becomes the customer's responsibility.
   - id_pattern: "SV-270499"
@@ -268,7 +268,7 @@ controls:
       check's "not a finding" clause anticipates. That model is
       FedRAMP-authorized/certified and is part of the ATO granted to Cloud.gov by
       the customer's agency; it is satisfied by the platform, not by tenant SQL.
-      Overridden to a platform disposition (impact 0.0) in controls/baseline.rb.
+      Overridden to a platform disposition (impact 0.0) in controls/overlay.rb.
 
   - id_pattern: "SV-270500"
     set_by: broker_infra
@@ -282,7 +282,7 @@ controls:
       `cf create-service`; the baseline authorization set is satisfied at provision
       by the platform, not a tenant SQL assertion. Customer-created users/roles are
       the customer's responsibility. Overridden to a platform disposition (impact
-      0.0) in controls/baseline.rb.
+      0.0) in controls/overlay.rb.
   - id_pattern: "SV-270501"
     set_by: broker_infra
     verified_by: compensating_control
@@ -295,7 +295,7 @@ controls:
       SQL-verified via SV-270502 (inherited) and the audit_trail entry above. If the
       customer creates additional users, individual attribution for them is the
       customer's responsibility. Overridden to a platform disposition (impact 0.0)
-      in controls/baseline.rb.
+      in controls/overlay.rb.
 
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270506"
@@ -311,7 +311,7 @@ controls:
       SYS/AUDSYS and the DB host OS, AWS-managed and tenant-unreachable. The DISA
       fix (dbms_audit_mgmt.move_dbaudit_tables, resize disk) needs SYS/OS access
       the tenant lacks. Inherited from the AWS platform. Overridden to N/A
-      (impact 0.0) in controls/baseline.rb.
+      (impact 0.0) in controls/overlay.rb.
   - id_pattern: "SV-270507"
     set_by: aws_inherited
     verified_by: not_applicable_rds
@@ -325,7 +325,7 @@ controls:
       (AU-4(1)/AU-6). A broker/platform integration configured outside the
       database, not a tenant SQL setting and not SQL-verifiable. Inherited from
       the AWS/Cloud.gov platform. Overridden to N/A (impact 0.0) in
-      controls/baseline.rb.
+      controls/overlay.rb.
   - id_pattern: "SV-270512"
     set_by: aws_inherited
     verified_by: not_applicable_rds
@@ -337,7 +337,7 @@ controls:
       and unreachable. The inherited baseline `command('umask')` assertion would
       reflect the InSpec runner host, not the DB server, so it is not a valid
       signal. Access restrictions to the DBMS software are inherited from the AWS
-      platform. Overridden to N/A (impact 0.0) in controls/baseline.rb.
+      platform. Overridden to N/A (impact 0.0) in controls/overlay.rb.
   - id_pattern: "SV-270515"
     set_by: aws_inherited
     verified_by: not_applicable_rds
@@ -351,7 +351,7 @@ controls:
       software-library file permissions (references/HANDOFF.md §6 needs_fix seed);
       DBA-role membership is covered by the dedicated account/role controls. The
       software-library privilege restriction is inherited from the AWS platform.
-      Overridden to N/A (impact 0.0) in controls/baseline.rb.
+      Overridden to N/A (impact 0.0) in controls/overlay.rb.
   - id_pattern: "SV-270496"
     set_by: aws_inherited
     verified_by: not_applicable_rds
@@ -365,7 +365,7 @@ controls:
       tablespace quotas) are org-defined resource limits on the
       customer-responsibility profile-hardening path (see SV-270495), not this
       control's listener.ora assertion. Overridden to N/A (impact 0.0) in
-      controls/baseline.rb.
+      controls/overlay.rb.
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

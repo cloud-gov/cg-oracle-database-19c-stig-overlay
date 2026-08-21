@@ -20,7 +20,7 @@ depends:
     branch: cloudgov
 
 # The overlay pulls in ALL baseline controls as they are defined there, via
-# `include_controls` in controls/baseline.rb (no per-control filter). The baseline
+# `include_controls` in controls/overlay.rb (no per-control filter). The baseline
 # `cloudgov` branch forwards `port: input('port')` into every connect string, so
 # this overlay's `port` input flows straight through.
 

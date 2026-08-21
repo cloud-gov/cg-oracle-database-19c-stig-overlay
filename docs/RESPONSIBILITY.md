@@ -52,7 +52,7 @@ classified in [`control-layers.yml`](../control-layers.yml) via its `set_by` /
   `aws_rds_parameter_group`, `not_applicable_rds`, `sql_hardening`). Customer
   responsibility corresponds to a `set_by: sql_hardening` + `verified_by: sql`
   control whose remediation value is org-defined.
-- **`controls/baseline.rb`** — the single, authoritative list of controls that
+- **`controls/overlay.rb`** — the single, authoritative list of controls that
   are a **customer** responsibility. Each entry is one `skip_control 'SV-XXXXXX'`
   line inside the `include_controls` block, gated by the responsibility input.
   This is the file that actually drives the skip behavior at scan time.
@@ -151,7 +151,7 @@ run-validation.sh            # or explicitly: run-validation.sh --all
 
 ## How the skip is implemented (single file, input-gated)
 
-`controls/baseline.rb` inherits **all** baseline controls via `include_controls`
+`controls/overlay.rb` inherits **all** baseline controls via `include_controls`
 and, in the same block, skips the customer-responsibility controls **only when the
 gate is active** — following the MITRE overlay pattern
 ([sample-mysql-overlay/controls/overlay.rb](https://github.com/mitre/sample-mysql-overlay/blob/main/controls/overlay.rb)).
@@ -175,7 +175,7 @@ end
 
 ### Adding a control
 
-Add **one line** inside the `if skip_customer` block in `controls/baseline.rb`:
+Add **one line** inside the `if skip_customer` block in `controls/overlay.rb`:
 
 ```ruby
 skip_control 'SV-2705XX'
@@ -220,4 +220,4 @@ run, assessed under `--all` once the customer has applied a limit.
 > `control-layers.yml` (`set_by: aws_rds_parameter_group / verified_by: sql`).
 
 > This list grows as controls are dispositioned. It MUST stay in sync with
-> `controls/baseline.rb` (the authoritative, executable `skip_control` list).
+> `controls/overlay.rb` (the authoritative, executable `skip_control` list).

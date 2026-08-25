@@ -261,12 +261,66 @@ controls:
       list (the SV-270495 customer-responsibility pattern, remediated via
       hardening/sql/, not the broker), and on RDS AUDSYS is AWS-managed so the
       broker could not run it at provision anyway.
+  - id_pattern: "SV-270528"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270528 (CM-6 b) system privileges must not be granted to PUBLIC. The
+      DISA check is a pure SQL predicate (SELECT privilege FROM dba_sys_privs
+      WHERE grantee = 'PUBLIC'; ANY row is a finding), and the DISA fix note
+      states system privileges are NOT granted to PUBLIC by default — a compliant
+      stock database returns zero rows, so the compliant posture is inherited from
+      the Oracle default (aws_inherited) with no org-defined value and no allowlist
+      needed. The baseline control's `should be_empty` assertion is correct
+      (baseline_status: fixed) and runs in BOTH postures to detect drift; it is
+      never suppressed (two-axis rule). Overlay inherits as-is
+      (overlay_status: inherited). Distinct from SV-270530 (object grants), which
+      DOES need an org-defined allowlist and is a customer responsibility.
+  - id_pattern: "SV-270530"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270530 (CM-6 b) object permissions granted to PUBLIC must be restricted.
+      INHERITED with a platform-seeded allowlist (NOT customer responsibility).
+      Unlike SV-270528/532 (which must be empty), the DISA check EXCLUDES Oracle
+      product accounts via a "list of nonapplicable accounts" — an org-defined
+      allowlist the baseline models with the users_allowed_access_to_public input
+      (baseline_status: ok). On a stock brokered RDS instance the owners that hold
+      PUBLIC object grants are the Oracle predefined product accounts (SYS, SYSTEM,
+      CTXSYS, GSMADMIN_INTERNAL, XDB) PLUS the AWS-managed RDSADMIN platform
+      account (confirmed against a provisioned RDS instance:
+      `select distinct owner from dba_tab_privs where grantee='PUBLIC'` returned
+      SYS, SYSTEM, CTXSYS, GSMADMIN_INTERNAL, RDSADMIN, XDB). Seeding those product
+      + platform accounts into the allowlist so a stock brokered instance passes is
+      a PLATFORM responsibility — done in runner/run-validation.sh — so the overlay
+      inherits the baseline control as-is and it runs in BOTH postures. Any OTHER
+      owner granting to PUBLIC (e.g. a customer application schema) is still a real
+      finding the tenant must REVOKE; hardening/sql/40_public_grants_assess.sql is
+      detect-first for that. overlay_status: inherited.
+  - id_pattern: "SV-270532"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270532 (CM-6 b) application role permissions must not be assigned to the
+      Oracle PUBLIC role. The DISA check is a pure SQL predicate (SELECT
+      granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC'; ANY row is a
+      finding), and the STIG discussion notes the Oracle installation does not
+      assign role permissions to PUBLIC — a compliant stock database returns zero
+      rows, so the compliant posture is inherited from the Oracle default
+      (aws_inherited) with no org-defined value and no allowlist needed. The
+      baseline control's `should be_empty` assertion is correct (baseline_status:
+      fixed) and runs in BOTH postures to detect drift; it is never suppressed
+      (two-axis rule). Overlay inherits as-is (overlay_status: inherited).
   - text_pattern: "granted to PUBLIC|PUBLIC grant|revoke.*public"
     set_by: sql_assessment_only
     verified_by: sql
     rationale: >-
       PUBLIC grants are detected (40_public_grants_assess.sql) but never
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
+      Broad default for PUBLIC-grant controls; the three explicitly-dispositioned
+      PUBLIC controls have id_pattern overrides above (SV-270528, SV-270530,
+      SV-270532).
+
   # --- manual / compensating-control dispositions (documentation / SSP) ---
   - id_pattern: "SV-270498"
     set_by: manual_review

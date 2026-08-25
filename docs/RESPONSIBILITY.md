@@ -130,6 +130,23 @@ manual_review`, then record it in the table below.
 | SV-270503 | Select which auditable events are audited (AU-12 b) | Procedural, no pass/fail SQL: verify designated personnel can select audited events. Oracle inherently allows this via `AUDIT` / `CREATE AUDIT POLICY` under `AUDIT ANY` / `AUDIT SYSTEM` / `AUDIT_ADMIN`; the broker issues the customer a privileged account able to manage unified-audit policies (SV-270504 — the DoD event policies are platform-set on RDS). Satisfied by documentation of that audit-management authorization. |
 | SV-270505 | Additional detailed audit info (AU-3(1)) | Conditional/procedural: "if there are none [additional site-specific detailed-audit requirements], this is not a finding." None defined for Cloud.gov RDS, so the not-a-finding clause is satisfied. The inherited baseline body runs an unconditional FGA-count query that would mislead on RDS; overridden to Manual. If additional detailed-audit requirements are later defined, deploying/verifying Fine-Grained Auditing is the customer's responsibility. |
 
+## Inherited controls with a platform-seeded allowlist input
+
+Some inherited baseline controls are **SQL-verifiable and kept running as-is**
+(no override), but their assertion compares against an **org-defined allowlist
+input** whose *baseline* membership on a stock brokered RDS instance is a
+**platform** fact. For these the overlay stays `inherited` (the baseline check is
+correct and runs in both postures), and `runner/run-validation.sh` **seeds the
+platform accounts** into the input so a stock brokered instance passes without a
+finding. Any grantee/owner **outside** the seeded list is still a real finding —
+seeding the platform baseline never suppresses a detectable drift (the two-axis
+rule). Customer-added principals can be appended via an input file passed after
+the runner's default.
+
+| Control | Intent | Input | Platform-seeded baseline | Still a finding |
+| --- | --- | --- | --- | --- |
+| SV-270530 | Restrict object permissions granted to PUBLIC (CM-6 b) | `users_allowed_access_to_public` | The Oracle predefined product accounts that hold PUBLIC object grants on a stock install (`SYS`, `SYSTEM`, `CTXSYS`, `GSMADMIN_INTERNAL`, `XDB`) plus the AWS-managed **`RDSADMIN`** platform account — the DISA check's "list of nonapplicable [Oracle product] accounts." Seeding these is a **platform responsibility** (confirmed against a provisioned RDS instance: owners with PUBLIC grants = SYS, SYSTEM, CTXSYS, GSMADMIN_INTERNAL, RDSADMIN, XDB). | Any **other** owner granting to PUBLIC (e.g. a customer application schema) is a finding; the tenant must `REVOKE` it (`40_public_grants_assess.sql` is detect-first). |
+
 ## Run postures
 
 The behavior is driven by the `skip_customer_responsibility_controls` input

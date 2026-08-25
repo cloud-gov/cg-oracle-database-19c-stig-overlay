@@ -6,13 +6,14 @@
 # both SQLcl runners (sqlcl/sqlcl-connect.sh and sqlcl-cf/entrypoint.sh) so the
 # connection contract lives in ONE place and they can't drift.
 #
-# Contract: on success, exports DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE, DB_PORT
-# and (when it chose one) ORAQUERY_TLS. Fails closed (non-zero + stderr) on a
-# missing coordinate or an absent VCAP binding.
+# Contract: on success, exports DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE, DB_PORT,
+# DB_INSTANCE_NAME and (when it chose one) ORAQUERY_TLS. Fails closed (non-zero +
+# stderr) on a missing coordinate or an absent VCAP binding.
 #
 # Env inputs:
 #   DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE   (required unless VCAP supplies them)
 #   DB_PORT                                     (optional; see port defaulting below)
+#   DB_INSTANCE_NAME                            (optional; report label; from VCAP instance_name)
 #   VCAP_SERVICES                               (Cloud.gov; aws-rds binding, db_name ORCL)
 #   ORAQUERY_TLS                                (optional; honored if already set)
 #   LOG_PREFIX                                  (optional; log tag, default "db-connect")
@@ -35,10 +36,13 @@ _dbc_ruby_bin() {
 }
 
 # Emit the selected ORCL binding's coordinates as a single tab-separated line:
-#   username <TAB> password <TAB> host <TAB> service <TAB> port
-# TWO interpreters implement the SAME contract so the shared resolver works in
-# every runner without drift: the CINC image ships Ruby; the Java-buildpack app on
-# cflinuxfs4 ships no Ruby but has jq. Preference order (richest first): Ruby → jq.
+#   username <TAB> password <TAB> host <TAB> service <TAB> port <TAB> instance_name
+# The instance_name is the CF service-instance name (a top-level field on the
+# binding, e.g. "test-oracle-tls"); it is the human-facing per-instance
+# discriminator used to label reports. TWO interpreters implement the SAME
+# contract so the shared resolver works in every runner without drift: the CINC
+# image ships Ruby; the Java-buildpack app on cflinuxfs4 ships no Ruby but has jq.
+# Preference order (richest first): Ruby → jq.
 
 _dbc_vcap_ruby() {
     "$1" <<'RUBY'
@@ -59,12 +63,15 @@ end
 
 credentials = binding.fetch('credentials')
 
+# instance_name / name are TOP-LEVEL binding fields (the CF service-instance
+# name), not credentials fields — that is what an operator recognizes.
 puts [
   credentials.fetch('username', ''),
   credentials.fetch('password', ''),
   credentials.fetch('host', ''),
   credentials['db_name'] || credentials.fetch('name', ''),
   credentials.fetch('port', ''),
+  binding['instance_name'] || binding['name'] || '',
 ].join("\t")
 RUBY
 }
@@ -78,19 +85,21 @@ RUBY
 # matching the Ruby behavior.
 _dbc_vcap_jq() {
     # -e: exit non-zero if the final result is null/false (no ORCL match) → fail
-    #     closed. -r: raw output (no JSON quoting). join("\t") emits the five decoded
+    #     closed. -r: raw output (no JSON quoting). join("\t") emits the six decoded
     #     fields tab-separated — NOT @tsv, which TSV-escapes backslashes (doubling a
     #     `\` in a password). Credentials never contain a literal tab, and the caller
     #     reads back with IFS=$'\t', so join("\t") is the faithful, correct form.
-    # `[.["aws-rds"][]?] | map(...) | first(...)` collects ALL aws-rds bindings
-    #     (the `[]?` tolerates a missing/empty aws-rds key → empty array → no match →
-    #     -e fails, fail-closed), then `first(select(...))` picks the FIRST ORCL match
-    #     in array order — the direct jq analogue of Ruby's `bindings.find`. This is
-    #     done INSIDE jq (not with a shell `head -n1`) so the single result flows out
-    #     without a truncated pipe, keeping jq's own exit status authoritative under
-    #     the caller's `set -o pipefail`.
+    # `[.["aws-rds"][]?]` collects ALL aws-rds BINDING objects (the `[]?` tolerates a
+    #     missing/empty aws-rds key → empty array → no match → -e fails, fail-closed),
+    #     then `first(select(...))` picks the FIRST whose credentials db_name/name is
+    #     ORCL — the direct jq analogue of Ruby's `bindings.find`. We keep the whole
+    #     binding object (NOT just .credentials) so instance_name — a TOP-LEVEL
+    #     binding field — survives to the output row. This is done INSIDE jq (not a
+    #     shell `head -n1`) so the single result flows out without a truncated pipe,
+    #     keeping jq's own exit status authoritative under the caller's pipefail.
     # Ruby emits credentials.db_name || name for the service field; the select filter
     #     already fixed that to "ORCL", so a literal "ORCL" is byte-identical here.
+    # instance_name || name mirrors the Ruby fallback for the CF instance name.
     # Portability: every construct here works on jq 1.6 (the platform's version) and
     #     older. We deliberately AVOID `error("msg")` (the string-argument form, new in
     #     1.6); an unmatched query yields no output, and `-e` turns that into a non-zero
@@ -98,19 +107,21 @@ _dbc_vcap_jq() {
     #     caller (_dbc_parse_vcap) on a non-zero return, so no jq-version-sensitive
     #     error() call is needed.
     printf '%s' "${VCAP_SERVICES}" | "$1" -er '
-        [ .["aws-rds"][]? | .credentials ]
-        | first(.[] | select((.db_name // .name) == "ORCL"))
-        | [ (.username // ""),
-            (.password // ""),
-            (.host // ""),
+        [ .["aws-rds"][]? ]
+        | first(.[] | select((.credentials.db_name // .credentials.name) == "ORCL"))
+        | [ (.credentials.username // ""),
+            (.credentials.password // ""),
+            (.credentials.host // ""),
             "ORCL",
-            (.port // "" | tostring) ]
+            (.credentials.port // "" | tostring),
+            (.instance_name // .name // "") ]
         | join("\t")
     '
 }
 # Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
-# "ORCL"; explicit DB_* env vars win. Fails closed if VCAP_SERVICES is present but
-# has no ORCL binding — never guesses another database. No-op without VCAP.
+# "ORCL" (and DB_INSTANCE_NAME from the binding's instance_name/name); explicit
+# DB_* / DB_INSTANCE_NAME env vars win. Fails closed if VCAP_SERVICES is present
+# but has no ORCL binding — never guesses another database. No-op without VCAP.
 _dbc_parse_vcap() {
     [ -n "${VCAP_SERVICES:-}" ] || return 0
 
@@ -127,14 +138,17 @@ _dbc_parse_vcap() {
         return 1
     fi
 
-    local vcap_user vcap_password vcap_host vcap_service vcap_port
-    IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port <<<"$vcap_values"
+    local vcap_user vcap_password vcap_host vcap_service vcap_port vcap_instance
+    IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port vcap_instance <<<"$vcap_values"
 
     DB_USER="${DB_USER:-$vcap_user}"
     DB_PASSWORD="${DB_PASSWORD:-$vcap_password}"
     DB_HOST="${DB_HOST:-$vcap_host}"
     DB_SERVICE="${DB_SERVICE:-$vcap_service}"
     DB_PORT="${DB_PORT:-$vcap_port}"
+    # CF service-instance name (e.g. "test-oracle-tls"), the human-facing report
+    # discriminator. An explicit DB_INSTANCE_NAME env var still wins.
+    DB_INSTANCE_NAME="${DB_INSTANCE_NAME:-$vcap_instance}"
 }
 
 # Unmistakably-local dev targets. Mirrors oraquery's isLocalHost allowlist
@@ -171,6 +185,54 @@ _dbc_default_tls() {
     fi
 }
 
+# Derive a stable, filesystem-safe discriminator token. On brokered Cloud.gov RDS
+# every Oracle service is named "ORCL" (see the VCAP parser above), so the SERVICE
+# name cannot tell two databases apart. The best discriminator is the CF
+# service-INSTANCE name (DB_INSTANCE_NAME, e.g. "test-oracle-tls" → labeled report
+# "ORCL-test-oracle-tls"). When that is unavailable (a local/ad-hoc run with no
+# VCAP binding and no DB_INSTANCE_NAME set), fall back to the RDS endpoint's first
+# DNS label. Prints the token on stdout; sanitized to [a-z0-9._-]; never empty.
+db_instance_label() {
+    local instance="${1:-${DB_INSTANCE_NAME:-}}"
+    if [ -n "$instance" ]; then
+        _dbc_sanitize_label "$instance"
+    else
+        db_host_label "${DB_HOST:-}"
+    fi
+}
+
+# Lowercase + replace any char outside [a-z0-9._-] with '-', trim edge '-', guard
+# against empty (→ "unknown"). Shared by db_instance_label and db_host_label so the
+# two cannot drift on what a "safe token" is.
+_dbc_sanitize_label() {
+    local label
+    label="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
+    label="${label#-}"
+    label="${label%-}"
+    printf '%s' "${label:-unknown}"
+}
+
+# Fallback discriminator: the RDS endpoint's first DNS label (the per-instance
+# identifier, e.g. "cg-aws-broker-xxxx" in
+# cg-aws-broker-xxxx.abc123.us-gov-west-1.rds.amazonaws.com). An IPv4/IPv6 literal
+# is kept WHOLE (its first "label" is not a discriminator — 10.0.0.5 and 10.9.9.9
+# both start with "10"). Prints the token on stdout.
+db_host_label() {
+    local host="${1:-${DB_HOST:-}}" label
+    # An IPv4 literal has no meaningful "first DNS label" (taking it would collapse
+    # 10.0.0.5 and 10.9.9.9 both to "10"), so keep the whole address. IPv6 (has a
+    # ':') is likewise kept whole; sanitization makes it filesystem-safe.
+    if printf '%s' "$host" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' || case "$host" in *:*) true ;; *) false ;; esac; then
+        label="$host"
+    else
+        # First DNS label — everything before the first '.'. For a bare hostname
+        # this is the whole value.
+        label="${host%%.*}"
+        [ -n "$label" ] || label="$host"
+    fi
+    _dbc_sanitize_label "$label"
+}
+
 # Single entry point: fill DB_* from VCAP, require the coordinates, then choose TLS
 # mode and port (order matters — the port default reads the TLS mode).
 resolve_db_connection() {
@@ -184,5 +246,5 @@ resolve_db_connection() {
     _dbc_default_tls
     _dbc_default_port
 
-    export DB_USER DB_PASSWORD DB_HOST DB_SERVICE DB_PORT
+    export DB_USER DB_PASSWORD DB_HOST DB_SERVICE DB_PORT DB_INSTANCE_NAME
 }

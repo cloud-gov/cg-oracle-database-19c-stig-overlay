@@ -193,7 +193,16 @@ report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSO
 	  local="$(RESULTS_DIR)/$$(basename "$$remote")"; \
 	  echo "report-cloudgov: fetching $$remote → $$local"; \
 	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) -c "cat '$$remote'" > "$$local"; \
-	  echo "report-cloudgov: saved $$local"
+	  echo "report-cloudgov: saved $$local"; \
+	  remote_meta="$${remote%.json}.meta.json"; \
+	  local_meta="$${local%.json}.meta.json"; \
+	  echo "report-cloudgov: fetching $$remote_meta → $$local_meta"; \
+	  if cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) -c "cat '$$remote_meta'" > "$$local_meta" 2>/dev/null && [ -s "$$local_meta" ]; then \
+	    echo "report-cloudgov: saved $$local_meta"; \
+	  else \
+	    rm -f "$$local_meta"; \
+	    echo "report-cloudgov: WARNING: no metadata sidecar found at $$remote_meta" >&2; \
+	  fi
 
 .PHONY: test-go
 test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)

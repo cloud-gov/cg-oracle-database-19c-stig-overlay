@@ -170,12 +170,35 @@ filename so multiple runs are distinguishable:
 
 ```
 ${OUT_DIR:-/out}/validation-<label>-<UTC-timestamp>.json
-# e.g. /out/validation-FREEPDB1-20260807T195624Z.json
+# e.g. /out/validation-ORCL-test-oracle-tls-20260807T195624Z.json
 ```
 
 - `OUT_DIR` — output directory (default `/out`).
-- `RUN_LABEL` — label token (default: the DB service name); sanitized to
+- `RUN_LABEL` — label token. **Default: `<db-service>-<instance-label>`**, where the
+  instance label is the **CF service-instance name** (`instance_name` from
+  `VCAP_SERVICES`, or the `DB_INSTANCE_NAME` env var) — e.g.
+  `ORCL-test-oracle-tls`. On brokered Cloud.gov RDS every Oracle service is named
+  `ORCL`, so the service name alone cannot tell two databases apart; the CF
+  instance name is the human-facing discriminator. For local/ad-hoc runs with no
+  VCAP binding and no `DB_INSTANCE_NAME`, it falls back to the RDS endpoint's first
+  DNS label. An explicit `RUN_LABEL` still overrides this. Sanitized to
   `[A-Za-z0-9._-]`.
+- `DB_INSTANCE_NAME` — optional override for the instance label on runs where
+  `VCAP_SERVICES` is absent (e.g. local dev, or a directly-configured `DB_*` run).
+
+Alongside each JSON report the runner writes a companion **metadata sidecar**:
+
+```
+${OUT_DIR:-/out}/validation-<label>-<UTC-timestamp>.meta.json
+```
+
+The CINC/InSpec JSON's `platform` block describes the **scanner** host (Ubuntu),
+not the Oracle target, so a saved report is otherwise silent about which database
+it assessed. The sidecar records the connection coordinates — `instance_name`,
+`db_host`, `db_port`, `db_service`, `db_user`, `instance_label`, `host_label`,
+`tls_mode`, and the responsibility posture — making each report self-describing
+and two `ORCL` reports unambiguously distinguishable. The **password is never
+written**.
 
 For local 23ai iteration, `make report-local` runs `retest` with `--json` and
 mounts `$(RESULTS_DIR)` (default `./out`) at the container's `/out`, so reports
@@ -183,7 +206,8 @@ land directly on the host — no copy step:
 
 ```bash
 make db-up
-make report-local          # → out/validation-FREEPDB1-<ts>.json
+make report-local          # → out/validation-FREEPDB1-localhost-<ts>.json
+                           #   (or DB_INSTANCE_NAME=... to label it explicitly)
 make report-local RESULTS_DIR=reports
 make report-local CONTROL=SV-270495    # report on a single control
 ```
@@ -206,9 +230,10 @@ Connection coordinates are injected at runtime, never baked into the image.
   binding whose credentials `db_name` (or `name`) is `ORCL` and fills missing
   `DB_*` values from `credentials.username`, `credentials.password`,
   `credentials.host`, `credentials.db_name`/`credentials.name`, and
-  `credentials.port` (parsed with CINC's embedded Ruby). If no `ORCL` binding
-  exists it fails closed rather than guessing another database. Explicit `DB_*`
-  values still take precedence.
+  `credentials.port` (parsed with CINC's embedded Ruby). It also reads the binding's
+  top-level `instance_name` (or `name`) into `DB_INSTANCE_NAME` for report labeling.
+  If no `ORCL` binding exists it fails closed rather than guessing another database.
+  Explicit `DB_*` values still take precedence.
 
 The runner passes `/usr/local/bin/oraquery` to the InSpec profile and prepends
 `/opt/cinc-auditor/embedded/bin` to `PATH` so Cloud Foundry's default environment

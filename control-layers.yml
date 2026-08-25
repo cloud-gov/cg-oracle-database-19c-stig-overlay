@@ -311,6 +311,63 @@ controls:
       baseline control's `should be_empty` assertion is correct (baseline_status:
       fixed) and runs in BOTH postures to detect drift; it is never suppressed
       (two-axis rule). Overlay inherits as-is (overlay_status: inherited).
+
+  # --- SQL parameter/account controls verified in SQL, inherited from platform ---
+  - id_pattern: "SV-270535"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270535 (CM-6 b) the undocumented Oracle _TRACE_FILES_PUBLIC parameter, if
+      present, must be FALSE. The DISA check is a pure SQL predicate
+      (SELECT value FROM v$parameter WHERE name = '_trace_files_public'; TRUE is a
+      finding, and "parameter does not exist or is FALSE" is not a finding).
+      _trace_files_public is a hidden parameter that is FALSE by default and not
+      set on a stock brokered RDS instance, so the compliant posture is inherited
+      from the Oracle/RDS default (aws_inherited) with no org-defined value. The
+      baseline control's `should_not cmp 'TRUE'` assertion is correct
+      (baseline_status: ok) and runs in BOTH postures to detect drift; it is never
+      suppressed (two-axis rule). The DISA fix requires an spfile edit +
+      shutdown/startup (unreachable on managed RDS), reinforcing that the compliant
+      default is platform-owned, not a tenant SQL remediation. Overlay inherits
+      as-is (overlay_status: inherited).
+  - id_pattern: "SV-270540"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: >-
+      SV-270540 (CM-6 b) changes to configuration options must be audited. The DISA
+      check is dual-mode: for unified/mixed auditing, >=1 enabled unified policy
+      for entity SYS; for standard auditing, audit_sys_operations = TRUE. On managed
+      RDS the DB runs unified auditing in MIXED mode (consistent with SV-270510's
+      unified_auditing_used=true posture), and SYS-operation auditing is delivered
+      by the broker-managed audit policy set on the parameter/option group
+      (aws_rds_parameter_group). The baseline control was corrected to a
+      `describe.one` that passes under EITHER audit mode (baseline_status: fixed):
+      branch A asserts unified_sys_policy_count >= 1, branch B asserts
+      audit_sys_operations = TRUE. It is SQL-verified in BOTH postures and never
+      suppressed (two-axis rule). Overlay inherits as-is (overlay_status:
+      inherited).
+  - id_pattern: "SV-270545"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270545 (IA-5(1)(d) / CM-6 b, severity high) Oracle-supplied default
+      accounts must have custom (nondefault) passwords. The DISA check is a SQL
+      predicate over SYS.DBA_USERS_WITH_DEFPWD — any account other than XS$NULL
+      listed is a finding. XS$NULL is an internal non-authenticatable account and
+      is the sole allowed value. On a stock brokered RDS instance the Oracle
+      predefined accounts are created LOCKED with non-default (RDS-randomized/
+      expired) credentials, so a compliant instance returns only XS$NULL — the
+      compliant posture is inherited from the Oracle/RDS provisioning default
+      (aws_inherited). The baseline control's `describe.one` is correct
+      (baseline_status: ok): branch A requires every listed account to be XS$NULL,
+      branch B requires the list be empty; together they pass iff the only entry is
+      XS$NULL (or none), and fail on any other default-password account. It is
+      SQL-verified in BOTH postures and never suppressed (two-axis rule) so any
+      customer-created account left on a default password is still a real finding
+      the tenant must remediate. Overlay inherits as-is (overlay_status: inherited).
+      Note: verified against DISA text + baseline logic only; a live brokered
+      GovCloud RDS run (aws-broker#558) would confirm the stock DBA_USERS_WITH_DEFPWD
+      contents but is not required to inherit a correct detect-first check.
   - text_pattern: "granted to PUBLIC|PUBLIC grant|revoke.*public"
     set_by: sql_assessment_only
     verified_by: sql

@@ -27,7 +27,12 @@
 # proves the check LOGIC runs; RDS/version-specific behavior is deferred to the
 # live proof (aws-broker#558). Do not treat this output as compliance evidence.
 #
-# Options: --json also writes a timestamped JSON report to OUT_DIR (default /out);
+# Options: --json also writes a timestamped JSON report to OUT_DIR (default /out),
+#   labeled <service>-<instance-label> by default so different ORCL databases don't
+#   collide (instance-label = CF instance_name / DB_INSTANCE_NAME, else the RDS
+#   host's first DNS label; override the whole thing with RUN_LABEL), plus a
+#   <report>.meta.json sidecar recording the connection coordinates (instance_name/
+#   host/port/service/user/tls; password omitted);
 # --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
 # --input-file PATH (or INPUT_FILE=PATH) appends a site input file after the
 #   generated defaults and rds-inputs.yml, so site allowlists can override/extend them.
@@ -217,7 +222,14 @@ reporter_args=(--reporter cli)
 
 if [ -n "$JSON_OUTPUT" ]; then
     OUT_DIR="${OUT_DIR:-/out}"
-    RUN_LABEL="${RUN_LABEL:-$DB_SERVICE}"
+    # On brokered RDS the service is ALWAYS "ORCL", so labeling reports by
+    # DB_SERVICE alone collides across different databases. Default the label to
+    # <service>-<instance-label>, where the instance label is the CF service-
+    # INSTANCE name (e.g. ORCL-test-oracle-tls). It comes from VCAP instance_name
+    # (or DB_INSTANCE_NAME); with neither set (local/ad-hoc) it falls back to the
+    # RDS endpoint's first DNS label. See db_instance_label in db-connect.sh.
+    # An explicit RUN_LABEL still wins.
+    RUN_LABEL="${RUN_LABEL:-${DB_SERVICE}-$(db_instance_label)}"
     RUN_LABEL="$(printf '%s' "$RUN_LABEL" | tr -c 'A-Za-z0-9._-' '_')"
     timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
     JSON_PATH="${OUT_DIR}/validation-${RUN_LABEL}-${timestamp}.json"
@@ -233,6 +245,30 @@ if [ -n "$JSON_OUTPUT" ]; then
     # report over cf ssh. This is a CONTRACT — do not reword or drop it without
     # updating the sed in the Makefile's report-cloudgov recipe.
     printf 'JSON_REPORT_PATH=%s\n' "$JSON_PATH" >&2
+
+    # Sidecar metadata: the CINC/InSpec JSON does NOT record which database it ran
+    # against (its platform block is the SCANNER host — Ubuntu — not the Oracle
+    # target). Write a companion <report>.meta.json capturing the connection
+    # coordinates so a saved report is self-describing and two ORCL reports are
+    # unambiguously distinguishable. The PASSWORD is deliberately OMITTED (never
+    # written to disk). This is a sidecar, not a mutation of CINC's own output.
+    META_PATH="${JSON_PATH%.json}.meta.json"
+    cat >"$META_PATH" <<EOF
+{
+  "report": "$(basename "$JSON_PATH")",
+  "timestamp_utc": "${timestamp}",
+  "instance_name": "${DB_INSTANCE_NAME:-}",
+  "db_host": "${DB_HOST}",
+  "db_port": "${DB_PORT}",
+  "db_service": "${DB_SERVICE}",
+  "db_user": "${DB_USER}",
+  "instance_label": "$(db_instance_label)",
+  "host_label": "$(db_host_label "$DB_HOST")",
+  "tls_mode": "${ORAQUERY_TLS:-verify-ca}",
+  "skip_customer_responsibility_controls": ${SKIP_CUSTOMER_CONTROLS}
+}
+EOF
+    echo "run-validation: metadata sidecar: ${META_PATH}" >&2
 fi
 
 exec_args+=("${reporter_args[@]}")

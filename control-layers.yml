@@ -101,7 +101,27 @@ controls:
   - text_pattern: "sql92_security"
     set_by: aws_rds_parameter_group
     verified_by: sql
-    rationale: Set by parameter group; verifiable in V$PARAMETER.
+    rationale: >-
+      SV-270525 (SQL92_SECURITY=TRUE). Set by the broker RDS parameter group
+      (aws-broker services/rds/baselines/oracle19c/parameters.yml sets
+      sql92_security=TRUE, apply_method pending-reboot) and verifiable in
+      V$PARAMETER — keep verifying in SQL to detect drift. Overlay inherits the
+      baseline control as-is (overlay_status: inherited).
+  - id_pattern: "SV-270524"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270524 (REMOTE_OS_ROLES=FALSE). REMOTE_OS_ROLES ships FALSE by Oracle
+      default (the DISA fix only has to ACT when a site has turned it on), so on
+      brokered RDS the compliant posture is inherited from the Oracle default —
+      the broker does not need to override it. It is NOT currently pinned in the
+      broker parameter group (parameters.yml), so it is classified aws_inherited
+      (Oracle default) rather than aws_rds_parameter_group. It remains fully
+      SQL-verifiable via V$PARAMETER, and the inherited baseline control's
+      `should cmp 'FALSE'` assertion is correct and runs in BOTH postures to
+      detect drift — never suppressed (two-axis rule). Overlay inherits as-is
+      (overlay_status: inherited). FOLLOW-UP: pin remote_os_roles=FALSE
+      explicitly in parameters.yml for defense-in-depth (aws-broker#574).
 
   # --- broker infra SET, verified from AWS metadata (not SQL) ---
   - text_pattern: "tablespace encryption|encrypted|TDE|at rest"

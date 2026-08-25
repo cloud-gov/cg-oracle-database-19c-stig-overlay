@@ -123,7 +123,8 @@ fi
 #
 # allowed_users_dba_role (SV-270533): accounts authorized to hold an application-
 # administration (DBA) role by default. Same brokered-RDS seed — the broker app
-# user + platform accounts.
+# user + platform accounts; site-authorized DBAs appended via an input file.
+# Both allowlists can be extended via an input file passed after this one.
 #
 # required_audit_policies / customer_audit_policies (SV-270504, AU-12 c): the two
 # audit-policy layers. These are declared in the OVERLAY inspec.yml, but the
@@ -132,6 +133,13 @@ fi
 # MUST be provided at runtime here (a --input-file value is cross-profile). The
 # control also carries inline value: defaults as a backstop. Change these to match
 # the site's policy names if they differ.
+#
+# users_allowed_access_to_public (SV-270530, CM-6 b): object owners whose grants to
+# PUBLIC are acceptable. The baseline relies wholly on this input for the DISA
+# "list of nonapplicable accounts" exclusion. Seed the Oracle product accounts that
+# hold PUBLIC grants on a stock install plus the AWS-managed RDSADMIN — a PLATFORM
+# responsibility so a stock brokered instance passes. Any owner OUTSIDE this list
+# (e.g. a customer schema) is still a finding; extend via an input file after this one.
 DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
@@ -160,6 +168,13 @@ required_audit_policies:
   - ORA_LOGON_FAILURES
 customer_audit_policies:
   - CG_AUDIT_POLICY
+users_allowed_access_to_public:
+  - SYS
+  - SYSTEM
+  - CTXSYS
+  - GSMADMIN_INTERNAL
+  - XDB
+  - RDSADMIN
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

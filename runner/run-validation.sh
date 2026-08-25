@@ -123,8 +123,15 @@ fi
 #
 # allowed_users_dba_role (SV-270533): accounts authorized to hold an application-
 # administration (DBA) role by default. Same brokered-RDS seed — the broker app
-# user + platform accounts; site-authorized DBAs appended via an input file.
-# Both allowlists can be extended via an input file passed after this one.
+# user + platform accounts.
+#
+# required_audit_policies / customer_audit_policies (SV-270504, AU-12 c): the two
+# audit-policy layers. These are declared in the OVERLAY inspec.yml, but the
+# SV-270504 control runs inside the depended-on baseline (via include_controls),
+# whose input namespace does not see the overlay's inspec.yml defaults — so they
+# MUST be provided at runtime here (a --input-file value is cross-profile). The
+# control also carries inline value: defaults as a backstop. Change these to match
+# the site's policy names if they differ.
 DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
@@ -148,6 +155,11 @@ allowed_users_dba_role:
   - RDSADMIN
   - SYSRAC
   - '${DB_USER_UC}'
+required_audit_policies:
+  - ORA_SECURECONFIG
+  - ORA_LOGON_FAILURES
+customer_audit_policies:
+  - CG_AUDIT_POLICY
 EOF
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).

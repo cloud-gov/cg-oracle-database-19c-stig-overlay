@@ -176,10 +176,47 @@ controls:
     set_by: sql_hardening
     verified_by: sql
     rationale: Profile limits enforced by hardening/sql/10_profiles.sql.
-  - text_pattern: "unified audit|audit policy|ORA_SECURECONFIG|ORA_LOGON_FAILURES"
-    set_by: sql_hardening
+  - id_pattern: "SV-270504"
+    set_by: aws_rds_parameter_group
     verified_by: sql
-    rationale: Unified audit policies enabled by hardening/sql/30_audit_policies.sql.
+    rationale: >-
+      SV-270504 (AU-12 c) generate audit records for the DOD-selected list of
+      auditable events. The generic mitre-baseline control is a Manual Review
+      because the DOD event set is organization-defined/documentable with no single
+      portable SQL predicate. On managed RDS the audit-policy posture is
+      SQL-verifiable in two layers, and the overlay OVERRIDES the baseline Manual
+      Review with in-place SQL assertions (controls/overlay.rb) that the required
+      policies are ENABLED (present in AUDIT_UNIFIED_ENABLED_POLICIES); detect-first,
+      never applied by this control.
+      LAYER 1 (platform, both postures): the Oracle-provided policies
+      ORA_SECURECONFIG (privilege GRANT, security-config/DDL, account administration
+      CREATE/ALTER/DROP USER, ALTER SYSTEM/DATABASE) and ORA_LOGON_FAILURES (LOGON)
+      are enabled BY DEFAULT on RDS once the broker's audit_trail parameters are set
+      (the RDS parameter group) — no tenant step. Asserted via the
+      required_audit_policies input (default ORA_SECURECONFIG / ORA_LOGON_FAILURES).
+      LAYER 2 (customer, --all posture only): the STIG-required events the RDS
+      defaults MISS — REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE — are
+      covered by a tenant-owned policy (CG_AUDIT_POLICY) created
+      and enabled by hardening/sql/30_audit_policies.sql. Asserted via the
+      org-defined customer_audit_policies input (default CG_AUDIT_POLICY) only when
+      skip_customer_responsibility_controls is false; an empty list skips (does not
+      fail) the customer assertion. Enabling CG_AUDIT_POLICY is customer-
+      responsibility remediation. A site that uses a different policy name sets the
+      customer_audit_policies default in inspec.yml (the runner is baked into the
+      image, so inputs are not supplied at runtime). NO aws-broker
+      step is required beyond routing audit_trail to a DB destination, already set
+      by the parameter group.
+  - text_pattern: "unified audit|audit policy|ORA_SECURECONFIG|ORA_LOGON_FAILURES"
+    set_by: aws_rds_parameter_group
+    verified_by: sql
+    rationale: >-
+      Unified audit policies ORA_SECURECONFIG / ORA_LOGON_FAILURES are enabled by
+      default on RDS for Oracle once the broker's audit_trail parameters are set
+      (RDS parameter group); SQL-verified via AUDIT_UNIFIED_ENABLED_POLICIES. The
+      events those defaults MISS (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE)
+      are added by hardening/sql/30_audit_policies.sql via
+      the tenant-owned CG_AUDIT_POLICY — customer-responsibility remediation
+      asserted only in the --all posture (see the SV-270504 id_pattern above).
   - text_pattern: "instance name.*version|Oracle version number|V\\$INSTANCE"
     set_by: aws_inherited
     verified_by: sql
@@ -230,7 +267,6 @@ controls:
     rationale: >-
       PUBLIC grants are detected (40_public_grants_assess.sql) but never
       auto-revoked; revocation requires an explicit allowlist (app-breakage risk).
-
   # --- manual / compensating-control dispositions (documentation / SSP) ---
   - id_pattern: "SV-270498"
     set_by: manual_review
@@ -253,8 +289,9 @@ controls:
       (and AUDIT_ADMIN for unified auditing) holders configure auditing via
       AUDIT / CREATE AUDIT POLICY; any user can audit their own schema. The broker
       issues the customer a privileged account able to manage unified-audit
-      policies (the customer-responsibility audit path, SV-270504 /
-      hardening/sql/30_audit_policies.sql), satisfying this capability. A
+      policies (the platform-set audit posture, SV-270504 — ORA_SECURECONFIG /
+      ORA_LOGON_FAILURES are enabled by default on RDS once audit_trail is set),
+      satisfying this capability. A
       documentation/policy determination (audit-management authorization), not a
       tenant SQL assertion. Overridden to Manual (impact 0.0) in
       controls/overlay.rb.

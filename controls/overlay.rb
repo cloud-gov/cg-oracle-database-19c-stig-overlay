@@ -111,6 +111,88 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-270517 (CM-5(6)) — DBMS software directories/config files must be stored in
+  # dedicated directories or DASD pools, separate from the host OS and other
+  # applications. The DISA check is purely a filesystem/host review: inspect the
+  # DBMS software library directory and its sibling/root directories for non-DBMS
+  # software sharing the same disk directory (or, for mainframes, DASD pools). The
+  # fix relocates/reinstalls other applications off the DBMS software directory.
+  # Both require OS/filesystem access to the DB host. On managed RDS the tenant
+  # has no OS access — the Oracle Home, its directory layout, and disk/DASD
+  # placement are AWS-managed and unreachable, and no other tenant application
+  # shares the RDS host. The inherited baseline body is a manual-review skip (no
+  # SQL). control-layers.yml classifies the OS/filesystem path ("$ORACLE_HOME/",
+  # etc.) as set_by: aws_inherited / verified_by: not_applicable_rds. Override to
+  # N/A so an RDS run reports it honestly rather than as a zero-test pass.
+  control 'SV-270517' do
+    impact 0.0
+    title 'Database software directories, including database management system ' \
+          '(DBMS) configuration files, must be stored in dedicated directories, ' \
+          'or DASD pools, separate from the host OS and other applications.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is a filesystem/host ' \
+         'review — inspect the DBMS software library directory and other ' \
+         'directories on the same disk (or DASD pools on mainframes) for non-DBMS ' \
+         'software sharing the location — and the fix relocates other ' \
+         'applications off that directory. Both require OS/filesystem access to ' \
+         'the DB host, which the tenant does not have on managed RDS: the Oracle ' \
+         'Home, its directory layout, and disk/DASD placement are AWS-managed and ' \
+         'unreachable, and no other tenant application shares the RDS host. ' \
+         'Directory isolation of the DBMS software is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270517 (dedicated DBMS software/config directories, CM-5(6)) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects the DBMS ' \
+           'software library directory and its disk/DASD neighbors for shared ' \
+           'non-DBMS software; the host/OS filesystem is AWS-managed on RDS with ' \
+           'no tenant access, and no other tenant application shares the host. ' \
+           'See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270531 (CM-6 b) — the Oracle Listener must require administration
+  # authentication (CAT I). The DISA check is entirely OS/listener-level: it opens
+  # "If a listener is not running on the local database host server, this check is
+  # not a finding," then enumerates host listener processes (`ps -ef | grep
+  # tnslsnr`, Windows TNSListener services) and runs `lsnrctl status` on the host
+  # to read the Security value. The fix relies on local OS authentication of the
+  # account that started the listener. On managed RDS the listener is AWS-managed
+  # and runs on the AWS-controlled host: the tenant has no OS/listener access,
+  # cannot run `ps`/`lsnrctl`, and cannot administer the listener at all. The
+  # inherited baseline body runs host `command('ps -ef ... tnslsnr')` and
+  # `command('lsnrctl status ...')`, which on RDS reflect the InSpec RUNNER's
+  # shell (no listener) and produce a misleading empty/failed result.
+  # control-layers.yml classifies the tnslsnr/lsnrctl/listener.ora path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270531' do
+    impact 0.0
+    title 'The Oracle Listener must be configured to require administration ' \
+          'authentication.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is OS/listener-level: ' \
+         'enumerate host listener processes (`ps -ef | grep tnslsnr`, Windows ' \
+         'TNSListener services) and run `lsnrctl status` on the host to read the ' \
+         'Security value; it is explicitly Not a Finding when no listener runs on ' \
+         'the local host. The fix relies on local OS authentication of the ' \
+         'listener-owner account. On managed RDS the listener is AWS-managed and ' \
+         'runs on the AWS-controlled host — the tenant has no OS or listener ' \
+         'access and cannot run `ps`/`lsnrctl` or administer the listener. The ' \
+         'inherited baseline `command(\'ps -ef ... tnslsnr\')` / `command(\'lsnrctl ' \
+         'status\')` assertions reflect the InSpec runner host (no listener), ' \
+         'producing a misleading result. Listener administration authentication is ' \
+         'inherited from the AWS platform (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270531 (Oracle Listener administration authentication, CM-6 b) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check enumerates host ' \
+           'listener processes and runs `lsnrctl status` on the DB host; the ' \
+           'listener is AWS-managed on RDS with no tenant OS/listener access, so ' \
+           'the inherited ps/lsnrctl assertions reflect the runner host, not the ' \
+           'DB server. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
   control 'SV-270496' do
     impact 0.0
     title 'Oracle Database must protect against or limit the effects of ' \

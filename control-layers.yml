@@ -97,7 +97,20 @@ controls:
   - text_pattern: "remote_login_passwordfile"
     set_by: aws_rds_parameter_group
     verified_by: sql
-    rationale: Set by parameter group; verifiable in V$PARAMETER.
+    rationale: >-
+      SV-270526 (CM-6 b) REMOTE_LOGIN_PASSWORDFILE must be EXCLUSIVE or NONE. Set
+      by the broker RDS parameter group (aws-broker
+      services/rds/baselines/oracle19c/parameters.yml sets
+      remote_login_passwordfile=NONE, apply_method pending-reboot) and verifiable
+      in V$PARAMETER — keep verifying in SQL to detect drift. The DISA check's
+      second part (OS permissions on the password file) is OS/filesystem and
+      unreachable on managed RDS (password file is AWS-managed); that portion is
+      not_applicable_rds while the parameter assertion remains SQL-verified. The
+      baseline stub was unwritten (needs_dev); implemented the parameter SQL
+      assertion upstream in the mitre-baseline
+      (fix/sv-270526-remote-login-passwordfile-sql, held for PR), modeled on
+      SV-270524/525 — baseline_status: fixed. Overlay inherits as-is
+      (overlay_status: inherited).
   - text_pattern: "sql92_security"
     set_by: aws_rds_parameter_group
     verified_by: sql
@@ -261,6 +274,40 @@ controls:
       list (the SV-270495 customer-responsibility pattern, remediated via
       hardening/sql/, not the broker), and on RDS AUDSYS is AWS-managed so the
       broker could not run it at provision anyway.
+  - id_pattern: "SV-270517"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270517 (CM-5(6)) DBMS software directories/config files must be stored in
+      dedicated directories or DASD pools, separate from the host OS and other
+      applications. The DISA check is a filesystem/host review (inspect the DBMS
+      software library directory and its disk/DASD neighbors for shared non-DBMS
+      software) and the fix relocates other applications off that directory — both
+      require OS/filesystem access the tenant does not have on managed RDS (Oracle
+      Home, directory layout, and disk/DASD placement are AWS-managed and
+      unreachable; no other tenant application shares the RDS host). The inherited
+      baseline body is a manual-review skip (no SQL). Overlay OVERRIDES to N/A
+      (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
+      id_pattern before the broad "$ORACLE_HOME/" default so it is unambiguous.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270531"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270531 (CM-6 b) the Oracle Listener must require administration
+      authentication (CAT I). The DISA check is OS/listener-level: it is Not a
+      Finding when no listener runs on the local host, and otherwise enumerates
+      host listener processes (ps -ef | grep tnslsnr, Windows TNSListener
+      services) and runs lsnrctl status on the host to read the Security value;
+      the fix relies on local OS authentication of the listener-owner account. On
+      managed RDS the listener is AWS-managed and runs on the AWS-controlled host —
+      the tenant has no OS/listener access and cannot run ps/lsnrctl or administer
+      the listener. The inherited baseline command('ps ... tnslsnr') /
+      command('lsnrctl status') assertions reflect the InSpec runner host (no
+      listener), producing a misleading result. Overlay OVERRIDES to N/A
+      (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
+      id_pattern before the broad tnslsnr/lsnrctl default so it is unambiguous.
+      overlay_status: N/A (platform).
   - id_pattern: "SV-270528"
     set_by: aws_inherited
     verified_by: sql

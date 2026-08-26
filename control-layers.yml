@@ -324,10 +324,11 @@ controls:
       CUSTOMER responsibility on the SV-270495 pattern (set_by: sql_hardening,
       verified_by: sql). The baseline check is correct (baseline_status: ok;
       per-profile DBA_PROFILES query, should cmp 'UNLIMITED'). Remediated via
-      hardening/sql/10_profiles.sql (ALTER PROFILE DEFAULT LIMIT PASSWORD_LOCK_TIME
-      — note the STIG requires UNLIMITED; the sample sets 1 and must be reviewed
-      against site policy before use). skip_control under
-      --skip-customer-controls; runs under --all.
+      hardening/sql/10_profiles.sql (DEFAULT profile) and/or
+      hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied,
+      immutable ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
+      the profile already carries PASSWORD_LOCK_TIME UNLIMITED). skip_control
+      under --skip-customer-controls; runs under --all.
   - id_pattern: "SV-270550"
     set_by: sql_hardening
     verified_by: sql
@@ -340,9 +341,10 @@ controls:
       (needs_dev); implemented the FAILED_LOGIN_ATTEMPTS SQL assertion upstream in
       the mitre-baseline (fix/sv-270550-failed-login-attempts, held for PR),
       modeled on SV-270549/551 — baseline_status: fixed. Remediated via
-      hardening/sql/10_profiles.sql (ALTER PROFILE DEFAULT LIMIT
-      FAILED_LOGIN_ATTEMPTS 3). skip_control under --skip-customer-controls; runs
-      under --all.
+      hardening/sql/10_profiles.sql (DEFAULT profile) and/or
+      hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
+      ORA_STIG_PROFILE, which already sets FAILED_LOGIN_ATTEMPTS 3). skip_control
+      under --skip-customer-controls; runs under --all.
   - id_pattern: "SV-270551"
     set_by: sql_hardening
     verified_by: sql
@@ -355,9 +357,11 @@ controls:
       CUSTOMER responsibility on the SV-270495 pattern. The baseline check is
       correct (baseline_status: fixed; per-profile DBA_PROFILES query,
       should_not cmp 'UNLIMITED' and should cmp <= account_inactivity_age).
-      Remediated via hardening/sql/10_profiles.sql (ALTER PROFILE DEFAULT LIMIT
-      INACTIVE_ACCOUNT_TIME 35). skip_control under --skip-customer-controls; runs
-      under --all.
+      Remediated via hardening/sql/10_profiles.sql (DEFAULT profile) and/or
+      hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
+      ORA_STIG_PROFILE, which already sets INACTIVE_ACCOUNT_TIME 35 — the STIG's
+      "ALTER USER ... PROFILE ORA_STIG_PROFILE" remediation). skip_control under
+      --skip-customer-controls; runs under --all.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"

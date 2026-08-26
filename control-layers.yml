@@ -614,6 +614,61 @@ controls:
       database, not a tenant SQL setting and not SQL-verifiable. Inherited from
       the AWS/Cloud.gov platform. Overridden to N/A (impact 0.0) in
       controls/overlay.rb.
+  - id_pattern: "SV-270508"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270508 (AU-5(1)) warning at 75 percent of allocated audit-log storage.
+      Procedural DISA check: review OS or third-party logging application settings
+      for a capacity warning. On managed RDS, local audit storage and OS-level
+      alerting are AWS-managed, and audit records are off-loaded through the RDS
+      log-export / CloudWatch Logs integration. Capacity monitoring and alerting
+      for that managed path are inherited from AWS/Cloud.gov, not tenant SQL. See
+      controls/overlay.rb `SV-270508`.
+  - id_pattern: "SV-270509"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270509 (AU-5(2)) real-time alert on audit failure. Procedural DISA check:
+      review Oracle, OS, or third-party logging software settings for real-time
+      alert delivery. On managed RDS, audit collection/log export and monitoring
+      are broker/AWS platform integrations outside tenant database control; no
+      tenant SQL assertion proves the external alerting path. See
+      controls/overlay.rb `SV-270509`.
+  - id_pattern: "SV-270511"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270511 (AU-9 a/b/c) protect audit tools. Procedural DISA check: review
+      permissions on tools used to view or modify audit log data. For brokered RDS,
+      the platform audit tooling is the managed AWS/Cloud.gov logging stack and
+      AWS-managed host/Oracle tooling tenants cannot access; protection is inherited
+      from the platform. See controls/overlay.rb `SV-270511`.
+  - id_pattern: "SV-270513"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270513 (SA-22 a) Oracle Database products must be vendor-supported. For
+      brokered RDS, customers run AWS-exposed Oracle engine versions; AWS has
+      policies/procedures for RDS Oracle support, deprecation, patching, and
+      required upgrade paths to ensure customers are running supported versions.
+      See controls/overlay.rb `SV-270513`.
+  - id_pattern: "SV-270514"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270514 (CM-5(6)) monitor DBMS software/configuration files for
+      unauthorized changes. Oracle software libraries and configuration files are
+      on AWS-managed RDS hosts tenants cannot access; monitoring is inherited from
+      AWS/Cloud.gov operational controls. See controls/overlay.rb `SV-270514`.
+  - id_pattern: "SV-270516"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270516 (CM-5(6)) restrict use of the Oracle software installation
+      account. The software owner / host SYSDBA-capable installation account is
+      AWS-managed and unavailable to tenants on RDS; the broker-created database
+      user is not that account. See controls/overlay.rb `SV-270516`.
   - id_pattern: "SV-270512"
     set_by: aws_inherited
     verified_by: not_applicable_rds

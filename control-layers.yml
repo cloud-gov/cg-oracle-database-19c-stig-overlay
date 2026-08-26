@@ -673,6 +673,57 @@ controls:
       assertion cannot see the device-separation requirement, so the overlay
       OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
       as an explicit id_pattern so it is unambiguous. overlay_status: N/A (platform).
+  - id_pattern: "SV-270539"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270539 (CM-6 b) network access to the database must be restricted to
+      authorized personnel. The DISA check enforces IP-address restriction at the
+      network layer — the listener SQLNET.ORA (tcp.validnode_checking=YES /
+      tcp.invited_nodes) in $ORACLE_HOME/network/admin, an Oracle Connection
+      Manager CMAN.ORA RULE set, or an external network device — none reachable by
+      the tenant on managed RDS. The inherited baseline reads the runner host's
+      sqlnet.ora (no tenant-managed file on RDS), a misleading signal. Network
+      access restriction is an AWS platform function: the listener is AWS-managed
+      and unreachable, and inbound access is governed by VPC security groups and
+      the Cloud.gov brokered private-networking posture, not a tenant SQL/OS
+      setting. Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern before the broad tnslsnr/lsnrctl default so
+      it is unambiguous. overlay_status: N/A (platform).
+  - id_pattern: "SV-270541"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270541 (CM-6 b) the /diag subdirectory under DIAGNOSTIC_DEST must be
+      protected from unauthorized access. The DISA check reads DIAGNOSTIC_DEST via
+      SQL, then inspects OS filesystem permissions on <DIAGNOSTIC_DEST>/diag
+      (`ls -ld` on Unix, Explorer ACLs on Windows); the fix alters host filesystem
+      permissions. Both require OS/filesystem access to the DB host, which the
+      tenant lacks on managed RDS — the diagnostic/diag directory and its
+      permissions are AWS-managed and unreachable, and the inherited baseline
+      command('ls -ld <DIAGNOSTIC_DEST>/diag') assertion reflects the InSpec runner
+      host, not the DB server, so it is not a valid signal. Filesystem protection of
+      the diagnostic directory is inherited from the AWS platform. Overridden to N/A
+      (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
+      id_pattern before the broad OS/file-permission default so it is unambiguous.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270542"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270542 (CM-6 b) remote administration must be disabled for the Oracle
+      Connection Manager (REMOTE_ADMIN = NO in cman.ora). The DISA check reads
+      cman.ora in $ORACLE_HOME/network/admin and is explicitly Not a Finding when
+      the file does not exist (Connection Manager not in use). On managed RDS Oracle
+      Connection Manager is not deployed and the tenant has no OS access to place or
+      read a cman.ora; any Connection Manager in the AWS network path is AWS-managed
+      and unreachable. The inherited baseline reads cman.ora on the runner host and
+      asserts `should exist`, which FAILS on a missing file even though the STIG
+      treats that as Not a Finding — a misleading signal. Connection Manager
+      configuration is inherited from the AWS platform. Overridden to N/A
+      (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
+      id_pattern before the broad tnslsnr/lsnrctl default so it is unambiguous.
+      overlay_status: N/A (platform).
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

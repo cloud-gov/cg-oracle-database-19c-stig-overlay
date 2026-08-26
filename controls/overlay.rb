@@ -770,4 +770,124 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270539 (CM-6 b) — network access to the database must be restricted to
+  # authorized personnel. The DISA check inspects network-layer artifacts the
+  # tenant cannot reach on managed RDS: the listener SQLNET.ORA
+  # (tcp.validnode_checking / tcp.invited_nodes) in $ORACLE_HOME/network/admin, an
+  # Oracle Connection Manager CMAN.ORA RULE set, or an external network device.
+  # The inherited baseline body reads
+  # file("#{$ORACLE_HOME}/network/admin/sqlnet.ora"), which on RDS resolves against
+  # the InSpec RUNNER host (no tenant-managed sqlnet.ora), producing a misleading
+  # result. On managed RDS network access restriction is an AWS platform function:
+  # the listener is AWS-managed and unreachable, and inbound access is governed by
+  # VPC security groups / the Cloud.gov brokered private-networking posture, not a
+  # tenant SQL/OS setting. control-layers.yml classifies the SQLNET.ORA/listener
+  # path as set_by: aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270539' do
+    impact 0.0
+    title 'Network access to Oracle Database must be restricted to authorized ' \
+          'personnel.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check enforces IP-address ' \
+         'restriction at the network layer — the listener SQLNET.ORA ' \
+         '(tcp.validnode_checking=YES / tcp.invited_nodes) in ' \
+         '$ORACLE_HOME/network/admin, an Oracle Connection Manager CMAN.ORA RULE ' \
+         'set, or an external network device — none of which the tenant can reach ' \
+         'on managed RDS. The inherited baseline reads the runner host\'s ' \
+         'sqlnet.ora (no tenant-managed file on RDS), a misleading signal. Network ' \
+         'access restriction is an AWS platform function: the listener is ' \
+         'AWS-managed and unreachable, and inbound access is governed by VPC ' \
+         'security groups and the Cloud.gov brokered private-networking posture, ' \
+         'not a tenant SQL/OS setting (control-layers.yml: set_by aws_inherited / ' \
+         'verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270539 (restrict network access, CM-6 b) is Not Applicable on ' \
+             'managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): IP-address restriction is set at ' \
+           'the listener SQLNET.ORA / Connection Manager / external network device ' \
+           'level; the listener is AWS-managed on RDS with no tenant OS/listener ' \
+           'access, inbound access is governed by VPC security groups, and the ' \
+           'inherited sqlnet.ora assertion reflects the runner host. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270541 (CM-6 b) — the /diag subdirectory under DIAGNOSTIC_DEST must be
+  # protected from unauthorized access. The DISA check reads DIAGNOSTIC_DEST via
+  # SQL, then inspects the OS filesystem permissions of <DIAGNOSTIC_DEST>/diag
+  # (`ls -ld` on Unix, Explorer ACLs on Windows), and the fix alters host filesystem
+  # permissions on that directory. The inherited baseline body runs
+  # command("ls -ld #{diagnostic_dest}/diag | awk ..."), an OS/filesystem check.
+  # On managed RDS the tenant has no OS access — the ADR/diag directory and its
+  # permissions live on the AWS-managed DB host and are unreachable; the `ls -ld`
+  # command reflects the InSpec RUNNER host, not the DB server, producing a
+  # meaningless result. Filesystem protection of the diagnostic directory is
+  # AWS-managed. control-layers.yml classifies the OS/filesystem path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270541' do
+    impact 0.0
+    title 'The /diag subdirectory under the directory assigned to the ' \
+          'DIAGNOSTIC_DEST parameter must be protected from unauthorized access.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reads DIAGNOSTIC_DEST ' \
+         'via SQL and then inspects OS filesystem permissions on ' \
+         '<DIAGNOSTIC_DEST>/diag (`ls -ld` on Unix, Explorer ACLs on Windows); the ' \
+         'fix alters host filesystem permissions. Both require OS/filesystem access ' \
+         'to the DB host, which the tenant does not have on managed RDS — the ' \
+         'diagnostic/diag directory and its permissions are AWS-managed and ' \
+         'unreachable, and the inherited baseline `command(\'ls -ld ' \
+         '<DIAGNOSTIC_DEST>/diag\')` assertion reflects the InSpec runner host, not ' \
+         'the DB server, so it is not a valid signal. Filesystem protection of the ' \
+         'diagnostic directory is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270541 (protect <DIAGNOSTIC_DEST>/diag, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects OS filesystem ' \
+           'permissions on <DIAGNOSTIC_DEST>/diag and the fix alters host ' \
+           'permissions; the DB host filesystem is AWS-managed on RDS with no ' \
+           'tenant access, and the inherited `ls -ld` assertion reflects the runner ' \
+           'host, not the DB server. See control-layers.yml and ' \
+           'docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270542 (CM-6 b) — remote administration must be disabled for the Oracle
+  # Connection Manager (REMOTE_ADMIN = NO in cman.ora). The DISA check reads the
+  # cman.ora file in $ORACLE_HOME/network/admin and is EXPLICITLY Not a Finding when
+  # that file does not exist (i.e. Connection Manager is not in use). The inherited
+  # baseline body reads file("#{$ORACLE_HOME}/network/admin/cman.ora") and also
+  # asserts `it { should exist }` — which on RDS resolves against the InSpec RUNNER
+  # host and FAILS on a missing cman.ora even though the STIG treats a missing file
+  # as Not a Finding, a misleading failure. On managed RDS Oracle Connection Manager
+  # is not deployed and the tenant has no OS access to place or read a cman.ora; any
+  # Connection Manager, if present in the AWS network path, is AWS-managed and
+  # unreachable. control-layers.yml classifies the cman.ora/listener path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270542' do
+    impact 0.0
+    title 'Remote administration must be disabled for the Oracle connection ' \
+          'manager.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reads the cman.ora ' \
+         'file in $ORACLE_HOME/network/admin and is explicitly Not a Finding when ' \
+         'the file does not exist (Connection Manager not in use). On managed RDS ' \
+         'Oracle Connection Manager is not deployed and the tenant has no OS access ' \
+         'to place or read a cman.ora; any Connection Manager in the AWS network ' \
+         'path is AWS-managed and unreachable. The inherited baseline reads ' \
+         'cman.ora on the runner host and asserts `should exist`, which FAILS on a ' \
+         'missing file even though the STIG treats that as Not a Finding — a ' \
+         'misleading signal. Connection Manager configuration is inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270542 (disable Connection Manager remote admin, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads cman.ora in ' \
+           '$ORACLE_HOME/network/admin and is Not a Finding when the file is ' \
+           'absent; Oracle Connection Manager is not deployed on managed RDS and ' \
+           'the tenant has no OS access, while the inherited `should exist` ' \
+           'assertion would falsely fail on the runner host. See control-layers.yml ' \
+           'and docs/RESPONSIBILITY.md.'
+    end
+  end
 end

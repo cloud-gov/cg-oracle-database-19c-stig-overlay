@@ -50,7 +50,10 @@ make retest CONTROLS="SV-270495 SV-270496"    # several
 ```
 
 (Equivalently, the runner accepts `--controls "ID [ID...]"` or a `CONTROLS` env
-var directly.)
+var directly.) The runner loads `rds-inputs.yml` after dynamic connection inputs
+by default. To append site-specific inputs such as extra `allowed_dbaobject_owners`,
+pass `--input-file /path/to/site-inputs.yml` or set `INPUT_FILE`; the file is
+loaded after the runner-generated defaults and `rds-inputs.yml`.
 
 The baseline `depends` is resolved from the committed `inspec.lock` (managed in-repo — run `make vendor` if you change the dependency). Because the profile dir is mounted read-only, CINC's dependency cache is directed to a writable path inside the container (`VENDOR_CACHE`, default the scanner user's `~/.inspec/cache`), so nothing is written back into your working tree.
 

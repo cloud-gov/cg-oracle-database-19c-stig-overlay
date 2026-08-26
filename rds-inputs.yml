@@ -1,0 +1,28 @@
+---
+allowed_dbaobject_owners:
+  - SYS
+  - SYSTEM
+  - DBSNMP
+  - APPQOSSYS
+  - DBSFWUSER
+  - REMOTE_SCHEDULER_AGENT
+  - PUBLIC
+  - CTXSYS
+  - AUDSYS
+  - GSMADMIN_INTERNAL
+  - RDSADMIN
+  - OUTLN
+  - ORACLE_OCM
+  - XDB
+required_audit_policies:
+  - ORA_SECURECONFIG
+  - ORA_LOGON_FAILURES
+customer_audit_policies:
+  - CG_AUDIT_POLICY
+users_allowed_access_to_public:
+  - SYS
+  - SYSTEM
+  - CTXSYS
+  - GSMADMIN_INTERNAL
+  - XDB
+  - RDSADMIN

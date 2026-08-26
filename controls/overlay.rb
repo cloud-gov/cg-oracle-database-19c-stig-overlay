@@ -193,6 +193,52 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-275999 (CM-6 b) — a minimum of three Oracle control files must exist, each
+  # stored on a SEPARATE physical and logical device. The count (>=3) is
+  # SQL-visible via SELECT name FROM v$controlfile, but the STIG's actual
+  # requirement — that each control file resides on a separate physical/logical
+  # (RAID 1+0) device — is a STORAGE-TOPOLOGY fact the DISA check itself directs a
+  # reviewer to confirm with "the storage administrator, system administrator, or
+  # database administrator," noting file paths alone do not prove device
+  # separation. On managed RDS the tenant has no visibility into or control over
+  # the underlying storage: control-file placement, multiplexing, and the physical/
+  # logical device layout are AWS-managed (Oracle-Managed Files on RDS-provisioned,
+  # EBS-backed storage with AWS-side redundancy). The v$controlfile paths on RDS
+  # point into the RDS-managed filesystem and cannot be mapped by the tenant to
+  # distinct physical/logical devices, so the control's real assertion is neither
+  # tenant-settable nor tenant-verifiable — control-file redundancy is inherited
+  # from the AWS platform. Override the inherited pending-skip to N/A (impact 0.0)
+  # so an RDS run reports it honestly rather than as a zero-test pass or a
+  # count-only check that cannot see the device-separation requirement.
+  control 'SV-275999' do
+    impact 0.0
+    title 'A minimum of three Oracle Control Files must be created and each ' \
+          'stored on a separate physical and logical device.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check lists control files ' \
+         '(SELECT name FROM v$controlfile) but its actual requirement — three or ' \
+         'more control files each on a SEPARATE physical and logical device ' \
+         '(RAID 1+0) — is a storage-topology determination the check itself ' \
+         'directs a reviewer to confirm with the storage/system/database ' \
+         'administrator, noting file paths do not prove device separation. On ' \
+         'managed RDS the tenant has no visibility into or control over the ' \
+         'underlying storage: control-file count, multiplexing, and physical/' \
+         'logical device placement are AWS-managed (Oracle-Managed Files on ' \
+         'RDS-provisioned storage with AWS-side redundancy), and the ' \
+         'v$controlfile paths cannot be mapped by the tenant to distinct ' \
+         'devices. Control-file redundancy and separation are inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-275999 (three+ control files on separate devices, CM-6 b) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): control-file count, ' \
+           'multiplexing, and physical/logical device separation are AWS-managed ' \
+           'on RDS (Oracle-Managed Files on RDS-provisioned storage); the tenant ' \
+           'cannot map v$controlfile paths to distinct devices or alter ' \
+           'placement. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
   control 'SV-270496' do
     impact 0.0
     title 'Oracle Database must protect against or limit the effects of ' \
@@ -512,6 +558,77 @@ include_controls 'oracle-database-19c-stig-baseline' do
             end
           end
         end
+      end
+    end
+  end
+
+  # SV-270553 (CM-7 a) — unused DBMS components/software/objects must be removed.
+  # The DISA check runs a fixed query listing installed components, EXCLUDING a
+  # hard-coded set of expected core comp_ids and OPTION OFF rows:
+  #   SELECT comp_id, comp_name, version, status FROM dba_registry
+  #   WHERE comp_id NOT IN ('CATJAVA','CATALOG','CATPROC','SDO','DV','XDB')
+  #   AND status <> 'OPTION OFF';
+  # then directs the reviewer: "If unused components are installed and are not
+  # documented and authorized, this is a finding." The pass/fail therefore depends
+  # on an ORGANIZATION-DEFINED authorized-components list — there is no fixed SQL
+  # predicate, which is why the generic baseline is a pending-assessment skip.
+  # On managed RDS the component set is NOT tenant-removable: DBCA component
+  # selection happens at database CREATION, which AWS owns; a brokered RDS instance
+  # ships Oracle Text (CONTEXT) installed and VALID, and the tenant cannot deselect
+  # it. So on RDS the question reduces to: are the STILL-installed components on the
+  # org-authorized list? The overlay OVERRIDES the baseline pending-skip with a
+  # concrete AWS-RDS SQL assertion (SV-270504 overlay-sql pattern): run the DISA
+  # query and FAIL on any returned component whose comp_id is NOT in the org-defined
+  # authorized_components allowlist. CONTEXT (Oracle Text) is the default allowlist
+  # member — it is an RDS default-installed component, documented and authorized
+  # here. detect-first: this control never removes a component (removal is not
+  # possible on RDS); it flags any unauthorized/undocumented component for review.
+  control 'SV-270553' do
+    impact 0.5
+    title 'Unused database components, database management system (DBMS) ' \
+          'software, and database objects must be removed.'
+    desc 'AWS RDS overlay of the unused-components control. The DISA check lists ' \
+         'installed components (dba_registry, excluding the core comp_ids and ' \
+         'OPTION OFF rows) and is a finding only if an installed component is ' \
+         'unused and NOT documented/authorized — an organization-defined ' \
+         'determination with no fixed SQL predicate (hence the generic baseline ' \
+         'pending-skip). On managed RDS the component set is fixed at ' \
+         'database creation by AWS and is not tenant-removable (a brokered ' \
+         'instance ships Oracle Text / CONTEXT installed and VALID), so the ' \
+         'question reduces to whether the still-installed components are ' \
+         'org-authorized. The overlay asserts every component returned by the ' \
+         'DISA query is present in the org-defined authorized_components ' \
+         'allowlist (default: CONTEXT, the RDS default-installed Oracle Text ' \
+         'component, documented and authorized here). Any component outside the ' \
+         'allowlist is a finding for review. Detect-first: removal is not ' \
+         'possible on RDS. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    tag cci: ['CCI-000381']
+    tag nist: ['CM-7 a']
+
+    # Inline value: this control lives in the depended-on baseline (via
+    # include_controls), whose input namespace does NOT see the overlay inspec.yml
+    # defaults; without an inline default the resolver returns nil on a bare run.
+    # run-validation.sh also writes the key into /tmp/inputs.yml so operators can
+    # override the authorized-components list centrally.
+    authorized = input('authorized_components', value: %w[CONTEXT]).map(&:upcase)
+    sql = oracledb_session(user: input('user'), password: input('password'),
+                           host: input('host'), port: input('port'),
+                           service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+
+    installed = sql.query(
+      "SELECT comp_id FROM dba_registry " \
+      "WHERE comp_id NOT IN ('CATJAVA','CATALOG','CATPROC','SDO','DV','XDB') " \
+      "AND status <> 'OPTION OFF';"
+    ).column('comp_id').map(&:upcase)
+
+    unauthorized = installed - authorized
+
+    describe 'Installed DBMS components not on the org-defined ' \
+             'authorized_components allowlist (dba_registry)' do
+      subject { unauthorized }
+      it 'is empty (every installed component is documented and authorized)' do
+        expect(unauthorized).to be_empty
       end
     end
   end

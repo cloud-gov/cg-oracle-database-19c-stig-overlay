@@ -234,6 +234,28 @@ controls:
     set_by: aws_inherited
     verified_by: sql
     rationale: Version is AWS-managed but readable via V$INSTANCE/V$VERSION.
+  - id_pattern: "SV-270553"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270553 (CM-7 a) unused DBMS components/software/objects must be removed.
+      The DISA check lists installed components (dba_registry, excluding the core
+      comp_ids CATJAVA/CATALOG/CATPROC/SDO/DV/XDB and OPTION OFF rows) and is a
+      finding only if an installed component is unused and NOT documented/
+      authorized — an organization-defined determination with no fixed SQL
+      predicate (the generic baseline is a pending-assessment skip). On managed RDS
+      the component set is fixed at database CREATION (DBCA component selection),
+      which AWS owns, and is not tenant-removable: a brokered instance ships Oracle
+      Text (CONTEXT) installed and VALID and the tenant cannot deselect it, so the
+      installed set is inherited from the AWS provisioning default (aws_inherited).
+      It remains SQL-verifiable, so the overlay OVERRIDES the baseline pending-skip
+      with an in-place SQL assertion (controls/overlay.rb, SV-270504 overlay-sql
+      pattern): run the DISA query and FAIL on any returned comp_id not in the
+      org-defined authorized_components allowlist (default CONTEXT — the RDS
+      default-installed component, documented and authorized). Detect-first:
+      removal is not possible on RDS; the assertion flags any unauthorized/
+      undocumented component for review. Runs in BOTH postures. overlay_status:
+      overlay-sql.
 
   # --- detect-first (assessment only; never auto-remediated) ---
   - id_pattern: "SV-270510"
@@ -632,6 +654,25 @@ controls:
       customer-responsibility profile-hardening path (see SV-270495), not this
       control's listener.ora assertion. Overridden to N/A (impact 0.0) in
       controls/overlay.rb.
+  - id_pattern: "SV-275999"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-275999 (CM-6 b) a minimum of three Oracle control files, each on a
+      SEPARATE physical and logical device (RAID 1+0). The count (>=3) is
+      SQL-visible via SELECT name FROM v$controlfile, but the STIG's actual
+      requirement — device separation — is a storage-topology fact the DISA check
+      itself directs a reviewer to confirm with the storage/system/database
+      administrator (file paths do not prove device separation). On managed RDS
+      the tenant has no visibility into or control over the underlying storage:
+      control-file count, multiplexing, and physical/logical device placement are
+      AWS-managed (Oracle-Managed Files on RDS-provisioned storage with AWS-side
+      redundancy), and the v$controlfile paths cannot be mapped by the tenant to
+      distinct devices. Control-file redundancy/separation is inherited from the
+      AWS platform. The baseline stub was unwritten (needs_dev); a count-only SQL
+      assertion cannot see the device-separation requirement, so the overlay
+      OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
+      as an explicit id_pattern so it is unambiguous. overlay_status: N/A (platform).
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

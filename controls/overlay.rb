@@ -16,6 +16,9 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
+    skip_control 'SV-270549'  # PASSWORD_LOCK_TIME UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql
+    skip_control 'SV-270550'  # FAILED_LOGIN_ATTEMPTS <=3 — org-defined ALTER PROFILE; 10_profiles.sql
+    skip_control 'SV-270551'  # INACTIVE_ACCOUNT_TIME <=35 — org-defined ALTER PROFILE; 10_profiles.sql
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------

@@ -50,10 +50,21 @@ make retest CONTROLS="SV-270495 SV-270496"    # several
 ```
 
 (Equivalently, the runner accepts `--controls "ID [ID...]"` or a `CONTROLS` env
-var directly.) The runner loads `rds-inputs.yml` after dynamic connection inputs
-by default. To append site-specific inputs such as extra `allowed_dbaobject_owners`,
-pass `--input-file /path/to/site-inputs.yml` or set `INPUT_FILE`; the file is
-loaded after the runner-generated defaults and `rds-inputs.yml`.
+var directly.) The runner loads the dynamic `/tmp/inputs.yml`, then the committed
+`rds-inputs.yml`, then any site file — all passed as a **single** `--input-file`
+flag so CINC Auditor **merges** them per key (later file wins a shared key; every
+file's unique keys survive). To append site-specific inputs such as extra
+`allowed_dbaobject_owners`, pass `--input-file /path/to/site-inputs.yml` or set
+`INPUT_FILE`; it is merged last, so a site value overrides the runner/rds default
+for the same key.
+
+> **Why one flag, not repeated flags.** On CINC Auditor 7, *repeated*
+> `--input-file A --input-file B` do **not** merge — `B` replaces the loaded input
+> set wholesale, so any key present in `A` but absent from `B` reverts to the
+> profile default (empty). A single `--input-file A B C` merges per key. The runner
+> uses the single-flag form deliberately; changing it back would silently wipe the
+> dynamic `user`/`password`/allowlist values (e.g. the per-instance `DB_USER` in
+> `allowed_dbaobject_owners` for SV-270518).
 
 The baseline `depends` is resolved from the committed `inspec.lock` (managed in-repo — run `make vendor` if you change the dependency). Because the profile dir is mounted read-only, CINC's dependency cache is directed to a writable path inside the container (`VENDOR_CACHE`, default the scanner user's `~/.inspec/cache`), so nothing is written back into your working tree.
 

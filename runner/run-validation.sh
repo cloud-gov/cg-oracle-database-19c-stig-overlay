@@ -137,9 +137,24 @@ fi
 # user + platform accounts; site-authorized DBAs appended via an input file.
 # Both allowlists can be extended via an input file passed after this one.
 #
-# Constant AWS RDS allowlists/policies live in rds-inputs.yml and are loaded after
+# allowed_dbaobject_owners (SV-270518, CM-5(6)): the baseline asserts EVERY
+# DBA_OBJECTS owner is allowlisted, so this MUST include the broker DB_USER —
+# otherwise the control fails once that user owns its first object. Same
+# dynamic-seed pattern as the three allowlists above (platform members +
+# uppercased DB_USER); seeded here rather than in rds-inputs.yml because a
+# committed file cannot interpolate DB_USER. Any other owner is still a finding.
+#
+# Constant AWS RDS allowlists/policies live in rds-inputs.yml and are merged with
 # this dynamic input file. Site-specific overrides can be appended with --input-file.
 DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
+
+# Pre-provisioned object owners on a stock brokered RDS instance (SV-270518);
+# single source of truth. Emitted into /tmp/inputs.yml below with the DB_USER.
+RDS_OBJECT_OWNERS=(
+    SYS SYSTEM DBSNMP APPQOSSYS DBSFWUSER REMOTE_SCHEDULER_AGENT PUBLIC
+    CTXSYS AUDSYS GSMADMIN_INTERNAL RDSADMIN OUTLN ORACLE_OCM XDB
+)
+
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -162,7 +177,12 @@ allowed_users_dba_role:
   - RDSADMIN
   - SYSRAC
   - '${DB_USER_UC}'
+allowed_dbaobject_owners:
 EOF
+for _owner in "${RDS_OBJECT_OWNERS[@]}"; do
+    printf "  - %s\n" "$_owner" >>/tmp/inputs.yml
+done
+printf "  - '%s'\n" "$DB_USER_UC" >>/tmp/inputs.yml
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).
 AUDITOR=cinc-auditor
@@ -176,11 +196,20 @@ PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
 RDS_INPUT_FILE="${RDS_INPUT_FILE:-${PROFILE_SOURCE}/rds-inputs.yml}"
 [ -r "$RDS_INPUT_FILE" ] || { echo "run-validation: cannot read RDS_INPUT_FILE ${RDS_INPUT_FILE}" >&2; exit 1; }
 
-exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml --input-file "$RDS_INPUT_FILE")
+# --- Input-file precedence (CINC Auditor 7) --------------------------------
+# Pass the files as ONE --input-file flag, not repeated flags. On auditor:7,
+# repeated flags REPLACE the input set wholesale (a key a later file omits reverts
+# to the profile default, silently wiping user/password + allowlists); a single
+# flag MERGES per key (later file wins a shared key, unique keys survive).
+# Order: dynamic /tmp/inputs.yml, then rds-inputs.yml, then any site --input-file
+# (so a shared key resolves site > rds > dynamic).
+input_files=(/tmp/inputs.yml "$RDS_INPUT_FILE")
 if [ -n "$INPUT_FILE" ]; then
     [ -r "$INPUT_FILE" ] || { echo "run-validation: cannot read INPUT_FILE ${INPUT_FILE}" >&2; exit 1; }
-    exec_args+=(--input-file "$INPUT_FILE")
+    input_files+=("$INPUT_FILE")
 fi
+
+exec_args=(exec "$PROFILE_SOURCE" --input-file "${input_files[@]}")
 
 # Always print the CLI report; with --json, also write a timestamped, labeled
 # JSON report so local runs can be saved/compared. Exit status is unaffected.

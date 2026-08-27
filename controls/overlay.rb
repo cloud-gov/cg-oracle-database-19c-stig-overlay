@@ -1382,7 +1382,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # broker provisions the listener with the SSL option group so the approved
   # transport is TCPS/TLS on port 2484, and (2) the Cloud.gov platform security
   # groups further restrict inbound access to only port 2484 (TLS), denying the
-  # cleartext 1521 path (aws-broker#541). Restriction of ports/protocols/services
+  # cleartext 1521 path (terraform-provision#2351). Restriction of ports/protocols/services
   # is inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by
   # aws_inherited / verified_by not_applicable_rds). Override to N/A in BOTH
   # postures so an RDS run is not misled by a missing tenant listener.ora.

@@ -151,7 +151,7 @@ controls:
   # tenant-SQL-visible — evidence is the option-group config + AWS metadata, plus a
   # client-side TCPS handshake, not a SQL query. See aws-broker#564 / options.yml.
   # NOTE: the SSL-only posture also depended on the platform security group allowing
-  # 2484 and denying 1521 (terraform-provision#2361), which has been implemented
+  # 2484 and denying 1521 (terraform-provision#2351), which has been implemented
   - text_pattern: "during transmission|SSLFIPS_140|SQLNET.SSL_VERSION|TCPS|SSL_SERVER_DN_MATCH|encrypt.*transmission|transmission.*encrypt"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds
@@ -161,7 +161,7 @@ controls:
       2484 listener. sqlnet.ora/fips.ora are AWS-managed on RDS (not SQL-visible);
       evidenced by option-group config + a client TCPS handshake. DISA Oracle 19c
       STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depended on platform SG (2484
-      open / 1521 denied) for a true TLS-only posture (terraform-provision#2361).
+      open / 1521 denied) for a true TLS-only posture (terraform-provision#2351).
 
   - text_pattern: "audit trail data must be retained|retention"
     set_by: manual_review
@@ -1032,7 +1032,7 @@ controls:
   # text_pattern). Per #1's bar, treat the resolution as unproven until a consumer/
   # resolver test asserts SV-276000 resolves to exactly one (set_by, verified_by)
   # pair.
-  # Refs: terraform-provision#2361 (SG), aws-broker#567 (redundant plan), aws-broker#558
+  # Refs: terraform-provision#2351 (SG), aws-broker#567 (redundant plan), aws-broker#558
   # (live proof); cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
   - id_pattern: "SV-276000"
     set_by: compensating_control

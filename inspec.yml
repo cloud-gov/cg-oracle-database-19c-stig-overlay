@@ -163,3 +163,25 @@ inputs:
     type: Array
     value:
       - CG_AUDIT_POLICY
+  # --- Authorized installed components (SV-270553) ---------------------------
+  # Org-defined allowlist of Oracle component comp_ids that are documented and
+  # authorized to remain installed (CM-7 a). SV-270553 runs the DISA dba_registry
+  # query (which already excludes the core comp_ids CATJAVA/CATALOG/CATPROC/SDO/
+  # DV/XDB and OPTION OFF rows) and FAILS on any returned comp_id not in this list.
+  # On managed RDS the component set is fixed at database creation by AWS and is
+  # NOT tenant-removable; a brokered instance ships Oracle Text (CONTEXT) installed
+  # and VALID, so CONTEXT is the default authorized member. Add site-authorized
+  # components here (the runner is baked into the image, so inputs are not supplied
+  # at runtime). NOTE: SV-270553 runs inside the depended-on baseline (via
+  # include_controls), whose input namespace does NOT see this overlay default, so
+  # the control also carries an inline value: default and run-validation.sh writes
+  # the key into /tmp/inputs.yml.
+  - name: authorized_components
+    description: >-
+      Oracle component comp_ids (dba_registry) documented and authorized to remain
+      installed (SV-270553 / CM-7 a). Defaults to CONTEXT (Oracle Text), which is
+      default-installed on RDS and not tenant-removable. Any installed component
+      outside this list (beyond the STIG-excluded core comp_ids) is a finding.
+    type: Array
+    value:
+      - CONTEXT

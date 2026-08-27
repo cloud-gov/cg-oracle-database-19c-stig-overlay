@@ -193,6 +193,52 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-275999 (CM-6 b) — a minimum of three Oracle control files must exist, each
+  # stored on a SEPARATE physical and logical device. The count (>=3) is
+  # SQL-visible via SELECT name FROM v$controlfile, but the STIG's actual
+  # requirement — that each control file resides on a separate physical/logical
+  # (RAID 1+0) device — is a STORAGE-TOPOLOGY fact the DISA check itself directs a
+  # reviewer to confirm with "the storage administrator, system administrator, or
+  # database administrator," noting file paths alone do not prove device
+  # separation. On managed RDS the tenant has no visibility into or control over
+  # the underlying storage: control-file placement, multiplexing, and the physical/
+  # logical device layout are AWS-managed (Oracle-Managed Files on RDS-provisioned,
+  # EBS-backed storage with AWS-side redundancy). The v$controlfile paths on RDS
+  # point into the RDS-managed filesystem and cannot be mapped by the tenant to
+  # distinct physical/logical devices, so the control's real assertion is neither
+  # tenant-settable nor tenant-verifiable — control-file redundancy is inherited
+  # from the AWS platform. Override the inherited pending-skip to N/A (impact 0.0)
+  # so an RDS run reports it honestly rather than as a zero-test pass or a
+  # count-only check that cannot see the device-separation requirement.
+  control 'SV-275999' do
+    impact 0.0
+    title 'A minimum of three Oracle Control Files must be created and each ' \
+          'stored on a separate physical and logical device.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check lists control files ' \
+         '(SELECT name FROM v$controlfile) but its actual requirement — three or ' \
+         'more control files each on a SEPARATE physical and logical device ' \
+         '(RAID 1+0) — is a storage-topology determination the check itself ' \
+         'directs a reviewer to confirm with the storage/system/database ' \
+         'administrator, noting file paths do not prove device separation. On ' \
+         'managed RDS the tenant has no visibility into or control over the ' \
+         'underlying storage: control-file count, multiplexing, and physical/' \
+         'logical device placement are AWS-managed (Oracle-Managed Files on ' \
+         'RDS-provisioned storage with AWS-side redundancy), and the ' \
+         'v$controlfile paths cannot be mapped by the tenant to distinct ' \
+         'devices. Control-file redundancy and separation are inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-275999 (three+ control files on separate devices, CM-6 b) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): control-file count, ' \
+           'multiplexing, and physical/logical device separation are AWS-managed ' \
+           'on RDS (Oracle-Managed Files on RDS-provisioned storage); the tenant ' \
+           'cannot map v$controlfile paths to distinct devices or alter ' \
+           'placement. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
   control 'SV-270496' do
     impact 0.0
     title 'Oracle Database must protect against or limit the effects of ' \
@@ -516,6 +562,77 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-270553 (CM-7 a) — unused DBMS components/software/objects must be removed.
+  # The DISA check runs a fixed query listing installed components, EXCLUDING a
+  # hard-coded set of expected core comp_ids and OPTION OFF rows:
+  #   SELECT comp_id, comp_name, version, status FROM dba_registry
+  #   WHERE comp_id NOT IN ('CATJAVA','CATALOG','CATPROC','SDO','DV','XDB')
+  #   AND status <> 'OPTION OFF';
+  # then directs the reviewer: "If unused components are installed and are not
+  # documented and authorized, this is a finding." The pass/fail therefore depends
+  # on an ORGANIZATION-DEFINED authorized-components list — there is no fixed SQL
+  # predicate, which is why the generic baseline is a pending-assessment skip.
+  # On managed RDS the component set is NOT tenant-removable: DBCA component
+  # selection happens at database CREATION, which AWS owns; a brokered RDS instance
+  # ships Oracle Text (CONTEXT) installed and VALID, and the tenant cannot deselect
+  # it. So on RDS the question reduces to: are the STILL-installed components on the
+  # org-authorized list? The overlay OVERRIDES the baseline pending-skip with a
+  # concrete AWS-RDS SQL assertion (SV-270504 overlay-sql pattern): run the DISA
+  # query and FAIL on any returned component whose comp_id is NOT in the org-defined
+  # authorized_components allowlist. CONTEXT (Oracle Text) is the default allowlist
+  # member — it is an RDS default-installed component, documented and authorized
+  # here. detect-first: this control never removes a component (removal is not
+  # possible on RDS); it flags any unauthorized/undocumented component for review.
+  control 'SV-270553' do
+    impact 0.5
+    title 'Unused database components, database management system (DBMS) ' \
+          'software, and database objects must be removed.'
+    desc 'AWS RDS overlay of the unused-components control. The DISA check lists ' \
+         'installed components (dba_registry, excluding the core comp_ids and ' \
+         'OPTION OFF rows) and is a finding only if an installed component is ' \
+         'unused and NOT documented/authorized — an organization-defined ' \
+         'determination with no fixed SQL predicate (hence the generic baseline ' \
+         'pending-skip). On managed RDS the component set is fixed at ' \
+         'database creation by AWS and is not tenant-removable (a brokered ' \
+         'instance ships Oracle Text / CONTEXT installed and VALID), so the ' \
+         'question reduces to whether the still-installed components are ' \
+         'org-authorized. The overlay asserts every component returned by the ' \
+         'DISA query is present in the org-defined authorized_components ' \
+         'allowlist (default: CONTEXT, the RDS default-installed Oracle Text ' \
+         'component, documented and authorized here). Any component outside the ' \
+         'allowlist is a finding for review. Detect-first: removal is not ' \
+         'possible on RDS. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    tag cci: ['CCI-000381']
+    tag nist: ['CM-7 a']
+
+    # Inline value: this control lives in the depended-on baseline (via
+    # include_controls), whose input namespace does NOT see the overlay inspec.yml
+    # defaults; without an inline default the resolver returns nil on a bare run.
+    # run-validation.sh also writes the key into /tmp/inputs.yml so operators can
+    # override the authorized-components list centrally.
+    authorized = input('authorized_components', value: %w[CONTEXT]).map(&:upcase)
+    sql = oracledb_session(user: input('user'), password: input('password'),
+                           host: input('host'), port: input('port'),
+                           service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+
+    installed = sql.query(
+      "SELECT comp_id FROM dba_registry " \
+      "WHERE comp_id NOT IN ('CATJAVA','CATALOG','CATPROC','SDO','DV','XDB') " \
+      "AND status <> 'OPTION OFF';"
+    ).column('comp_id').map(&:upcase)
+
+    unauthorized = installed - authorized
+
+    describe 'Installed DBMS components not on the org-defined ' \
+             'authorized_components allowlist (dba_registry)' do
+      subject { unauthorized }
+      it 'is empty (every installed component is documented and authorized)' do
+        expect(unauthorized).to be_empty
+      end
+    end
+  end
+
   # SV-270505 (AU-3(1)) — organization-defined ADDITIONAL, more detailed
   # information in audit records for events identified by type/location/subject.
   # The DISA check is explicitly conditional and procedural: "Review the system
@@ -651,6 +768,319 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'outside the database, feeding the Cloud.gov centralized logging ' \
            'posture. Not a tenant SQL setting and not SQL-verifiable. See ' \
            'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270508 (AU-5(1)) — warning at 75 percent of allocated audit-log storage.
+  # PLATFORM disposition. The DISA check is procedural: review OS or third-party
+  # logging application settings for a capacity warning. On managed RDS, local
+  # audit storage and the OS-level alerting surface are AWS-managed, and the
+  # centralized audit-log path is the RDS log-export / CloudWatch Logs integration
+  # documented for SV-270507. Capacity monitoring and alerting for that managed log
+  # path are Cloud.gov/AWS operational controls, not tenant SQL. Override to N/A
+  # (platform) so the inherited manual-review skip is reported as a platform
+  # disposition.
+  control 'SV-270508' do
+    impact 0.0
+    title 'The Oracle Database, or the logging or alerting mechanism the ' \
+          'application uses, must provide a warning when allocated audit record ' \
+          'storage volume record storage volume reaches 75 percent of maximum ' \
+          'audit record storage capacity.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'is procedural: review OS or third-party logging application settings to ' \
+         'determine whether support personnel are warned when DBMS audit-log ' \
+         'storage reaches 75 percent of maximum capacity. On managed RDS, local ' \
+         'audit storage and OS-level alerting are AWS-managed, and audit records ' \
+         'are off-loaded through the RDS log-export / CloudWatch Logs integration ' \
+         'described for SV-270507. Capacity monitoring and alerting for that ' \
+         'managed log path are inherited from the AWS/Cloud.gov platform, not ' \
+         'tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270508 (75 percent audit-log capacity warning, AU-5(1)) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): audit-log storage capacity ' \
+           'warning is an AWS/Cloud.gov platform logging and monitoring control ' \
+           'for the RDS/CloudWatch Logs path, not a tenant SQL setting. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270509 (AU-5(2)) — real-time alert when auditing fails. PLATFORM
+  # disposition. The DISA check is procedural: review Oracle, OS, or third-party
+  # logging settings for alert delivery. On managed RDS, audit collection and log
+  # export are broker/AWS platform integrations outside the tenant database, and
+  # operational alerting on those pipeline failures is handled by the Cloud.gov/AWS
+  # monitoring posture. There is no portable tenant SQL assertion that proves the
+  # external alerting path. Override to N/A (platform).
+  control 'SV-270509' do
+    impact 0.0
+    title 'Oracle Database must provide an immediate real-time alert to ' \
+          'appropriate support staff of all audit log failures.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'is procedural: review Oracle Database, OS, or third-party logging ' \
+         'software settings to determine whether real-time alerts are sent when ' \
+         'auditing fails. On managed RDS, audit collection and log export are ' \
+         'broker/AWS platform integrations outside tenant database control, and ' \
+         'operational alerting for failures in that logging path is inherited from ' \
+         'the AWS/Cloud.gov monitoring posture. There is no tenant SQL assertion ' \
+         'that can prove the external alert delivery path (control-layers.yml: ' \
+         'set_by aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270509 (real-time audit-failure alert, AU-5(2)) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): real-time audit-failure alerting ' \
+           'is an AWS/Cloud.gov platform monitoring control around the managed ' \
+           'audit/log-export path, not a tenant SQL setting. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270511 (AU-9 a/b/c) — protect audit tools from unauthorized access,
+  # modification, or deletion. PLATFORM disposition. The DISA check is a review of
+  # permissions on the tools used to view or modify audit data, including OS,
+  # vendor, open-source, and DBMS tooling. For brokered RDS, the audit-log viewing
+  # and manipulation tooling is the managed AWS/Cloud.gov logging stack (RDS log
+  # exports, CloudWatch Logs, and platform IAM/operational controls) plus
+  # AWS-managed host/Oracle tooling that tenants cannot access. Protection of those
+  # tools is inherited from the AWS/Cloud.gov platform; customer application-level
+  # tools, if created, are outside the broker baseline. Override to N/A (platform).
+  control 'SV-270511' do
+    impact 0.0
+    title 'The system must protect audit tools from unauthorized access, ' \
+          'modification, or deletion.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'reviews access permissions to tools used to view or modify audit log ' \
+         'data, including the DBMS itself and external audit tools. On brokered ' \
+         'RDS, the audit-log tooling for the platform path is the managed ' \
+         'AWS/Cloud.gov logging stack (RDS log exports, CloudWatch Logs, and ' \
+         'platform IAM/operational controls) plus AWS-managed host/Oracle tooling ' \
+         'that tenants cannot access. Protection from unauthorized access, ' \
+         'modification, or deletion of those tools is inherited from the ' \
+         'AWS/Cloud.gov platform; any customer-created application audit tooling ' \
+         'is outside the broker baseline (control-layers.yml: set_by aws_inherited ' \
+         '/ verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270511 (protect audit tools, AU-9 a/b/c) is Not Applicable on ' \
+             'managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): platform audit tooling is ' \
+           'protected by AWS/Cloud.gov logging, IAM, and operational controls; ' \
+           'tenants cannot access AWS-managed host/Oracle audit tooling. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270513 (SA-22 a) — Oracle Database products must be vendor-supported.
+  # PLATFORM disposition. The DISA check combines documentation review, DBA
+  # interview, SQL version identification, and verification against the Oracle
+  # support lifecycle. For brokered RDS, customers select from AWS-exposed Oracle
+  # engine versions and AWS has policies/procedures for RDS Oracle support,
+  # deprecation, patching, and required upgrade paths; unsupported engine versions
+  # are not a tenant-remediated SQL condition. Override to N/A (platform).
+  control 'SV-270513' do
+    impact 0.0
+    title 'Oracle Database products must be a version supported by the vendor.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'requires reviewing system documentation, identifying database software ' \
+         'components and versions (including SELECT version FROM v$instance), and ' \
+         'verifying vendor support against Oracle\'s release schedule. For ' \
+         'brokered RDS, customers run AWS-provided Oracle engine versions; AWS has ' \
+         'policies and procedures for RDS for Oracle support, deprecation, patching, ' \
+         'and required upgrade paths to ensure customers are running supported ' \
+         'versions. Unsupported engine selection is not a tenant SQL-remediated ' \
+         'condition in the database. Vendor-support lifecycle management is ' \
+         'inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270513 (vendor-supported Oracle version, SA-22 a) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): RDS Oracle engine-version support, ' \
+           'deprecation, patching, and required upgrade paths are governed by AWS ' \
+           'policies/procedures and Cloud.gov platform operation, not tenant SQL. ' \
+           'See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270514 (CM-5(6)) — monitor database software, applications, and
+  # configuration files for unauthorized changes. PLATFORM disposition. The DISA
+  # check reviews monitoring procedures and implementation evidence for software
+  # libraries, related applications, and configuration files; the inherited baseline
+  # tries to inspect AIDE cron configuration on the runner host. On managed RDS the
+  # Oracle software libraries and configuration files live on AWS-managed hosts, so
+  # file integrity/change monitoring is inherited from AWS/Cloud.gov operational
+  # controls rather than tenant OS access or SQL. Override to N/A (platform).
+  control 'SV-270514' do
+    impact 0.0
+    title 'Database software, applications, and configuration files must be ' \
+          'monitored to discover unauthorized changes.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'reviews monitoring procedures and implementation evidence for changes to ' \
+         'DBMS software libraries, related applications, and configuration files. ' \
+         'The inherited baseline checks AIDE cron configuration on the runner host, ' \
+         'which is not evidence about the RDS database host. On managed RDS, Oracle ' \
+         'software libraries and DBMS configuration files are on AWS-managed hosts ' \
+         'that tenants cannot access; unauthorized-change monitoring for those ' \
+         'platform components is inherited from AWS/Cloud.gov operational controls, ' \
+         'not tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270514 (monitor DBMS software/configuration changes, CM-5(6)) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): DBMS software/configuration file ' \
+           'monitoring is inherited from AWS/Cloud.gov host and operational ' \
+           'controls; the inherited AIDE cron check reflects the runner host, not ' \
+           'the RDS DB host. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270516 (CM-5(6)) — restrict use of the Oracle software installation
+  # account. PLATFORM disposition. The DISA check is procedural: review procedures
+  # for controlling use of the DBMS software installation account. On managed RDS
+  # the Oracle software owner / installation account and SYSDBA-equivalent host
+  # access are AWS-managed and unavailable to tenants; the broker-created database
+  # user is not the software installation account. Access restriction for that
+  # account is inherited from AWS/Cloud.gov platform controls. Override to N/A.
+  control 'SV-270516' do
+    impact 0.0
+    title 'The Oracle Database software installation account must be restricted to ' \
+          'authorized users.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'reviews procedures for controlling and granting access to the DBMS ' \
+         'software installation account, which Oracle equates with host-level ' \
+         'SYSDBA-capable installation ownership. On managed RDS, the Oracle ' \
+         'software owner / installation account and SYSDBA-equivalent host access ' \
+         'are AWS-managed and unavailable to tenants; the broker-created database ' \
+         'user is not the software installation account. Restricting use of the ' \
+         'installation account is inherited from AWS/Cloud.gov platform controls, ' \
+         'not tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270516 (restrict Oracle software installation account, CM-5(6)) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the Oracle software installation ' \
+           'account and host-level SYSDBA access are AWS-managed on RDS with no ' \
+           'tenant access; the broker user is not that account. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270539 (CM-6 b) — network access to the database must be restricted to
+  # authorized personnel. The DISA check inspects network-layer artifacts the
+  # tenant cannot reach on managed RDS: the listener SQLNET.ORA
+  # (tcp.validnode_checking / tcp.invited_nodes) in $ORACLE_HOME/network/admin, an
+  # Oracle Connection Manager CMAN.ORA RULE set, or an external network device.
+  # The inherited baseline body reads
+  # file("#{$ORACLE_HOME}/network/admin/sqlnet.ora"), which on RDS resolves against
+  # the InSpec RUNNER host (no tenant-managed sqlnet.ora), producing a misleading
+  # result. On managed RDS network access restriction is an AWS platform function:
+  # the listener is AWS-managed and unreachable, and inbound access is governed by
+  # VPC security groups / the Cloud.gov brokered private-networking posture, not a
+  # tenant SQL/OS setting. control-layers.yml classifies the SQLNET.ORA/listener
+  # path as set_by: aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270539' do
+    impact 0.0
+    title 'Network access to Oracle Database must be restricted to authorized ' \
+          'personnel.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check enforces IP-address ' \
+         'restriction at the network layer — the listener SQLNET.ORA ' \
+         '(tcp.validnode_checking=YES / tcp.invited_nodes) in ' \
+         '$ORACLE_HOME/network/admin, an Oracle Connection Manager CMAN.ORA RULE ' \
+         'set, or an external network device — none of which the tenant can reach ' \
+         'on managed RDS. The inherited baseline reads the runner host\'s ' \
+         'sqlnet.ora (no tenant-managed file on RDS), a misleading signal. Network ' \
+         'access restriction is an AWS platform function: the listener is ' \
+         'AWS-managed and unreachable, and inbound access is governed by VPC ' \
+         'security groups and the Cloud.gov brokered private-networking posture, ' \
+         'not a tenant SQL/OS setting (control-layers.yml: set_by aws_inherited / ' \
+         'verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270539 (restrict network access, CM-6 b) is Not Applicable on ' \
+             'managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): IP-address restriction is set at ' \
+           'the listener SQLNET.ORA / Connection Manager / external network device ' \
+           'level; the listener is AWS-managed on RDS with no tenant OS/listener ' \
+           'access, inbound access is governed by VPC security groups, and the ' \
+           'inherited sqlnet.ora assertion reflects the runner host. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270541 (CM-6 b) — the /diag subdirectory under DIAGNOSTIC_DEST must be
+  # protected from unauthorized access. The DISA check reads DIAGNOSTIC_DEST via
+  # SQL, then inspects the OS filesystem permissions of <DIAGNOSTIC_DEST>/diag
+  # (`ls -ld` on Unix, Explorer ACLs on Windows), and the fix alters host filesystem
+  # permissions on that directory. The inherited baseline body runs
+  # command("ls -ld #{diagnostic_dest}/diag | awk ..."), an OS/filesystem check.
+  # On managed RDS the tenant has no OS access — the ADR/diag directory and its
+  # permissions live on the AWS-managed DB host and are unreachable; the `ls -ld`
+  # command reflects the InSpec RUNNER host, not the DB server, producing a
+  # meaningless result. Filesystem protection of the diagnostic directory is
+  # AWS-managed. control-layers.yml classifies the OS/filesystem path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270541' do
+    impact 0.0
+    title 'The /diag subdirectory under the directory assigned to the ' \
+          'DIAGNOSTIC_DEST parameter must be protected from unauthorized access.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reads DIAGNOSTIC_DEST ' \
+         'via SQL and then inspects OS filesystem permissions on ' \
+         '<DIAGNOSTIC_DEST>/diag (`ls -ld` on Unix, Explorer ACLs on Windows); the ' \
+         'fix alters host filesystem permissions. Both require OS/filesystem access ' \
+         'to the DB host, which the tenant does not have on managed RDS — the ' \
+         'diagnostic/diag directory and its permissions are AWS-managed and ' \
+         'unreachable, and the inherited baseline `command(\'ls -ld ' \
+         '<DIAGNOSTIC_DEST>/diag\')` assertion reflects the InSpec runner host, not ' \
+         'the DB server, so it is not a valid signal. Filesystem protection of the ' \
+         'diagnostic directory is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270541 (protect <DIAGNOSTIC_DEST>/diag, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects OS filesystem ' \
+           'permissions on <DIAGNOSTIC_DEST>/diag and the fix alters host ' \
+           'permissions; the DB host filesystem is AWS-managed on RDS with no ' \
+           'tenant access, and the inherited `ls -ld` assertion reflects the runner ' \
+           'host, not the DB server. See control-layers.yml and ' \
+           'docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270542 (CM-6 b) — remote administration must be disabled for the Oracle
+  # Connection Manager (REMOTE_ADMIN = NO in cman.ora). The DISA check reads the
+  # cman.ora file in $ORACLE_HOME/network/admin and is EXPLICITLY Not a Finding when
+  # that file does not exist (i.e. Connection Manager is not in use). The inherited
+  # baseline body reads file("#{$ORACLE_HOME}/network/admin/cman.ora") and also
+  # asserts `it { should exist }` — which on RDS resolves against the InSpec RUNNER
+  # host and FAILS on a missing cman.ora even though the STIG treats a missing file
+  # as Not a Finding, a misleading failure. On managed RDS Oracle Connection Manager
+  # is not deployed and the tenant has no OS access to place or read a cman.ora; any
+  # Connection Manager, if present in the AWS network path, is AWS-managed and
+  # unreachable. control-layers.yml classifies the cman.ora/listener path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A.
+  control 'SV-270542' do
+    impact 0.0
+    title 'Remote administration must be disabled for the Oracle connection ' \
+          'manager.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reads the cman.ora ' \
+         'file in $ORACLE_HOME/network/admin and is explicitly Not a Finding when ' \
+         'the file does not exist (Connection Manager not in use). On managed RDS ' \
+         'Oracle Connection Manager is not deployed and the tenant has no OS access ' \
+         'to place or read a cman.ora; any Connection Manager in the AWS network ' \
+         'path is AWS-managed and unreachable. The inherited baseline reads ' \
+         'cman.ora on the runner host and asserts `should exist`, which FAILS on a ' \
+         'missing file even though the STIG treats that as Not a Finding — a ' \
+         'misleading signal. Connection Manager configuration is inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270542 (disable Connection Manager remote admin, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads cman.ora in ' \
+           '$ORACLE_HOME/network/admin and is Not a Finding when the file is ' \
+           'absent; Oracle Connection Manager is not deployed on managed RDS and ' \
+           'the tenant has no OS access, while the inherited `should exist` ' \
+           'assertion would falsely fail on the runner host. See control-layers.yml ' \
+           'and docs/RESPONSIBILITY.md.'
     end
   end
 end

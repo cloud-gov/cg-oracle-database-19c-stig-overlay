@@ -345,6 +345,25 @@ controls:
       never suppressed (two-axis rule). Overlay inherits as-is
       (overlay_status: inherited). Distinct from SV-270530 (object grants), which
       DOES need an org-defined allowlist and is a customer responsibility.
+  - id_pattern: "SV-270518"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270518 (CM-5(6)) database objects must be owned by authorized accounts.
+      The baseline SQL assertion is correct: enumerate DISTINCT owners from
+      DBA_OBJECTS and compare each to the allowed_dbaobject_owners input. On a
+      stock brokered RDS instance, the pre-provisioned object owners are SYS,
+      SYSTEM, DBSNMP, APPQOSSYS, DBSFWUSER, REMOTE_SCHEDULER_AGENT, PUBLIC,
+      CTXSYS, AUDSYS, GSMADMIN_INTERNAL, RDSADMIN, OUTLN, ORACLE_OCM, and XDB.
+      run-validation.sh seeds that platform allowlist PLUS the per-instance broker
+      DB_USER (the baseline asserts EVERY owner is allowlisted, so the connecting
+      user MUST be present or the control fails on its first customer-owned object)
+      so the inherited baseline check runs in BOTH postures and detects any
+      additional unauthorized owner. The allowlist is seeded dynamically (not from
+      the committed rds-inputs.yml) because a static file cannot interpolate the
+      per-instance DB_USER. Customer-created object owners beyond the broker user
+      must be documented and added by the site via an input file. Overlay inherits
+      as-is (overlay_status: inherited).
   - id_pattern: "SV-270530"
     set_by: aws_inherited
     verified_by: sql
@@ -381,7 +400,30 @@ controls:
       fixed) and runs in BOTH postures to detect drift; it is never suppressed
       (two-axis rule). Overlay inherits as-is (overlay_status: inherited).
 
-  # --- CUSTOMER responsibility: org-defined ALTER PROFILE limits (SV-270495 pattern) ---
+  # --- CUSTOMER responsibility: org-defined SQL/tooling hardening (SV-270495 pattern) ---
+  - id_pattern: "SV-270520"
+    set_by: sql_hardening
+    verified_by: compensating_control
+    rationale: >-
+      SV-270520 (CM-6 b) apply STIG/DOD configuration guidance. Running Oracle
+      DBSAT requires the customer to create a DBSAT user with specific privileges
+      and grants, which is database-altering, customer-owned setup outside platform
+      provisioning scope. Cloud.gov uses this InSpec/CINC Auditor overlay as a
+      compensating automated validation path for every control that is subject to
+      automated validation. The baseline control is already a manual-review skip,
+      so it is not included in the overlay's SQL-only customer skip gate.
+  - id_pattern: "SV-270536"
+    set_by: customer_policy
+    verified_by: manual_review
+    rationale: >-
+      SV-270536 (CM-6 b) production application/data directories must be protected
+      from developers on shared production/development DBMS hosts. For brokered RDS,
+      this is a customer policy/procedure responsibility governing how team members
+      use broker-provided database access across production and development
+      environments. It is not satisfied by AWS RDS platform inheritance and has no
+      tenant SQL assertion in the overlay. The baseline control is already a
+      manual-review skip, so it is not included in the overlay's SQL-only customer
+      skip gate.
   - id_pattern: "SV-270549"
     set_by: sql_hardening
     verified_by: sql

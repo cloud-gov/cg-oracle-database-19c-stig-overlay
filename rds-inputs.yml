@@ -1,0 +1,16 @@
+---
+# allowed_dbaobject_owners (SV-270518) is seeded in run-validation.sh, not here:
+# the list must include the per-instance broker DB_USER, which a committed file
+# cannot interpolate. See RDS_OBJECT_OWNERS there (single source of truth).
+required_audit_policies:
+  - ORA_SECURECONFIG
+  - ORA_LOGON_FAILURES
+customer_audit_policies:
+  - CG_AUDIT_POLICY
+users_allowed_access_to_public:
+  - SYS
+  - SYSTEM
+  - CTXSYS
+  - GSMADMIN_INTERNAL
+  - XDB
+  - RDSADMIN

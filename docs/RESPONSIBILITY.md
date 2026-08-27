@@ -148,7 +148,7 @@ Some inherited baseline controls are **SQL-verifiable and kept running as-is**
 (no override), but their assertion compares against an **org-defined allowlist
 input** whose *baseline* membership on a stock brokered RDS instance is a
 **platform** fact. For these the overlay stays `inherited` (the baseline check is
-correct and runs in both postures), and `runner/run-validation.sh` **seeds the
+correct and runs in both postures), and `rds-inputs.yml` **seeds the
 platform accounts** into the input so a stock brokered instance passes without a
 finding. Any grantee/owner **outside** the seeded list is still a real finding —
 seeding the platform baseline never suppresses a detectable drift (the two-axis
@@ -157,6 +157,7 @@ the runner's default.
 
 | Control | Intent | Input | Platform-seeded baseline | Still a finding |
 | --- | --- | --- | --- | --- |
+| SV-270518 | Authorized database object owners (CM-5(6)) | `allowed_dbaobject_owners` | Pre-provisioned object owners allowed on the reviewed brokered RDS instance: `SYS`, `SYSTEM`, `DBSNMP`, `APPQOSSYS`, `DBSFWUSER`, `REMOTE_SCHEDULER_AGENT`, `PUBLIC`, `CTXSYS`, `AUDSYS`, `GSMADMIN_INTERNAL`, `RDSADMIN`, `OUTLN`, `ORACLE_OCM`, `XDB` **plus the per-instance broker `DB_USER`** (the baseline asserts every `DBA_OBJECTS` owner is allowlisted, so the connecting user must be present or the control fails on its first owned object). Seeded dynamically by `run-validation.sh` (not the committed file, which cannot interpolate `DB_USER`); inherited baseline SQL runs in both postures. | Any owner outside this allowlist is a finding unless documented and added by the site. |
 | SV-270530 | Restrict object permissions granted to PUBLIC (CM-6 b) | `users_allowed_access_to_public` | The Oracle predefined product accounts that hold PUBLIC object grants on a stock install (`SYS`, `SYSTEM`, `CTXSYS`, `GSMADMIN_INTERNAL`, `XDB`) plus the AWS-managed **`RDSADMIN`** platform account — the DISA check's "list of nonapplicable [Oracle product] accounts." Seeding these is a **platform responsibility** (confirmed against a provisioned RDS instance: owners with PUBLIC grants = SYS, SYSTEM, CTXSYS, GSMADMIN_INTERNAL, RDSADMIN, XDB). | Any **other** owner granting to PUBLIC (e.g. a customer application schema) is a finding; the tenant must `REVOKE` it (`40_public_grants_assess.sql` is detect-first). |
 | SV-270553 | Remove unused DBMS components (CM-7 a) | `authorized_components` | On managed RDS the installed component set is fixed at database creation by AWS and is **not tenant-removable**; a brokered instance ships Oracle Text (**`CONTEXT`**) installed and VALID, so `CONTEXT` is the default authorized member (documented and authorized here). The overlay overrides the baseline pending-skip with an in-place SQL assertion (overlay-sql) that runs the DISA `dba_registry` query — which already excludes the core comp_ids `CATJAVA`/`CATALOG`/`CATPROC`/`SDO`/`DV`/`XDB` and `OPTION OFF` rows — and fails on any returned comp_id not in this list. Detect-first (removal is not possible on RDS). | Any installed component **outside** the allowlist (beyond the STIG-excluded core comp_ids) is a finding for review; the customer documents/authorizes it or, where removal is possible, requests it be excluded at provisioning. |
 
@@ -168,7 +169,7 @@ The behavior is driven by the `skip_customer_responsibility_controls` input
 | Posture | Flag | Input value | What runs |
 | --- | --- | --- | --- |
 | **`--all`** (default) | `--all` (or no flag) | `false` | The **full baseline** — every control, including customer-responsibility ones. Use this **after** the customer has applied the `hardening/sql/` scripts, to assess the fully-hardened database. |
-| **Platform-only** | `--skip-customer-controls` (or `SKIP_CUSTOMER_CONTROLS=1`) | `true` | Customer-responsibility controls are **skipped** (reported as skipped with a caveat, `impact 0.0`), so a platform-only run is not failed by customer-owned remediation. |
+| **Platform-only** | `--skip-customer-controls` (or `SKIP_CUSTOMER_CONTROLS=1`) | `true` | Customer-responsibility controls with SQL-assessed elements are **skipped** when they would produce misleading findings in a platform-provider run. Baseline controls already skipped because they require manual review are not included in this overlay gate. |
 
 ```bash
 # Platform-only posture (skip customer-responsibility controls):
@@ -182,8 +183,10 @@ run-validation.sh            # or explicitly: run-validation.sh --all
 ## How the skip is implemented (single file, input-gated)
 
 `controls/overlay.rb` inherits **all** baseline controls via `include_controls`
-and, in the same block, skips the customer-responsibility controls **only when the
-gate is active** — following the MITRE overlay pattern
+and, in the same block, skips only customer-responsibility controls with
+**SQL-assessed elements** that would produce misleading findings in a
+platform-provider run. Baseline controls already skipped because they require
+manual review are not included in this overlay gate. This follows the MITRE overlay pattern
 ([sample-mysql-overlay/controls/overlay.rb](https://github.com/mitre/sample-mysql-overlay/blob/main/controls/overlay.rb)).
 Because the skip happens in-place on the inherited control, it reports **once** (no
 duplicate baseline finding):
@@ -201,7 +204,8 @@ end
 - **`skip_customer_responsibility_controls == false`** (default / `--all`): no
   `skip_control` is emitted, and the **inherited baseline assertion runs**.
 - **`skip_customer_responsibility_controls == true`** (`--skip-customer-controls`):
-  the control is skipped in-place — it does not run and cannot fail.
+  qualifying SQL-assessed customer-responsibility controls are skipped in-place —
+  they do not run and cannot fail in a platform-provider run.
 
 ### Adding a control
 
@@ -234,9 +238,15 @@ run, assessed under `--all` once the customer has applied a limit.
 
 ## Current customer-responsibility controls
 
+Controls marked `baseline manual skip` are already skipped by the baseline manual
+review implementation and are not listed in `controls/overlay.rb`'s SQL-only
+customer skip gate.
+
 | Control | Intent | Why customer-owned | Remediation step |
 | --- | --- | --- | --- |
 | SV-270495 | Concurrent session limits (`SESSIONS_PER_USER`) | Fix is `ALTER PROFILE ... LIMIT SESSIONS_PER_USER <n>` with an org-defined value (AC-10). | run `15_concurrent_sessions.sql` |
+| SV-270520 | Apply STIG/DOD configuration guidance (CM-6 b) | Running Oracle DBSAT requires a customer-created DBSAT user with specific privileges/grants, which is database-altering setup outside platform provisioning scope. Cloud.gov uses this InSpec/CINC Auditor overlay as a compensating automated validation path for controls subject to automated validation. Baseline manual skip. | create/configure DBSAT user as needed; run InSpec/CINC Auditor overlay |
+| SV-270536 | Shield production from development access (CM-6 b) | Customers must define and enforce policies/procedures for how team members use broker-provided database access across production and development environments. This is not satisfied by AWS RDS and has no tenant SQL assertion in the overlay. Baseline manual skip. | document and review customer team access policies/procedures |
 | SV-270549 | Account lockout persists until admin reset (`PASSWORD_LOCK_TIME`, AC-7 b) | Fix is `ALTER PROFILE <profile> LIMIT PASSWORD_LOCK_TIME UNLIMITED` against a site profile — org-defined db-altering SQL. Baseline check correct (`should cmp 'UNLIMITED'` per profile). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270550 | Max consecutive invalid logon attempts = 3 (`FAILED_LOGIN_ATTEMPTS`, CM-6 b) | Fix is `ALTER PROFILE <profile> LIMIT FAILED_LOGIN_ATTEMPTS 3` — org-defined db-altering SQL. Baseline SQL assertion implemented upstream (mitre-baseline `fix/sv-270550-failed-login-attempts`, held for PR). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270551 | Disable accounts after 35 days inactivity (`INACTIVE_ACCOUNT_TIME`, IA-4 e / AC-2(3)(a)) | Fix is `ALTER PROFILE <profile> LIMIT INACTIVE_ACCOUNT_TIME 35` (or `ALTER USER ... PROFILE ORA_STIG_PROFILE`) — org-defined db-altering SQL. Baseline check correct (`should_not cmp 'UNLIMITED'` and `<= account_inactivity_age` per profile). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |

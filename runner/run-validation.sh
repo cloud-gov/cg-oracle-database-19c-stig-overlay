@@ -29,6 +29,8 @@
 #
 # Options: --json also writes a timestamped JSON report to OUT_DIR (default /out);
 # --controls "ID [ID...]" (or the CONTROLS env) runs only the named control(s).
+# --input-file PATH (or INPUT_FILE=PATH) appends a site input file after the
+#   generated defaults and rds-inputs.yml, so site allowlists can override/extend them.
 # --skip-customer-controls (or SKIP_CUSTOMER_CONTROLS=1) skips customer-
 #   responsibility controls; default runs all. See ../docs/RESPONSIBILITY.md.
 
@@ -44,6 +46,7 @@ export LOG_PREFIX  # consumed by the sourced lib/db-connect.sh (SC2034)
 # --- CLI args --------------------------------------------------------------
 JSON_OUTPUT="${JSON_OUTPUT:-}"
 CONTROLS="${CONTROLS:-}"
+INPUT_FILE="${INPUT_FILE:-}"
 # Responsibility posture (see ../docs/RESPONSIBILITY.md). Default = run all;
 # --skip-customer-controls / SKIP_CUSTOMER_CONTROLS sets the profile input below.
 SKIP_CUSTOMER_CONTROLS="${SKIP_CUSTOMER_CONTROLS:-}"
@@ -65,6 +68,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --controls=*)
             CONTROLS="${CONTROLS:+$CONTROLS }${1#--controls=}"
+            ;;
+        --input-file)
+            shift
+            [ "$#" -gt 0 ] || { echo "run-validation: --input-file requires a value" >&2; exit 2; }
+            INPUT_FILE="$1"
+            ;;
+        --input-file=*)
+            INPUT_FILE="${1#--input-file=}"
             ;;
         *)
             echo "run-validation: unknown argument '${1}'" >&2
@@ -126,21 +137,24 @@ fi
 # user + platform accounts; site-authorized DBAs appended via an input file.
 # Both allowlists can be extended via an input file passed after this one.
 #
-# required_audit_policies / customer_audit_policies (SV-270504, AU-12 c): the two
-# audit-policy layers. These are declared in the OVERLAY inspec.yml, but the
-# SV-270504 control runs inside the depended-on baseline (via include_controls),
-# whose input namespace does not see the overlay's inspec.yml defaults — so they
-# MUST be provided at runtime here (a --input-file value is cross-profile). The
-# control also carries inline value: defaults as a backstop. Change these to match
-# the site's policy names if they differ.
+# allowed_dbaobject_owners (SV-270518, CM-5(6)): the baseline asserts EVERY
+# DBA_OBJECTS owner is allowlisted, so this MUST include the broker DB_USER —
+# otherwise the control fails once that user owns its first object. Same
+# dynamic-seed pattern as the three allowlists above (platform members +
+# uppercased DB_USER); seeded here rather than in rds-inputs.yml because a
+# committed file cannot interpolate DB_USER. Any other owner is still a finding.
 #
-# users_allowed_access_to_public (SV-270530, CM-6 b): object owners whose grants to
-# PUBLIC are acceptable. The baseline relies wholly on this input for the DISA
-# "list of nonapplicable accounts" exclusion. Seed the Oracle product accounts that
-# hold PUBLIC grants on a stock install plus the AWS-managed RDSADMIN — a PLATFORM
-# responsibility so a stock brokered instance passes. Any owner OUTSIDE this list
-# (e.g. a customer schema) is still a finding; extend via an input file after this one.
+# Constant AWS RDS allowlists/policies live in rds-inputs.yml and are merged with
+# this dynamic input file. Site-specific overrides can be appended with --input-file.
 DB_USER_UC="$(printf '%s' "${DB_USER}" | tr '[:lower:]' '[:upper:]')"
+
+# Pre-provisioned object owners on a stock brokered RDS instance (SV-270518);
+# single source of truth. Emitted into /tmp/inputs.yml below with the DB_USER.
+RDS_OBJECT_OWNERS=(
+    SYS SYSTEM DBSNMP APPQOSSYS DBSFWUSER REMOTE_SCHEDULER_AGENT PUBLIC
+    CTXSYS AUDSYS GSMADMIN_INTERNAL RDSADMIN OUTLN ORACLE_OCM XDB
+)
+
 cat >/tmp/inputs.yml <<EOF
 user: '${DB_USER}'
 password: '${DB_PASSWORD}'
@@ -163,19 +177,12 @@ allowed_users_dba_role:
   - RDSADMIN
   - SYSRAC
   - '${DB_USER_UC}'
-required_audit_policies:
-  - ORA_SECURECONFIG
-  - ORA_LOGON_FAILURES
-customer_audit_policies:
-  - CG_AUDIT_POLICY
-users_allowed_access_to_public:
-  - SYS
-  - SYSTEM
-  - CTXSYS
-  - GSMADMIN_INTERNAL
-  - XDB
-  - RDSADMIN
+allowed_dbaobject_owners:
 EOF
+for _owner in "${RDS_OBJECT_OWNERS[@]}"; do
+    printf "  - %s\n" "$_owner" >>/tmp/inputs.yml
+done
+printf "  - '%s'\n" "$DB_USER_UC" >>/tmp/inputs.yml
 
 # CINC Auditor is invoked as `cinc-auditor` (falls back to `inspec` if aliased).
 AUDITOR=cinc-auditor
@@ -186,7 +193,23 @@ command -v "$AUDITOR" >/dev/null 2>&1 || AUDITOR=inspec
 # edits are picked up without an image rebuild.
 PROFILE_SOURCE="${PROFILE_SOURCE:-/profile}"
 
-exec_args=(exec "$PROFILE_SOURCE" --input-file /tmp/inputs.yml)
+RDS_INPUT_FILE="${RDS_INPUT_FILE:-${PROFILE_SOURCE}/rds-inputs.yml}"
+[ -r "$RDS_INPUT_FILE" ] || { echo "run-validation: cannot read RDS_INPUT_FILE ${RDS_INPUT_FILE}" >&2; exit 1; }
+
+# --- Input-file precedence (CINC Auditor 7) --------------------------------
+# Pass the files as ONE --input-file flag, not repeated flags. On auditor:7,
+# repeated flags REPLACE the input set wholesale (a key a later file omits reverts
+# to the profile default, silently wiping user/password + allowlists); a single
+# flag MERGES per key (later file wins a shared key, unique keys survive).
+# Order: dynamic /tmp/inputs.yml, then rds-inputs.yml, then any site --input-file
+# (so a shared key resolves site > rds > dynamic).
+input_files=(/tmp/inputs.yml "$RDS_INPUT_FILE")
+if [ -n "$INPUT_FILE" ]; then
+    [ -r "$INPUT_FILE" ] || { echo "run-validation: cannot read INPUT_FILE ${INPUT_FILE}" >&2; exit 1; }
+    input_files+=("$INPUT_FILE")
+fi
+
+exec_args=(exec "$PROFILE_SOURCE" --input-file "${input_files[@]}")
 
 # Always print the CLI report; with --json, also write a timestamped, labeled
 # JSON report so local runs can be saved/compared. Exit status is unaffected.

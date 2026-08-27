@@ -15,6 +15,9 @@ skip_customer = input('skip_customer_responsibility_controls') == true
 
 include_controls 'oracle-database-19c-stig-baseline' do
   if skip_customer
+    # Only skip customer-responsibility controls when they have a SQL-assessed
+    # element that would produce misleading findings in a platform-provider run.
+    # Baseline controls already skipped for manual review do not belong here.
     skip_control 'SV-270495'  # SESSIONS_PER_USER — org-defined value; see docs/RESPONSIBILITY.md
     skip_control 'SV-270549'  # PASSWORD_LOCK_TIME UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
     skip_control 'SV-270550'  # FAILED_LOGIN_ATTEMPTS <=3 — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql

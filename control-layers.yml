@@ -779,6 +779,67 @@ controls:
       (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
       id_pattern before the broad tnslsnr/lsnrctl default so it is unambiguous.
       overlay_status: N/A (platform).
+  - id_pattern: "SV-270534"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270534 (CM-6 b) the directories assigned to the LOG_ARCHIVE_DEST*
+      parameters must be protected from unauthorized access. The DISA check has a
+      SQL fragment (confirm archive logging is configured — LOG_MODE,
+      log_archive_dest*, db_recovery_file_dest; Not a Finding when NOARCHIVELOG)
+      but its ACTUAL requirement is the OS filesystem permissions on those
+      archive/recovery directories (`ls -ld [pathname]`, Windows ACLs — a finding
+      on world/everyone access or any account beyond the Oracle owner/DBAs/backup
+      operators). The fixed baseline body only implements the config fragment (it
+      asserts a destination is configured), NOT the directory-permission target.
+      On managed RDS the archive-log and fast-recovery-area directories are
+      AWS-managed (Oracle-Managed Files on RDS-provisioned storage) and the tenant
+      has no OS/filesystem access to run `ls -ld` or alter permissions — the
+      protectable target is unreachable and inherited from the AWS platform. The
+      overlay OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern before the broad OS/file-permission default
+      so it is unambiguous. See controls/overlay.rb `SV-270534`.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270543"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270543 (CM-6 b) network client connections must be restricted to
+      supported versions. The DISA check inspects the sqlnet.ora file in
+      $ORACLE_HOME/network/admin (or TNS_ADMIN) for
+      SQLNET.ALLOWED_LOGON_VERSION_SERVER / _CLIENT = 12 (or 12a); the fix edits
+      that file. Both require host/OS access to the Oracle Net configuration,
+      which the tenant lacks on managed RDS — sqlnet.ora is AWS-managed and
+      unreachable. The inherited baseline reads
+      file("$ORACLE_HOME/network/admin/sqlnet.ora"), which on RDS resolves against
+      the InSpec runner host (no tenant-managed sqlnet.ora), a misleading signal.
+      Allowed-logon-version enforcement is part of the broker-managed Oracle Net
+      configuration (the same AWS-managed sqlnet.ora layer as the SSL option
+      group) and is inherited from the AWS platform. Overridden to N/A (impact
+      0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit id_pattern
+      before the broad sqlnet.ora listener default so it is unambiguous. See
+      controls/overlay.rb `SV-270543`. overlay_status: N/A (platform).
+  - id_pattern: "SV-270544"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270544 (CM-6 b, high) DBA OS accounts must be granted only the host
+      system privileges necessary to administer the Oracle Database. The DISA
+      check is entirely OS/host-level: on Unix `cat /etc/group | grep -i dba`,
+      `groups root`, `groups [dba user]` (findings: root in the DBA group, a DBA
+      account in the root group, or a DBA account in groups granting non-DBA
+      privileges); on Windows the ORA_DBA / ORA_[SID]_DBA local groups and
+      directly assigned User Rights. The fix revokes host privileges and OS group
+      memberships. On managed RDS the tenant has no OS/host access — /etc/group,
+      /etc/passwd, the DBA/root groups, and Windows local groups are AWS-managed
+      and unreachable, and the broker-issued database user is not a host OS
+      account. The inherited baseline `command('cat /etc/group | grep -i dba')` /
+      `command('groups root')` assertions reflect the InSpec runner host, not the
+      DB server. DBA OS-privilege restriction is inherited from the AWS platform.
+      Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
+      as an explicit id_pattern before the broad OS/file-permission default so it
+      is unambiguous. See controls/overlay.rb `SV-270544`.
+      overlay_status: N/A (platform).
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

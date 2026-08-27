@@ -149,9 +149,9 @@ controls:
   # group (TLS 1.2, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, FIPS.SSLFIPS_140=TRUE).
   # These live in sqlnet.ora / fips.ora, which are AWS-managed on RDS and NOT
   # tenant-SQL-visible — evidence is the option-group config + AWS metadata, plus a
-  # client-side TCPS handshake, not a SQL query. See aws-broker#538 / options.yml.
-  # NOTE: the SSL-only posture also depends on the platform security group allowing
-  # 2484 and denying 1521 (aws-broker#541); until then the cleartext path remains.
+  # client-side TCPS handshake, not a SQL query. See aws-broker#564 / options.yml.
+  # NOTE: the SSL-only posture also depended on the platform security group allowing
+  # 2484 and denying 1521 (terraform-provision#2361), which has been implemented
   - text_pattern: "during transmission|SSLFIPS_140|SQLNET.SSL_VERSION|TCPS|SSL_SERVER_DN_MATCH|encrypt.*transmission|transmission.*encrypt"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds
@@ -160,8 +160,8 @@ controls:
       option group — TLS 1.2, FedRAMP+FIPS cipher, FIPS.SSLFIPS_140=TRUE on a TCPS
       2484 listener. sqlnet.ora/fips.ora are AWS-managed on RDS (not SQL-visible);
       evidenced by option-group config + a client TCPS handshake. DISA Oracle 19c
-      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depends on platform SG (2484
-      open / 1521 denied) for a true TLS-only posture (aws-broker#541).
+      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depended on platform SG (2484
+      open / 1521 denied) for a true TLS-only posture (terraform-provision#2361).
 
   - text_pattern: "audit trail data must be retained|retention"
     set_by: manual_review
@@ -953,7 +953,7 @@ controls:
       broker provisions the listener with the SSL option group so the approved
       transport is TCPS/TLS on port 2484, and the Cloud.gov platform security
       groups further restrict inbound access to only port 2484 (TLS), denying the
-      cleartext 1521 path (aws-broker#541). Inherited from the AWS/Cloud.gov
+      cleartext 1521 path (terraform-provision#2361). Inherited from the AWS/Cloud.gov
       platform. Overridden to N/A (impact 0.0) in BOTH postures (controls/
       overlay.rb). Placed as an explicit id_pattern before the broad tnslsnr/
       lsnrctl default so it is unambiguous. See controls/overlay.rb `SV-270558`.

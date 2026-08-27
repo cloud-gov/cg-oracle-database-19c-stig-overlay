@@ -1368,4 +1368,170 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'server. See control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270558 (CM-7 b / CM-7(1)(b)) — prohibit/restrict unapproved functions,
+  # ports, protocols, and services (PPSM CAL). The DISA check is entirely
+  # listener/Oracle-Net-configuration: communications are handled by the Oracle
+  # Listener, whose config files (SQLNET.ora, LISTENER.ora, TNSNAMES.ora) live in
+  # $ORACLE_HOME/network/admin; the reviewer inspects those files for unauthorized
+  # ports/protocols and the fix edits them and runs `lsnrctl reload`. All of that
+  # requires OS/listener access the tenant does not have on managed RDS — the
+  # listener and its config files are AWS-managed and unreachable, and the
+  # inherited baseline is a manual-review skip. On brokered Cloud.gov RDS the
+  # ports/protocols posture is a PLATFORM fact hardened two layers deep: (1) the
+  # broker provisions the listener with the SSL option group so the approved
+  # transport is TCPS/TLS on port 2484, and (2) the Cloud.gov platform security
+  # groups further restrict inbound access to only port 2484 (TLS), denying the
+  # cleartext 1521 path (terraform-provision#2351). Restriction of ports/protocols/services
+  # is inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by
+  # aws_inherited / verified_by not_applicable_rds). Override to N/A in BOTH
+  # postures so an RDS run is not misled by a missing tenant listener.ora.
+  control 'SV-270558' do
+    impact 0.0
+    title 'Oracle Database must be configured to prohibit or restrict the use of ' \
+          'organization-defined functions, ports, protocols, and/or services, as ' \
+          'defined in the Ports, Protocols, and Services Management Category ' \
+          'Assurance List (PPSM CAL) and vulnerability assessments.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is ' \
+         'listener/Oracle-Net-configuration: the Oracle Listener handles all DB ' \
+         'communications and its config files (SQLNET.ora, LISTENER.ora, ' \
+         'TNSNAMES.ora) live in $ORACLE_HOME/network/admin; the reviewer inspects ' \
+         'those files for unauthorized ports/protocols and the fix edits them and ' \
+         'runs `lsnrctl reload`. Both require OS/listener access the tenant lacks ' \
+         'on managed RDS — the listener and its config files are AWS-managed and ' \
+         'unreachable, and the inherited baseline body is a manual-review skip. On ' \
+         'brokered Cloud.gov RDS the ports/protocols posture is a platform fact: ' \
+         'the broker provisions the listener with the SSL option group so the ' \
+         'approved transport is TCPS/TLS on port 2484, and the Cloud.gov platform ' \
+         'security groups further restrict inbound access to only port 2484 (TLS), ' \
+         'denying the cleartext 1521 path (aws-broker#541). Restriction of ' \
+         'ports/protocols/services is inherited from the AWS/Cloud.gov platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270558 (restrict functions/ports/protocols/services, PPSM CAL, ' \
+             'CM-7 b) is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects the ' \
+           'listener config files (SQLNET.ora/LISTENER.ora/TNSNAMES.ora) under ' \
+           '$ORACLE_HOME/network/admin and the fix reloads the listener; the ' \
+           'listener is AWS-managed on RDS with no tenant OS access. Approved ' \
+           'transport is TCPS/TLS on 2484 (broker SSL option group) and the ' \
+           'Cloud.gov security groups restrict inbound to 2484 only, denying 1521 ' \
+           '(aws-broker#541). See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270566 (IA-5(2)(a)(1)) — when using PKI-based authentication, enforce
+  # authorized access to the corresponding PRIVATE KEY (CAT I / high). The DISA
+  # check reviews the access controls protecting the DBMS's private key, which
+  # Oracle stores in an Oracle Wallet ($ORACLE_HOME/network/admin/sqlnet.ora
+  # WALLET_LOCATION → a wallet file on the DB host); the fix implements strong
+  # access/authentication controls on that wallet/key. On managed AWS RDS the
+  # server-side TLS credentials — the RDS Oracle wallet, its X.509 certificate,
+  # and the corresponding PRIVATE KEY — are provisioned and managed entirely by
+  # AWS as part of the RDS SSL/TLS integration (the SSL option group). The wallet
+  # and private key reside on the AWS-managed DB host filesystem, which the tenant
+  # cannot reach: there is no tenant OS access to sqlnet.ora, the wallet directory,
+  # or the key material, and the broker DB user cannot read or relocate it. Access
+  # control over the database's PKI private key is therefore an AWS platform
+  # responsibility, inherited and not tenant-verifiable by SQL. control-layers.yml
+  # classifies this as set_by aws_inherited / verified_by not_applicable_rds.
+  # Override to N/A (impact 0.0) in BOTH postures. (Client-side wallet/key
+  # protection on the tenant's own connecting systems is a separate customer
+  # operational concern outside this database control's scope.)
+  control 'SV-270566' do
+    impact 0.0
+    title 'Oracle Database, when using public key infrastructure (PKI)-based ' \
+          'authentication, must enforce authorized access to the corresponding ' \
+          'private key.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reviews the access ' \
+         'controls protecting the DBMS private key — stored in an Oracle Wallet ' \
+         'referenced by $ORACLE_HOME/network/admin/sqlnet.ora (WALLET_LOCATION) on ' \
+         'the DB host — and the fix implements strong access/authentication ' \
+         'controls on that wallet/key. On managed AWS RDS the server-side TLS ' \
+         'credentials (the RDS Oracle wallet, its X.509 certificate, and the ' \
+         'corresponding private key) are provisioned and managed entirely by AWS ' \
+         'as part of the RDS SSL/TLS integration (the broker SSL option group). ' \
+         'The wallet and private key live on the AWS-managed DB host filesystem, ' \
+         'which the tenant cannot reach: there is no tenant OS access to ' \
+         'sqlnet.ora, the wallet directory, or the key material, and the ' \
+         'broker-issued DB user cannot read or relocate it. Access control over ' \
+         'the database PKI private key is an AWS platform responsibility, ' \
+         'inherited and not tenant-verifiable by SQL (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds). Client-side wallet/key ' \
+         'protection on the tenant\'s own connecting systems is a separate customer ' \
+         'operational concern outside this database control\'s scope.'
+    tag responsibility: 'platform'
+    describe 'SV-270566 (enforce authorized access to the PKI private key, ' \
+             'IA-5(2)(a)(1)) is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the DBMS private key lives in an ' \
+           'Oracle Wallet on the AWS-managed DB host (referenced by sqlnet.ora ' \
+           'WALLET_LOCATION); the RDS server-side TLS wallet, certificate, and ' \
+           'private key are provisioned and access-controlled by AWS (broker SSL ' \
+           'option group) with no tenant OS/filesystem access. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # --- MANUAL disposition: satisfied by the aws-broker TLS implementation --------
+  # SV-270565 (IA-5(1)(c)) — if passwords are used for authentication, the database
+  # must transmit only ENCRYPTED representations of passwords (protect passwords in
+  # transit). The DISA check is procedural: it is Not a Finding if all accounts are
+  # authenticated by the OS/an enterprise mechanism (not Oracle); otherwise the
+  # reviewer inspects $ORACLE_HOME/network/admin/sqlnet.ora for TLS/wallet entries
+  # (WALLET_LOCATION, SSL_CIPHER_SUITES, SSL_VERSION, SSL_CLIENT_AUTHENTICATION) —
+  # a host/OS review the tenant cannot perform on managed RDS (sqlnet.ora is
+  # AWS-managed and unreachable), and there is no tenant SQL predicate for it. On
+  # brokered Cloud.gov RDS this is satisfied by the aws-broker TLS implementation
+  # (aws-broker#564): the broker provisions the RDS SSL option group (TLS 1.2,
+  # FIPS cipher, TCPS listener on port 2484), REQUIRES TLS with host/server-DN
+  # verification (SSL_SERVER_DN_MATCH), and provides the trusted CA certificate(s)
+  # to the client system so password (and all) traffic is encrypted end-to-end.
+  # Because that transport posture is configured in the AWS-managed
+  # sqlnet.ora/option group (not tenant SQL) and its assurance is a documented
+  # broker/platform integration, the overlay records a Manual disposition
+  # (set_by: aws_rds_option_group; see control-layers.yml "during transmission"
+  # SSL-option-group entry) rather than a zero-test pass or a misleading
+  # missing-sqlnet.ora failure.
+  control 'SV-270565' do
+    impact 0.0
+    title 'If passwords are used for authentication, the Oracle Database must ' \
+          'transmit only encrypted representations of passwords.'
+    desc 'Manual disposition (satisfied by the aws-broker TLS implementation). ' \
+         'The DISA check is procedural: Not a Finding if all accounts authenticate ' \
+         'via the OS/an enterprise mechanism, otherwise inspect ' \
+         '$ORACLE_HOME/network/admin/sqlnet.ora for TLS/wallet entries ' \
+         '(WALLET_LOCATION, SSL_CIPHER_SUITES, SSL_VERSION, ' \
+         'SSL_CLIENT_AUTHENTICATION) — a host/OS review with no tenant SQL ' \
+         'predicate, and sqlnet.ora is AWS-managed and unreachable on managed RDS. ' \
+         'On brokered Cloud.gov RDS this is satisfied by the aws-broker TLS ' \
+         'implementation (aws-broker#564): the broker provisions the RDS SSL ' \
+         'option group (TLS 1.2, ' \
+         'FIPS cipher, TCPS listener on port 2484), requires TLS with host/' \
+         'server-DN verification (SSL_SERVER_DN_MATCH), and provides the trusted ' \
+         'CA certificate(s) to the client system, so passwords are transmitted ' \
+         'only in encrypted form. That transport posture is configured in the ' \
+         'AWS-managed sqlnet.ora/option group (not tenant SQL) and its assurance is ' \
+         'a documented broker/platform integration, so the overlay records a ' \
+         'Manual disposition rather than a zero-test pass or a misleading ' \
+         'missing-sqlnet.ora failure. See control-layers.yml (the "during ' \
+         'transmission" SSL-option-group entry) and docs/RESPONSIBILITY.md.'
+    tag responsibility: 'platform'
+    describe 'The implementation of this control, transmitting "only encrypted ' \
+             'representations of passwords", is satisfied by the aws-broker TLS ' \
+             'implementation: the broker provisions the RDS SSL option group (TLS ' \
+             '1.2, FIPS cipher, TCPS on port 2484), requires TLS with host/' \
+             'server-DN verification, and provides the trusted CA certificate(s) ' \
+             'to the client, encrypting password traffic in transit. The transport ' \
+             'is configured in the AWS-managed sqlnet.ora/option group, not tenant ' \
+             'SQL, so it is a documented broker/platform disposition rather than an ' \
+             'automated SQL assertion.' do
+      skip 'Manual disposition: satisfied by the aws-broker TLS implementation ' \
+           '(RDS SSL option group — TLS 1.2, FIPS cipher, TCPS 2484 — with ' \
+           'required TLS host/server-DN verification and broker-provided client ' \
+           'certificates). Configured in the AWS-managed sqlnet.ora/option group; ' \
+           'no tenant SQL assertion is applicable on managed RDS. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
 end

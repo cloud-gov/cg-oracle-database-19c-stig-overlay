@@ -1224,4 +1224,148 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'not the DB server. See control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270548 (AC-5 c / CM-6 b) — the database must be protected from unauthorized
+  # access by developers on SHARED production/development HOST systems. The DISA
+  # check is explicitly Not Applicable when no host contains both a development and
+  # a production database, and otherwise is a host/OS review: inspect /etc/oratab
+  # for co-resident instances and interview the system owner / development team,
+  # then check whether developer OS/DB privileges on the production host are
+  # documented and approved. The fix separates developer vs. production
+  # accounts/roles at the host level. On managed RDS the tenant has no host/OS
+  # access — /etc/oratab and the DB host are AWS-managed and unreachable — and the
+  # broker provisions each database as a DEDICATED instance, not a shared dev/prod
+  # host, so the DISA "no host contains both" Not-Applicable clause holds. The
+  # inherited baseline body is a manual-review skip (no SQL). control-layers.yml
+  # classifies the OS/host path as set_by: aws_inherited / verified_by:
+  # not_applicable_rds. Override to N/A (impact 0.0) in BOTH postures. (In-database
+  # developer-privilege appropriateness on customer-created accounts remains a
+  # customer responsibility, covered by the role/authorization controls.)
+  control 'SV-270548' do
+    impact 0.0
+    title 'Oracle Database must be protected from unauthorized access by ' \
+          'developers on shared production/development host systems.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is explicitly Not ' \
+         'Applicable when no host contains both a development and a production ' \
+         'database, and otherwise is a host/OS review — inspect /etc/oratab for ' \
+         'co-resident instances, interview the system owner/development team, and ' \
+         'check whether developer OS/DB privileges on the production host are ' \
+         'documented and approved; the fix separates developer vs. production ' \
+         'accounts/roles at the host level. On managed RDS the tenant has no ' \
+         'host/OS access (/etc/oratab and the DB host are AWS-managed and ' \
+         'unreachable) and the broker provisions each database as a dedicated ' \
+         'instance — not a shared dev/prod host — so the DISA "no host contains ' \
+         'both" Not-Applicable clause holds. The inherited baseline body is a ' \
+         'manual-review skip. Shared-host isolation is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds). In-database developer-privilege appropriateness on ' \
+         'customer-created accounts remains a customer responsibility, covered by ' \
+         'the role/authorization controls.'
+    tag responsibility: 'platform'
+    describe 'SV-270548 (protect DB from developers on shared prod/dev hosts, ' \
+             'AC-5 c) is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check is a host/OS review ' \
+           '(/etc/oratab co-resident instances, host developer privileges) and is ' \
+           'Not a Finding when no host holds both dev and prod databases; brokered ' \
+           'RDS provisions dedicated instances with no tenant host access. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270555 (CM-6 b / CM-7 a) — OS accounts used to run external procedures
+  # called by the database must have limited privileges. The DISA check inspects
+  # the OS account behind extproc/external jobs — it reads
+  # $ORACLE_HOME/rdbms/admin/externaljob.ora for run_user=/run_group= (must be
+  # "nobody") and reviews the privileges of the OS account running external
+  # procedures. The fix limits those DBMS-related OS-account privileges. Both are
+  # host/OS-level facts unreachable on managed RDS: externaljob.ora and the OS
+  # accounts live under the AWS-managed Oracle Home / DB host, and the tenant has
+  # no OS access. The inherited baseline body reads
+  # file("$ORACLE_HOME/rdbms/admin/externaljob.ora"), which on RDS resolves against
+  # the InSpec RUNNER host (no tenant-managed file), a misleading signal. Managed
+  # RDS also does not expose a tenant-usable external-procedure OS agent. The
+  # extproc OS-account privilege restriction is inherited from the AWS platform.
+  # control-layers.yml classifies the "$ORACLE_HOME/" OS path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A in BOTH
+  # postures.
+  control 'SV-270555' do
+    impact 0.0
+    title 'OS accounts used to run external procedures called by Oracle Database ' \
+          'must have limited privileges.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check inspects the OS ' \
+         'account behind the external-procedure agent: it reads ' \
+         '$ORACLE_HOME/rdbms/admin/externaljob.ora for run_user=/run_group= ' \
+         '(expected "nobody") and reviews the privileges of the OS account used to ' \
+         'run external procedures; the fix limits those DBMS-related OS-account ' \
+         'privileges. Both are host/OS-level facts the tenant cannot reach on ' \
+         'managed RDS — externaljob.ora and the OS accounts live under the ' \
+         'AWS-managed Oracle Home / DB host, and there is no tenant OS access nor a ' \
+         'tenant-usable external-procedure OS agent. The inherited baseline reads ' \
+         'file("$ORACLE_HOME/rdbms/admin/externaljob.ora"), which on RDS resolves ' \
+         'against the InSpec runner host (no tenant-managed file), a misleading ' \
+         'signal. External-procedure OS-account privilege restriction is inherited ' \
+         'from the AWS platform (control-layers.yml: set_by aws_inherited / ' \
+         'verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270555 (limit extproc OS-account privileges, CM-6 b / CM-7 a) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads ' \
+           '$ORACLE_HOME/rdbms/admin/externaljob.ora and reviews the ' \
+           'external-procedure OS account; the Oracle Home and host OS accounts ' \
+           'are AWS-managed on RDS with no tenant access, and the inherited file ' \
+           'assertion reflects the runner host, not the DB server. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270557 (CM-7 a) — access to external executables must be disabled or
+  # restricted. The DISA check is entirely host/OS/listener-level: locate the
+  # extproc/extproc.exe executable under $ORACLE_HOME/bin (or the ORACLE_BASE
+  # path) and check its file permissions; read $ORACLE_HOME/rdbms/admin/
+  # externaljob.ora (run_user/run_group) and $ORACLE_HOME/hs/admin/extproc.ora
+  # (EXTPROC_DLLS=ONLY:...); and inspect listener.ora / tnsnames.ora for any
+  # "extproc" references, a dedicated IPC listener, etc. The fix stops the
+  # listener, edits listener.ora/tnsnames.ora, and alters executable file
+  # permissions. All of it requires OS/filesystem and listener access the tenant
+  # does not have on managed RDS: the Oracle Home, its bin/hs/rdbms directories,
+  # and the AWS-managed listener are unreachable. The inherited baseline body reads
+  # file("$ORACLE_HOME/rdbms/admin/externaljob.ora") and
+  # file("$ORACLE_HOME/hs/admin/extproc.ora") (asserting `should exist`), which on
+  # RDS resolve against the InSpec RUNNER host and would falsely fail. Managed RDS
+  # does not expose the external-procedure agent to the tenant. External-executable
+  # restriction is inherited from the AWS platform. control-layers.yml classifies
+  # the "$ORACLE_HOME/" / listener path as set_by: aws_inherited / verified_by:
+  # not_applicable_rds. Override to N/A in BOTH postures.
+  control 'SV-270557' do
+    impact 0.0
+    title 'Access to external executables must be disabled or restricted.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is host/OS/' \
+         'listener-level: locate the extproc executable under $ORACLE_HOME/bin ' \
+         '(or the ORACLE_BASE path) and check its permissions; read ' \
+         '$ORACLE_HOME/rdbms/admin/externaljob.ora (run_user/run_group) and ' \
+         '$ORACLE_HOME/hs/admin/extproc.ora (EXTPROC_DLLS=ONLY:...); and inspect ' \
+         'listener.ora/tnsnames.ora for any "extproc" references and a dedicated ' \
+         'IPC listener. The fix stops the listener, edits listener.ora/' \
+         'tnsnames.ora, and alters executable file permissions. All of this ' \
+         'requires OS/filesystem and listener access the tenant does not have on ' \
+         'managed RDS — the Oracle Home (bin/hs/rdbms) and the AWS-managed listener ' \
+         'are unreachable, and RDS does not expose the external-procedure agent to ' \
+         'the tenant. The inherited baseline reads ' \
+         'file("$ORACLE_HOME/rdbms/admin/externaljob.ora") and ' \
+         'file("$ORACLE_HOME/hs/admin/extproc.ora") (`should exist`), which on RDS ' \
+         'resolve against the InSpec runner host and would falsely fail. ' \
+         'External-executable restriction is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270557 (disable/restrict access to external executables, CM-7 a) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects the extproc ' \
+           'executable, externaljob.ora/extproc.ora under $ORACLE_HOME, and ' \
+           'listener.ora/tnsnames.ora extproc references; the Oracle Home and ' \
+           'listener are AWS-managed on RDS with no tenant access, and the ' \
+           'inherited file() assertions reflect the runner host, not the DB ' \
+           'server. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
 end

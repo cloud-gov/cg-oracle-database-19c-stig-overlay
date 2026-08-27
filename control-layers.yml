@@ -711,6 +711,40 @@ controls:
       account. The software owner / host SYSDBA-capable installation account is
       AWS-managed and unavailable to tenants on RDS; the broker-created database
       user is not that account. See controls/overlay.rb `SV-270516`.
+  - id_pattern: "SV-270537"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270537 (CM-6 b) use of the Oracle Database installation account must be
+      logged. The DISA check reviews documented monitoring procedures and host
+      audit logs for the DBMS software installation account. On managed RDS that
+      host-level account and its audit logs are AWS-managed and unavailable to
+      tenants; the broker-created database user is not the software installation
+      account. Logging/accountability for that account is inherited from the
+      platform. See controls/overlay.rb `SV-270537`.
+  - id_pattern: "SV-270538"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270538 (CM-6 b) data files, transaction logs, and audit files must be
+      stored in dedicated directories or disk partitions separate from software or
+      other application files. The DISA check reviews host disk/directory layout;
+      on managed RDS that filesystem/storage layout is AWS-managed and unreachable
+      to tenants (Oracle-Managed Files on RDS-provisioned storage), and no tenant
+      application shares the RDS host filesystem. See controls/overlay.rb
+      `SV-270538`.
+  - id_pattern: "SV-270546"
+    set_by: sql_hardening
+    verified_by: manual_review
+    rationale: >-
+      SV-270546 (CM-6 b / AC-2(2)) temporary or emergency accounts must be
+      identifiable. The STIG explicitly allows a consistently enforced policy
+      forbidding temporary/emergency accounts, or enterprise-level authentication,
+      as Not a Finding. If a tenant uses Oracle-managed temporary accounts, the fix
+      is db-altering, org-defined SQL: create/use a distinctive temporary profile
+      and assign applicable users to it. This is a customer responsibility; the
+      baseline remains a manual-review skip and the control is not part of the
+      overlay SQL-only skip gate.
   - id_pattern: "SV-270512"
     set_by: aws_inherited
     verified_by: not_applicable_rds

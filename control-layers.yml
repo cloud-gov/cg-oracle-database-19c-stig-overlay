@@ -960,10 +960,10 @@ controls:
       (WALLET_LOCATION, SSL_CIPHER_SUITES, SSL_VERSION, SSL_CLIENT_AUTHENTICATION)
       — a host/OS review with no tenant SQL predicate, and sqlnet.ora is
       AWS-managed and unreachable on managed RDS. Satisfied by the aws-broker TLS
-      implementation: the broker provisions the RDS SSL option group (TLS 1.2,
-      FIPS cipher, TCPS listener on port 2484), requires TLS with host/server-DN
-      verification (SSL_SERVER_DN_MATCH), and provides the trusted CA
-      certificate(s) to the client system, so passwords are transmitted only in
+      implementation (aws-broker#564): the broker provisions the RDS SSL option
+      group (TLS 1.2, FIPS cipher, TCPS listener on port 2484), requires TLS with
+      host/server-DN verification (SSL_SERVER_DN_MATCH), and provides the trusted
+      CA certificate(s) to the client system, so passwords are transmitted only in
       encrypted form. Because the transport is configured in the AWS-managed
       sqlnet.ora/option group (not tenant SQL) and its assurance is a documented
       broker/platform integration, the overlay records a Manual disposition

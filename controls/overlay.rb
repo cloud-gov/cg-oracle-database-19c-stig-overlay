@@ -1482,16 +1482,17 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # (WALLET_LOCATION, SSL_CIPHER_SUITES, SSL_VERSION, SSL_CLIENT_AUTHENTICATION) —
   # a host/OS review the tenant cannot perform on managed RDS (sqlnet.ora is
   # AWS-managed and unreachable), and there is no tenant SQL predicate for it. On
-  # brokered Cloud.gov RDS this is satisfied by the aws-broker TLS implementation:
-  # the broker provisions the RDS SSL option group (TLS 1.2, FIPS cipher, TCPS
-  # listener on port 2484), REQUIRES TLS with host/server-DN verification
-  # (SSL_SERVER_DN_MATCH), and provides the trusted CA certificate(s) to the client
-  # system so password (and all) traffic is encrypted end-to-end. Because that
-  # transport posture is configured in the AWS-managed sqlnet.ora/option group
-  # (not tenant SQL) and its assurance is a documented broker/platform integration,
-  # the overlay records a Manual disposition (satisfied by the aws-broker TLS
-  # posture; see control-layers.yml "during transmission" SSL-option-group entry)
-  # rather than a zero-test pass or a misleading missing-sqlnet.ora failure.
+  # brokered Cloud.gov RDS this is satisfied by the aws-broker TLS implementation
+  # (aws-broker#564): the broker provisions the RDS SSL option group (TLS 1.2,
+  # FIPS cipher, TCPS listener on port 2484), REQUIRES TLS with host/server-DN
+  # verification (SSL_SERVER_DN_MATCH), and provides the trusted CA certificate(s)
+  # to the client system so password (and all) traffic is encrypted end-to-end.
+  # Because that transport posture is configured in the AWS-managed
+  # sqlnet.ora/option group (not tenant SQL) and its assurance is a documented
+  # broker/platform integration, the overlay records a Manual disposition
+  # (set_by: aws_rds_option_group; see control-layers.yml "during transmission"
+  # SSL-option-group entry) rather than a zero-test pass or a misleading
+  # missing-sqlnet.ora failure.
   control 'SV-270565' do
     impact 0.0
     title 'If passwords are used for authentication, the Oracle Database must ' \
@@ -1504,7 +1505,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'SSL_CLIENT_AUTHENTICATION) — a host/OS review with no tenant SQL ' \
          'predicate, and sqlnet.ora is AWS-managed and unreachable on managed RDS. ' \
          'On brokered Cloud.gov RDS this is satisfied by the aws-broker TLS ' \
-         'implementation: the broker provisions the RDS SSL option group (TLS 1.2, ' \
+         'implementation (aws-broker#564): the broker provisions the RDS SSL ' \
+         'option group (TLS 1.2, ' \
          'FIPS cipher, TCPS listener on port 2484), requires TLS with host/' \
          'server-DN verification (SSL_SERVER_DN_MATCH), and provides the trusted ' \
          'CA certificate(s) to the client system, so passwords are transmitted ' \

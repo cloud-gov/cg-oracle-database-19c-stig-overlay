@@ -1086,4 +1086,289 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270534 (CM-6 b) — the directories assigned to the LOG_ARCHIVE_DEST*
+  # parameters must be protected from unauthorized access. The DISA check has two
+  # parts: (1) a SQL portion that confirms archive logging is configured (LOG_MODE,
+  # log_archive_dest / log_archive_dest_[1-10] / db_recovery_file_dest — and is Not
+  # a Finding outright when LOG_MODE is NOARCHIVELOG), and (2) the control's ACTUAL
+  # requirement — inspect the OS filesystem permissions on those directories
+  # (`ls -ld [pathname]` on Unix, Explorer ACLs on Windows) and it is a finding if
+  # world/everyone access is granted or any account beyond the Oracle owner/DBAs/
+  # backup operators is listed. The fixed baseline body only implements part 1 (it
+  # asserts at least one destination is configured); it does NOT assess the
+  # directory permissions that are the STIG's real target. On managed RDS the
+  # archive-log and fast-recovery-area directories are AWS-managed (Oracle-Managed
+  # Files on RDS-provisioned storage) and the tenant has no OS/filesystem access to
+  # run `ls -ld` or alter their permissions — the protectable target is unreachable
+  # and inherited from the AWS platform. control-layers.yml classifies the
+  # OS/file-permission path as set_by: aws_inherited / verified_by:
+  # not_applicable_rds. Override to N/A (impact 0.0) in BOTH postures so an RDS run
+  # is not misled by the config-only fragment standing in for a permissions check.
+  control 'SV-270534' do
+    impact 0.0
+    title 'The directories assigned to the LOG_ARCHIVE_DEST* parameters must be ' \
+          'protected from unauthorized access.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check confirms archive ' \
+         'logging is configured via SQL (LOG_MODE, log_archive_dest*, ' \
+         'db_recovery_file_dest) and then — the control\'s actual requirement — ' \
+         'inspects the OS filesystem permissions on those archive/recovery ' \
+         'directories (`ls -ld [pathname]`, Explorer ACLs), a finding if world/' \
+         'everyone access or any account beyond the Oracle owner, DBAs, and backup ' \
+         'operators is present. The fixed baseline body only asserts a destination ' \
+         'is configured; it does not assess the directory permissions the STIG ' \
+         'targets. On managed RDS the archive-log and fast-recovery-area ' \
+         'directories are AWS-managed (Oracle-Managed Files on RDS-provisioned ' \
+         'storage) and the tenant has no OS/filesystem access to run `ls -ld` or ' \
+         'alter their permissions — the protectable target is unreachable. ' \
+         'Directory protection of the archive logs is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270534 (protect LOG_ARCHIVE_DEST* directories, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the control\'s real requirement ' \
+           'is OS filesystem permissions on the archive-log / recovery ' \
+           'directories (`ls -ld`), which are AWS-managed on RDS (Oracle-Managed ' \
+           'Files) with no tenant OS access; the fixed baseline only checks that a ' \
+           'destination is configured, not its permissions. See control-layers.yml ' \
+           'and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270543 (CM-6 b) — network client connections must be restricted to
+  # supported versions. The DISA check inspects the sqlnet.ora file in
+  # $ORACLE_HOME/network/admin (or TNS_ADMIN) for
+  # SQLNET.ALLOWED_LOGON_VERSION_SERVER / _CLIENT set to 12 (or 12a); the fix edits
+  # that file. Both require host/OS access to the Oracle Net configuration, which
+  # the tenant does not have on managed RDS — sqlnet.ora is AWS-managed and
+  # unreachable. The inherited baseline body reads
+  # file("#{oracle_home}/network/admin/sqlnet.ora"), which on RDS resolves against
+  # the InSpec RUNNER host (no tenant-managed sqlnet.ora), producing a misleading
+  # result. control-layers.yml classifies the sqlnet.ora path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A in BOTH
+  # postures. NOTE: allowed-logon-version enforcement of the SSL/native crypto
+  # posture is delivered by the broker's Oracle Net configuration (the same
+  # AWS-managed sqlnet.ora layer as the SSL option group, see SV-270579/271),
+  # inherited from the platform rather than tenant-set.
+  control 'SV-270543' do
+    impact 0.0
+    title 'Network client connections must be restricted to supported versions.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check inspects the ' \
+         'sqlnet.ora file in $ORACLE_HOME/network/admin (or the TNS_ADMIN ' \
+         'directory) for SQLNET.ALLOWED_LOGON_VERSION_SERVER / _CLIENT set to 12 ' \
+         'or 12a, and the fix edits that file. Both require host/OS access to the ' \
+         'Oracle Net configuration, which the tenant does not have on managed RDS ' \
+         '— sqlnet.ora is AWS-managed and unreachable. The inherited baseline ' \
+         'reads file("$ORACLE_HOME/network/admin/sqlnet.ora"), which on RDS ' \
+         'resolves against the InSpec runner host (no tenant-managed sqlnet.ora), ' \
+         'producing a misleading result. Allowed-logon-version enforcement is part ' \
+         'of the broker-managed Oracle Net configuration (the same AWS-managed ' \
+         'sqlnet.ora layer as the SSL option group) and is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270543 (restrict clients to supported logon versions, CM-6 b) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads ' \
+           'SQLNET.ALLOWED_LOGON_VERSION_* in sqlnet.ora under ' \
+           '$ORACLE_HOME/network/admin and the fix edits that file; sqlnet.ora is ' \
+           'AWS-managed on RDS with no tenant OS access, and the inherited file ' \
+           'assertion reflects the runner host, not the DB server. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270544 (CM-6 b, severity high) — DBA OS accounts must be granted only the
+  # host system privileges necessary to administer the Oracle Database. The DISA
+  # check is entirely OS/host-level: on Unix, `cat /etc/group | grep -i dba`,
+  # `groups root`, and `groups [dba user]` to inspect host group memberships (root
+  # in the DBA group, DBA accounts in the root group, or DBA accounts in groups
+  # granting non-DBA privileges are findings); on Windows, the ORA_DBA /
+  # ORA_[SID]_DBA local groups and directly assigned User Rights. The fix revokes
+  # host privileges and OS group memberships. All of this targets the OS accounts
+  # and groups on the DB host. On managed RDS the tenant has no OS/host access —
+  # /etc/group, /etc/passwd, the DBA/root groups, and Windows local groups are
+  # AWS-managed and unreachable, and the broker-issued database user is not a host
+  # OS account at all. The inherited baseline body runs
+  # command('cat /etc/group | grep -i dba') / command('groups root') on the InSpec
+  # RUNNER host, not the DB server, producing a meaningless signal.
+  # control-layers.yml classifies the /etc/group OS-enumeration path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A in BOTH
+  # postures.
+  control 'SV-270544' do
+    impact 0.0
+    title 'Database administrator (DBA) OS accounts must be granted only those ' \
+          'host system privileges necessary for the administration of the Oracle ' \
+          'Database.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is OS/host-level: on ' \
+         'Unix it enumerates host group memberships (`cat /etc/group | grep -i ' \
+         'dba`, `groups root`, `groups [dba user]`) and is a finding when root is ' \
+         'in the DBA group, a DBA account is in the root group, or a DBA account ' \
+         'belongs to groups granting non-DBA privileges; on Windows it reviews the ' \
+         'ORA_DBA / ORA_[SID]_DBA local groups and directly assigned User Rights. ' \
+         'The fix revokes host privileges and OS group memberships. On managed RDS ' \
+         'the tenant has no OS/host access — /etc/group, /etc/passwd, the DBA/root ' \
+         'groups, and Windows local groups are AWS-managed and unreachable, and ' \
+         'the broker-issued database user is not a host OS account. The inherited ' \
+         'baseline `command(\'cat /etc/group | grep -i dba\')` / ' \
+         '`command(\'groups root\')` assertions reflect the InSpec runner host, ' \
+         'not the DB server, producing a meaningless signal. DBA OS-privilege ' \
+         'restriction is inherited from the AWS platform (control-layers.yml: ' \
+         'set_by aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270544 (limit DBA OS-account host privileges, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check enumerates host OS ' \
+           'groups (/etc/group, root group, Windows ORA_DBA) and the fix revokes ' \
+           'host privileges/group memberships; the DB host OS is AWS-managed on ' \
+           'RDS with no tenant access, the broker user is not a host account, and ' \
+           'the inherited /etc/group / groups assertions reflect the runner host, ' \
+           'not the DB server. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270548 (AC-5 c / CM-6 b) — the database must be protected from unauthorized
+  # access by developers on SHARED production/development HOST systems. The DISA
+  # check is explicitly Not Applicable when no host contains both a development and
+  # a production database, and otherwise is a host/OS review: inspect /etc/oratab
+  # for co-resident instances and interview the system owner / development team,
+  # then check whether developer OS/DB privileges on the production host are
+  # documented and approved. The fix separates developer vs. production
+  # accounts/roles at the host level. On managed RDS the tenant has no host/OS
+  # access — /etc/oratab and the DB host are AWS-managed and unreachable — and the
+  # broker provisions each database as a DEDICATED instance, not a shared dev/prod
+  # host, so the DISA "no host contains both" Not-Applicable clause holds. The
+  # inherited baseline body is a manual-review skip (no SQL). control-layers.yml
+  # classifies the OS/host path as set_by: aws_inherited / verified_by:
+  # not_applicable_rds. Override to N/A (impact 0.0) in BOTH postures. (In-database
+  # developer-privilege appropriateness on customer-created accounts remains a
+  # customer responsibility, covered by the role/authorization controls.)
+  control 'SV-270548' do
+    impact 0.0
+    title 'Oracle Database must be protected from unauthorized access by ' \
+          'developers on shared production/development host systems.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is explicitly Not ' \
+         'Applicable when no host contains both a development and a production ' \
+         'database, and otherwise is a host/OS review — inspect /etc/oratab for ' \
+         'co-resident instances, interview the system owner/development team, and ' \
+         'check whether developer OS/DB privileges on the production host are ' \
+         'documented and approved; the fix separates developer vs. production ' \
+         'accounts/roles at the host level. On managed RDS the tenant has no ' \
+         'host/OS access (/etc/oratab and the DB host are AWS-managed and ' \
+         'unreachable) and the broker provisions each database as a dedicated ' \
+         'instance — not a shared dev/prod host — so the DISA "no host contains ' \
+         'both" Not-Applicable clause holds. The inherited baseline body is a ' \
+         'manual-review skip. Shared-host isolation is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds). In-database developer-privilege appropriateness on ' \
+         'customer-created accounts remains a customer responsibility, covered by ' \
+         'the role/authorization controls.'
+    tag responsibility: 'platform'
+    describe 'SV-270548 (protect DB from developers on shared prod/dev hosts, ' \
+             'AC-5 c) is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check is a host/OS review ' \
+           '(/etc/oratab co-resident instances, host developer privileges) and is ' \
+           'Not a Finding when no host holds both dev and prod databases; brokered ' \
+           'RDS provisions dedicated instances with no tenant host access. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270555 (CM-6 b / CM-7 a) — OS accounts used to run external procedures
+  # called by the database must have limited privileges. The DISA check inspects
+  # the OS account behind extproc/external jobs — it reads
+  # $ORACLE_HOME/rdbms/admin/externaljob.ora for run_user=/run_group= (must be
+  # "nobody") and reviews the privileges of the OS account running external
+  # procedures. The fix limits those DBMS-related OS-account privileges. Both are
+  # host/OS-level facts unreachable on managed RDS: externaljob.ora and the OS
+  # accounts live under the AWS-managed Oracle Home / DB host, and the tenant has
+  # no OS access. The inherited baseline body reads
+  # file("$ORACLE_HOME/rdbms/admin/externaljob.ora"), which on RDS resolves against
+  # the InSpec RUNNER host (no tenant-managed file), a misleading signal. Managed
+  # RDS also does not expose a tenant-usable external-procedure OS agent. The
+  # extproc OS-account privilege restriction is inherited from the AWS platform.
+  # control-layers.yml classifies the "$ORACLE_HOME/" OS path as set_by:
+  # aws_inherited / verified_by: not_applicable_rds. Override to N/A in BOTH
+  # postures.
+  control 'SV-270555' do
+    impact 0.0
+    title 'OS accounts used to run external procedures called by Oracle Database ' \
+          'must have limited privileges.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check inspects the OS ' \
+         'account behind the external-procedure agent: it reads ' \
+         '$ORACLE_HOME/rdbms/admin/externaljob.ora for run_user=/run_group= ' \
+         '(expected "nobody") and reviews the privileges of the OS account used to ' \
+         'run external procedures; the fix limits those DBMS-related OS-account ' \
+         'privileges. Both are host/OS-level facts the tenant cannot reach on ' \
+         'managed RDS — externaljob.ora and the OS accounts live under the ' \
+         'AWS-managed Oracle Home / DB host, and there is no tenant OS access nor a ' \
+         'tenant-usable external-procedure OS agent. The inherited baseline reads ' \
+         'file("$ORACLE_HOME/rdbms/admin/externaljob.ora"), which on RDS resolves ' \
+         'against the InSpec runner host (no tenant-managed file), a misleading ' \
+         'signal. External-procedure OS-account privilege restriction is inherited ' \
+         'from the AWS platform (control-layers.yml: set_by aws_inherited / ' \
+         'verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270555 (limit extproc OS-account privileges, CM-6 b / CM-7 a) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check reads ' \
+           '$ORACLE_HOME/rdbms/admin/externaljob.ora and reviews the ' \
+           'external-procedure OS account; the Oracle Home and host OS accounts ' \
+           'are AWS-managed on RDS with no tenant access, and the inherited file ' \
+           'assertion reflects the runner host, not the DB server. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270557 (CM-7 a) — access to external executables must be disabled or
+  # restricted. The DISA check is entirely host/OS/listener-level: locate the
+  # extproc/extproc.exe executable under $ORACLE_HOME/bin (or the ORACLE_BASE
+  # path) and check its file permissions; read $ORACLE_HOME/rdbms/admin/
+  # externaljob.ora (run_user/run_group) and $ORACLE_HOME/hs/admin/extproc.ora
+  # (EXTPROC_DLLS=ONLY:...); and inspect listener.ora / tnsnames.ora for any
+  # "extproc" references, a dedicated IPC listener, etc. The fix stops the
+  # listener, edits listener.ora/tnsnames.ora, and alters executable file
+  # permissions. All of it requires OS/filesystem and listener access the tenant
+  # does not have on managed RDS: the Oracle Home, its bin/hs/rdbms directories,
+  # and the AWS-managed listener are unreachable. The inherited baseline body reads
+  # file("$ORACLE_HOME/rdbms/admin/externaljob.ora") and
+  # file("$ORACLE_HOME/hs/admin/extproc.ora") (asserting `should exist`), which on
+  # RDS resolve against the InSpec RUNNER host and would falsely fail. Managed RDS
+  # does not expose the external-procedure agent to the tenant. External-executable
+  # restriction is inherited from the AWS platform. control-layers.yml classifies
+  # the "$ORACLE_HOME/" / listener path as set_by: aws_inherited / verified_by:
+  # not_applicable_rds. Override to N/A in BOTH postures.
+  control 'SV-270557' do
+    impact 0.0
+    title 'Access to external executables must be disabled or restricted.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is host/OS/' \
+         'listener-level: locate the extproc executable under $ORACLE_HOME/bin ' \
+         '(or the ORACLE_BASE path) and check its permissions; read ' \
+         '$ORACLE_HOME/rdbms/admin/externaljob.ora (run_user/run_group) and ' \
+         '$ORACLE_HOME/hs/admin/extproc.ora (EXTPROC_DLLS=ONLY:...); and inspect ' \
+         'listener.ora/tnsnames.ora for any "extproc" references and a dedicated ' \
+         'IPC listener. The fix stops the listener, edits listener.ora/' \
+         'tnsnames.ora, and alters executable file permissions. All of this ' \
+         'requires OS/filesystem and listener access the tenant does not have on ' \
+         'managed RDS — the Oracle Home (bin/hs/rdbms) and the AWS-managed listener ' \
+         'are unreachable, and RDS does not expose the external-procedure agent to ' \
+         'the tenant. The inherited baseline reads ' \
+         'file("$ORACLE_HOME/rdbms/admin/externaljob.ora") and ' \
+         'file("$ORACLE_HOME/hs/admin/extproc.ora") (`should exist`), which on RDS ' \
+         'resolve against the InSpec runner host and would falsely fail. ' \
+         'External-executable restriction is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270557 (disable/restrict access to external executables, CM-7 a) ' \
+             'is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects the extproc ' \
+           'executable, externaljob.ora/extproc.ora under $ORACLE_HOME, and ' \
+           'listener.ora/tnsnames.ora extproc references; the Oracle Home and ' \
+           'listener are AWS-managed on RDS with no tenant access, and the ' \
+           'inherited file() assertions reflect the runner host, not the DB ' \
+           'server. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
 end

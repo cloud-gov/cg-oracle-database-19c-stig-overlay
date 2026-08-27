@@ -821,6 +821,129 @@ controls:
       (impact 0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit
       id_pattern before the broad tnslsnr/lsnrctl default so it is unambiguous.
       overlay_status: N/A (platform).
+  - id_pattern: "SV-270534"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270534 (CM-6 b) the directories assigned to the LOG_ARCHIVE_DEST*
+      parameters must be protected from unauthorized access. The DISA check has a
+      SQL fragment (confirm archive logging is configured — LOG_MODE,
+      log_archive_dest*, db_recovery_file_dest; Not a Finding when NOARCHIVELOG)
+      but its ACTUAL requirement is the OS filesystem permissions on those
+      archive/recovery directories (`ls -ld [pathname]`, Windows ACLs — a finding
+      on world/everyone access or any account beyond the Oracle owner/DBAs/backup
+      operators). The fixed baseline body only implements the config fragment (it
+      asserts a destination is configured), NOT the directory-permission target.
+      On managed RDS the archive-log and fast-recovery-area directories are
+      AWS-managed (Oracle-Managed Files on RDS-provisioned storage) and the tenant
+      has no OS/filesystem access to run `ls -ld` or alter permissions — the
+      protectable target is unreachable and inherited from the AWS platform. The
+      overlay OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern before the broad OS/file-permission default
+      so it is unambiguous. See controls/overlay.rb `SV-270534`.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270543"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270543 (CM-6 b) network client connections must be restricted to
+      supported versions. The DISA check inspects the sqlnet.ora file in
+      $ORACLE_HOME/network/admin (or TNS_ADMIN) for
+      SQLNET.ALLOWED_LOGON_VERSION_SERVER / _CLIENT = 12 (or 12a); the fix edits
+      that file. Both require host/OS access to the Oracle Net configuration,
+      which the tenant lacks on managed RDS — sqlnet.ora is AWS-managed and
+      unreachable. The inherited baseline reads
+      file("$ORACLE_HOME/network/admin/sqlnet.ora"), which on RDS resolves against
+      the InSpec runner host (no tenant-managed sqlnet.ora), a misleading signal.
+      Allowed-logon-version enforcement is part of the broker-managed Oracle Net
+      configuration (the same AWS-managed sqlnet.ora layer as the SSL option
+      group) and is inherited from the AWS platform. Overridden to N/A (impact
+      0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit id_pattern
+      before the broad sqlnet.ora listener default so it is unambiguous. See
+      controls/overlay.rb `SV-270543`. overlay_status: N/A (platform).
+  - id_pattern: "SV-270544"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270544 (CM-6 b, high) DBA OS accounts must be granted only the host
+      system privileges necessary to administer the Oracle Database. The DISA
+      check is entirely OS/host-level: on Unix `cat /etc/group | grep -i dba`,
+      `groups root`, `groups [dba user]` (findings: root in the DBA group, a DBA
+      account in the root group, or a DBA account in groups granting non-DBA
+      privileges); on Windows the ORA_DBA / ORA_[SID]_DBA local groups and
+      directly assigned User Rights. The fix revokes host privileges and OS group
+      memberships. On managed RDS the tenant has no OS/host access — /etc/group,
+      /etc/passwd, the DBA/root groups, and Windows local groups are AWS-managed
+      and unreachable, and the broker-issued database user is not a host OS
+      account. The inherited baseline `command('cat /etc/group | grep -i dba')` /
+      `command('groups root')` assertions reflect the InSpec runner host, not the
+      DB server. DBA OS-privilege restriction is inherited from the AWS platform.
+      Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
+      as an explicit id_pattern before the broad OS/file-permission default so it
+      is unambiguous. See controls/overlay.rb `SV-270544`.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270548"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270548 (AC-5 c / CM-6 b) protect the database from unauthorized access by
+      developers on SHARED production/development host systems. The DISA check is
+      explicitly Not Applicable when no host contains both a development and a
+      production database, and otherwise is a host/OS review (inspect /etc/oratab
+      for co-resident instances, interview the system owner/dev team, check whether
+      developer OS/DB privileges on the production host are documented/approved);
+      the fix separates developer vs. production accounts/roles at the host level.
+      On managed RDS the tenant has no host/OS access (/etc/oratab and the DB host
+      are AWS-managed and unreachable) and the broker provisions each database as a
+      DEDICATED instance — not a shared dev/prod host — so the DISA "no host
+      contains both" Not-Applicable clause holds. The inherited baseline body is a
+      manual-review skip. Shared-host isolation is inherited from the AWS platform.
+      In-database developer-privilege appropriateness on customer-created accounts
+      remains a customer responsibility (role/authorization controls). The overlay
+      OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
+      as an explicit id_pattern before the broad OS/host defaults. See
+      controls/overlay.rb `SV-270548`. overlay_status: N/A (platform).
+  - id_pattern: "SV-270555"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270555 (CM-6 b / CM-7 a) OS accounts used to run external procedures must
+      have limited privileges. The DISA check inspects the OS account behind the
+      external-procedure agent — it reads $ORACLE_HOME/rdbms/admin/externaljob.ora
+      for run_user=/run_group= (expected "nobody") and reviews the privileges of
+      the OS account running external procedures; the fix limits those
+      DBMS-related OS-account privileges. Both are host/OS-level facts unreachable
+      on managed RDS (externaljob.ora and the OS accounts live under the
+      AWS-managed Oracle Home / DB host; no tenant OS access and no tenant-usable
+      external-procedure OS agent). The inherited baseline reads
+      file("$ORACLE_HOME/rdbms/admin/externaljob.ora"), which on RDS resolves
+      against the InSpec runner host, a misleading signal. External-procedure
+      OS-account privilege restriction is inherited from the AWS platform. The
+      overlay OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern before the broad "$ORACLE_HOME/" OS default.
+      See controls/overlay.rb `SV-270555`. overlay_status: N/A (platform).
+  - id_pattern: "SV-270557"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270557 (CM-7 a) access to external executables must be disabled or
+      restricted. The DISA check is host/OS/listener-level: locate the extproc
+      executable under $ORACLE_HOME/bin (or the ORACLE_BASE path) and check its
+      permissions; read $ORACLE_HOME/rdbms/admin/externaljob.ora and
+      $ORACLE_HOME/hs/admin/extproc.ora (EXTPROC_DLLS=ONLY:...); and inspect
+      listener.ora/tnsnames.ora for "extproc" references and a dedicated IPC
+      listener. The fix stops the listener, edits listener.ora/tnsnames.ora, and
+      alters executable file permissions. All require OS/filesystem and listener
+      access the tenant lacks on managed RDS — the Oracle Home (bin/hs/rdbms) and
+      the AWS-managed listener are unreachable, and RDS does not expose the
+      external-procedure agent to the tenant. The inherited baseline reads
+      file("$ORACLE_HOME/rdbms/admin/externaljob.ora") and
+      file("$ORACLE_HOME/hs/admin/extproc.ora") (`should exist`), which on RDS
+      resolve against the InSpec runner host and would falsely fail.
+      External-executable restriction is inherited from the AWS platform. The
+      overlay OVERRIDES to N/A (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern before the broad "$ORACLE_HOME/" + listener
+      defaults. See controls/overlay.rb `SV-270557`. overlay_status: N/A (platform).
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

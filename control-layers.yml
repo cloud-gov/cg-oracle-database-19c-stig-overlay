@@ -160,8 +160,9 @@ controls:
       option group — TLS 1.2, FedRAMP+FIPS cipher, FIPS.SSLFIPS_140=TRUE on a TCPS
       2484 listener. sqlnet.ora/fips.ora are AWS-managed on RDS (not SQL-visible);
       evidenced by option-group config + a client TCPS handshake. DISA Oracle 19c
-      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depended on platform SG (2484
-      open / 1521 denied) for a true TLS-only posture (terraform-provision#2351).
+      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). TLS via option groups:
+      aws-broker#564. Depended on platform SG (2484 open / 1521 denied) for a
+      true TLS-only posture (terraform-provision#2351).
 
   - text_pattern: "audit trail data must be retained|retention"
     set_by: manual_review
@@ -1013,14 +1014,14 @@ controls:
       a misleading signal. Encryption in transit is delivered by the broker SSL
       option group: a TCPS 2484 listener running TLS 1.2 with a FedRAMP/FIPS cipher
       (TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) and FIPS.SSLFIPS_140=TRUE, configured
-      in the AWS-managed sqlnet.ora / fips.ora layer (aws-broker options.yml, #538).
-      Evidence is the option-group config + a client-side TCPS handshake, not a
-      tenant SQL query. Inherited from the AWS platform. Overridden to N/A (impact
-      0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit id_pattern
-      before the broad "during transmission" text_pattern (which shares this
-      classification) so it is unambiguous. Depends on the platform SG (2484 open /
-      1521 denied) for a true TLS-only posture (aws-broker#541). See
-      controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
+      in the AWS-managed sqlnet.ora / fips.ora layer (aws-broker options.yml,
+      aws-broker#564). Evidence is the option-group config + a client-side TCPS
+      handshake, not a tenant SQL query. Inherited from the AWS platform.
+      Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
+      as an explicit id_pattern before the broad "during transmission" text_pattern
+      (which shares this classification) so it is unambiguous. Depends on the
+      platform blocking 1521 (terraform-provision#2351) for a true TLS-only
+      posture. See controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
   - id_pattern: "SV-270589"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds

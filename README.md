@@ -79,6 +79,8 @@ InSpec/CINC against itself (separation of duties).
   [`aws-broker` PR #537](https://github.com/cloud-gov/aws-broker/pull/537) →
   `docs/oracle19c/`.
 - Broker epic: [cloud-gov/aws-broker#519](https://github.com/cloud-gov/aws-broker/issues/519).
+- TLS via option groups (in-transit encryption implementation):
+  [cloud-gov/aws-broker#564](https://github.com/cloud-gov/aws-broker/pull/564).
 - Platform dependency for TLS-only (open TCPS 2484 / deny 1521):
   [cloud-gov/terraform-provision#2351](https://github.com/cloud-gov/terraform-provision/pull/2351).
 - Remaining InSpec-profile work in this repo:

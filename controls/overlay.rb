@@ -1487,12 +1487,12 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # a misleading signal. Encryption in transit on RDS Oracle is delivered by the
   # broker SSL option group (a TCPS 2484 listener; TLS 1.2 with a FedRAMP/FIPS
   # cipher, FIPS.SSLFIPS_140=TRUE), configured in the AWS-managed sqlnet.ora /
-  # fips.ora layer. Evidence is the option-group config + a client-side TCPS
-  # handshake, not a tenant SQL query. control-layers.yml already classifies the
-  # "during transmission" text_pattern as set_by: aws_rds_option_group /
-  # verified_by: not_applicable_rds and names this control. Override to N/A in BOTH
-  # postures. NOTE: a true TLS-only posture also depends on the platform security
-  # group opening 2484 and denying 1521 (aws-broker#541).
+  # fips.ora layer (aws-broker#564). Evidence is the option-group config + a
+  # client-side TCPS handshake, not a tenant SQL query. control-layers.yml already
+  # classifies the "during transmission" text_pattern as set_by:
+  # aws_rds_option_group / verified_by: not_applicable_rds and names this control.
+  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depends on
+  # the platform blocking 1521 (terraform-provision#2351).
   control 'SV-270579' do
     impact 0.0
     title 'Oracle Database must employ cryptographic mechanisms preventing the ' \
@@ -1511,12 +1511,12 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'option group: a TCPS 2484 listener running TLS 1.2 with a FedRAMP/FIPS ' \
          'cipher (TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) and FIPS.SSLFIPS_140=TRUE, ' \
          'configured in the AWS-managed sqlnet.ora / fips.ora layer (aws-broker ' \
-         'options.yml, #538). Evidence is the option-group config + a client-side ' \
-         'TCPS handshake, not a tenant SQL query. In-transit encryption is ' \
-         'inherited from the AWS platform (control-layers.yml: set_by ' \
-         'aws_rds_option_group / verified_by not_applicable_rds). A true TLS-only ' \
-         'posture also depends on the platform security group opening 2484 and ' \
-         'denying 1521 (aws-broker#541).'
+         'options.yml, aws-broker#564). Evidence is the option-group config + a ' \
+         'client-side TCPS handshake, not a tenant SQL query. In-transit ' \
+         'encryption is inherited from the AWS platform (control-layers.yml: ' \
+         'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
+         'TLS-only posture also depends on the platform blocking 1521 ' \
+         '(terraform-provision#2351).'
     tag responsibility: 'platform'
     describe 'SV-270579 (encrypt information in transit, SC-8(1)/SC-8(2)) is Not ' \
              'Applicable on managed AWS RDS' do

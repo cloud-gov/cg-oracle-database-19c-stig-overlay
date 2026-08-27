@@ -967,6 +967,68 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-270537 (CM-6 b) — use of the Oracle Database installation account must be
+  # logged. PLATFORM disposition. The DISA check is procedural/host-oriented:
+  # review documented monitoring procedures for the DBMS software installation
+  # account and include host audit logs/accountability for whoever accessed that
+  # account. On managed RDS the Oracle software installation account and host audit
+  # logs are AWS-managed and unavailable to tenants; the broker-created database
+  # user is not the software installation account. Logging/accountability for use
+  # of the installation account is inherited from AWS/Cloud.gov platform controls.
+  control 'SV-270537' do
+    impact 0.0
+    title 'Use of the Oracle Database installation account must be logged.'
+    desc 'Not Applicable on managed AWS RDS (platform-satisfied). The DISA check ' \
+         'reviews documented procedures and host audit logs for monitoring use of ' \
+         'the DBMS software installation account. On managed RDS, the Oracle ' \
+         'software installation account and host audit logs are AWS-managed and ' \
+         'unavailable to tenants; the broker-created database user is not the ' \
+         'software installation account. Logging/accountability for that host-level ' \
+         'account is inherited from AWS/Cloud.gov platform controls, not tenant SQL ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270537 (log Oracle software installation account use, CM-6 b) is ' \
+             'Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the Oracle software installation ' \
+           'account and host audit logs are AWS-managed on RDS with no tenant ' \
+           'access; the broker user is not that account. See control-layers.yml ' \
+           'and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270538 (CM-6 b) — database data files, transaction logs, and audit files
+  # must live in dedicated directories/partitions. PLATFORM disposition. The DISA
+  # check reviews host disk/directory placement and separation of database data,
+  # transaction logs, audit files, and application/software files. On managed RDS
+  # that storage layout is AWS-managed (Oracle-Managed Files on RDS-provisioned
+  # storage); tenants cannot inspect or change host directories/partitions, and no
+  # tenant application shares the RDS host filesystem. Directory/partition
+  # separation is inherited from the AWS platform. Override to N/A.
+  control 'SV-270538' do
+    impact 0.0
+    title 'The Oracle Database data files, transaction logs and audit files must ' \
+          'be stored in dedicated directories or disk partitions separate from ' \
+          'software or other application files.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check reviews host ' \
+         'disk/directory placement for database data files, transaction logs, audit ' \
+         'files, and application/software files. On managed RDS that filesystem and ' \
+         'storage layout is AWS-managed (Oracle-Managed Files on RDS-provisioned ' \
+         'storage); tenants cannot inspect or change host directories/partitions, ' \
+         'and no tenant application shares the RDS host filesystem. Separation of ' \
+         'database files from software/application files is inherited from the AWS ' \
+         'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270538 (separate data/log/audit directories, CM-6 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): database data/log/audit file ' \
+           'placement is on AWS-managed RDS storage with no tenant host/filesystem ' \
+           'access, and no tenant application shares the host filesystem. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
   # SV-270539 (CM-6 b) — network access to the database must be restricted to
   # authorized personnel. The DISA check inspects network-layer artifacts the
   # tenant cannot reach on managed RDS: the listener SQLNET.ORA

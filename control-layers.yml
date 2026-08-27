@@ -149,9 +149,9 @@ controls:
   # group (TLS 1.2, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, FIPS.SSLFIPS_140=TRUE).
   # These live in sqlnet.ora / fips.ora, which are AWS-managed on RDS and NOT
   # tenant-SQL-visible — evidence is the option-group config + AWS metadata, plus a
-  # client-side TCPS handshake, not a SQL query. See aws-broker#538 / options.yml.
-  # NOTE: the SSL-only posture also depends on the platform security group allowing
-  # 2484 and denying 1521 (aws-broker#541); until then the cleartext path remains.
+  # client-side TCPS handshake, not a SQL query. See aws-broker#564 / options.yml.
+  # NOTE: the SSL-only posture also depended on the platform security group allowing
+  # 2484 and denying 1521 (terraform-provision#2351), which has been implemented
   - text_pattern: "during transmission|SSLFIPS_140|SQLNET.SSL_VERSION|TCPS|SSL_SERVER_DN_MATCH|encrypt.*transmission|transmission.*encrypt"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds
@@ -160,8 +160,8 @@ controls:
       option group — TLS 1.2, FedRAMP+FIPS cipher, FIPS.SSLFIPS_140=TRUE on a TCPS
       2484 listener. sqlnet.ora/fips.ora are AWS-managed on RDS (not SQL-visible);
       evidenced by option-group config + a client TCPS handshake. DISA Oracle 19c
-      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depends on platform SG (2484
-      open / 1521 denied) for a true TLS-only posture (aws-broker#541).
+      STIG V-270579 (SC-8(2)) + V-270571 (SC-13). Depended on platform SG (2484
+      open / 1521 denied) for a true TLS-only posture (terraform-provision#2351).
 
   - text_pattern: "audit trail data must be retained|retention"
     set_by: manual_review
@@ -711,6 +711,40 @@ controls:
       account. The software owner / host SYSDBA-capable installation account is
       AWS-managed and unavailable to tenants on RDS; the broker-created database
       user is not that account. See controls/overlay.rb `SV-270516`.
+  - id_pattern: "SV-270537"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270537 (CM-6 b) use of the Oracle Database installation account must be
+      logged. The DISA check reviews documented monitoring procedures and host
+      audit logs for the DBMS software installation account. On managed RDS that
+      host-level account and its audit logs are AWS-managed and unavailable to
+      tenants; the broker-created database user is not the software installation
+      account. Logging/accountability for that account is inherited from the
+      platform. See controls/overlay.rb `SV-270537`.
+  - id_pattern: "SV-270538"
+    set_by: aws_inherited
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270538 (CM-6 b) data files, transaction logs, and audit files must be
+      stored in dedicated directories or disk partitions separate from software or
+      other application files. The DISA check reviews host disk/directory layout;
+      on managed RDS that filesystem/storage layout is AWS-managed and unreachable
+      to tenants (Oracle-Managed Files on RDS-provisioned storage), and no tenant
+      application shares the RDS host filesystem. See controls/overlay.rb
+      `SV-270538`.
+  - id_pattern: "SV-270546"
+    set_by: sql_hardening
+    verified_by: manual_review
+    rationale: >-
+      SV-270546 (CM-6 b / AC-2(2)) temporary or emergency accounts must be
+      identifiable. The STIG explicitly allows a consistently enforced policy
+      forbidding temporary/emergency accounts, or enterprise-level authentication,
+      as Not a Finding. If a tenant uses Oracle-managed temporary accounts, the fix
+      is db-altering, org-defined SQL: create/use a distinctive temporary profile
+      and assign applicable users to it. This is a customer responsibility; the
+      baseline remains a manual-review skip and the control is not part of the
+      overlay SQL-only skip gate.
   - id_pattern: "SV-270512"
     set_by: aws_inherited
     verified_by: not_applicable_rds
@@ -998,7 +1032,7 @@ controls:
   # text_pattern). Per #1's bar, treat the resolution as unproven until a consumer/
   # resolver test asserts SV-276000 resolves to exactly one (set_by, verified_by)
   # pair.
-  # Refs: aws-broker#541 (SG), aws-broker#567 (redundant plan), aws-broker#558
+  # Refs: terraform-provision#2351 (SG), aws-broker#567 (redundant plan), aws-broker#558
   # (live proof); cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
   - id_pattern: "SV-276000"
     set_by: compensating_control

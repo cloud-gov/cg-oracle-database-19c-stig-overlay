@@ -274,6 +274,40 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # --- SHARED-RESPONSIBILITY compensating control (NO overlay override) --------
+  # SV-276000 (CM-6 b) — a minimum of three Oracle redo log groups AND a minimum of
+  # two members per group, on separate/archived physical disks or a RAID device.
+  # Unlike the N/A (platform) overrides above, SV-276000 is DELIBERATELY NOT
+  # overridden here: the strict baseline check
+  # (mitre-baseline/controls/SV-276000.rb) keeps running and correctly enforces the
+  # SQL-visible half. The disposition is documented (control-layers.yml id_pattern
+  # SV-276000: set_by compensating_control / verified_by compensating_control) and
+  # split by evidence source:
+  #   * SQL-visible (V$LOG, the strict baseline check): >=3 redo log groups. This is
+  #     the ONLY part SQL can confirm; V$LOG/V$LOGFILE can only ever show the
+  #     single-member deficit (MEMBERS=1), never the compensating redundancy — so
+  #     the strict check correctly FAILS the member-multiplexing half on RDS and is
+  #     NOT auto-passed (auto-passing would require AWS metadata SQL cannot see).
+  #   * NOT SQL-visible (AWS metadata / CRM / POA&M): the compensating mechanism —
+  #     EBS intra-AZ replication plus CUSTOMER-elected Multi-AZ synchronous cross-AZ
+  #     replication (aws-broker `medium-oracle-se2-redundant`, redundant:true ->
+  #     MultiAZ), the RAID/mirroring equivalent the STIG check text exempts. Member
+  #     multiplexing itself is unsupported on managed RDS (ALTER DATABASE ADD
+  #     LOGFILE MEMBER needs OS filesystem paths the tenant cannot reach).
+  # Shared responsibility: the PLATFORM provides EBS replication, tenant-
+  # controllable >=3 log groups, and the AVAILABILITY of a Multi-AZ tier; ELECTING
+  # that Multi-AZ plan when data-criticality/RTO warrants the redundancy (or
+  # accepting the residual Single-AZ cross-AZ gap as a documented risk for
+  # development instances) is the CUSTOMER's responsibility (CRM / POA&M). Because
+  # the compensating evidence lives outside the database, it is recorded in the CRM
+  # rather than asserted by tenant SQL; the strict baseline check stays the
+  # SQL-enforced floor. NOTE: electing the -redundant (Multi-AZ) plan does NOT
+  # change V$LOG/V$LOGFILE (Multi-AZ is block-level storage replication, not
+  # Oracle-level redo member multiplexing), so the strict check fails on the
+  # redundant plan too — consistent with "never auto-pass on RDS." No overlay
+  # control is defined for SV-276000; see docs/RESPONSIBILITY.md and
+  # control-layers.yml. Refs: aws-broker#567 (redundant plan), aws-broker#558 (live
+  # proof), cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
 
   # --- MANUAL disposition: satisfied by documentation / compensating control ---
   # These DISA checks are procedural (system-documentation / organizational

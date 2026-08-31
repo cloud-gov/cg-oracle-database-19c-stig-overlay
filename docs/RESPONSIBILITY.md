@@ -162,6 +162,25 @@ manual_review`, then record it in the table below.
 | SV-270559 | Individual auth before shared authenticator (IA-2(5)) | Procedural: "If shared accounts do not exist, this is Not Applicable." The broker provisions a single customer user account via `cf create-service` (not a shared account) — the same "no shared accounts" basis as SV-270501 — so the Not Applicable clause is satisfied at provision. No pass/fail SQL query. If the customer later creates shared accounts, individual-before-shared authentication for them is a customer/documentation responsibility. |
 | SV-270560 | Uniquely identify/authenticate organizational users (IA-2) | Procedural, no pass/fail SQL: review DBMS/OS/enterprise settings and site practices. Database accounts are provisioned/authenticated through the FedRAMP-authorized CloudFoundry brokered-credentials model (each binding issues a distinct credential) — part of the Cloud.gov ATO, the same model behind SV-270499. Satisfied by that platform model plus the Cloud.gov SSP (IA-2). Customer-created users each getting a separate account is a customer responsibility. |
 
+## Shared-responsibility compensating control (strict check kept running)
+
+A control can be **partly SQL-verifiable** while its full satisfaction depends on
+a **customer-elected platform option** plus compensating evidence that lives
+**outside the database** (AWS metadata / the Customer Responsibility Matrix /
+POA&M). Unlike the not-applicable and manual overrides above, the overlay does
+**NOT** override these to `impact 0.0`: the (strict) baseline check is kept
+running so the SQL-visible portion stays enforced, and — crucially — it is **not
+auto-passed**, because SQL cannot see the compensating mechanism and a blanket
+"RDS -> pass" would re-introduce a false pass. The disposition is documented
+in `control-layers.yml` (`set_by: compensating_control` / `verified_by:
+compensating_control`) and recorded in the CRM, split by evidence source.
+
+### Current shared-responsibility compensating controls
+
+| Control | Intent | How satisfied |
+| --- | --- | --- |
+| SV-276000 | Three+ redo log groups AND two+ members per group, mirrored / RAID (CM-6 b) | Split by evidence source. **SQL-visible (strict baseline check, kept running):** `>=3` redo log groups via `V$LOG` — the only part SQL can confirm; `V$LOG`/`V$LOGFILE` can only ever show the single-member deficit (`MEMBERS=1`), never the compensating redundancy, so the strict check correctly FAILS the member-multiplexing half on RDS and is **not auto-passed**. **NOT SQL-visible (AWS metadata / CRM / POA&M):** member multiplexing is unsupported on managed RDS (`ALTER DATABASE ADD LOGFILE MEMBER` needs OS filesystem paths the tenant cannot reach); the compensating mechanism is EBS intra-AZ replication plus **customer-elected Multi-AZ** synchronous cross-AZ replication (aws-broker `medium-oracle-se2-redundant`, `redundant:true` -> MultiAZ) — the RAID/mirroring equivalent the STIG check text exempts. **Shared responsibility:** the platform provides EBS replication, tenant-controllable `>=3` log groups, and the *availability* of a Multi-AZ tier; **electing** that Multi-AZ plan when data-criticality/RTO warrants it (or accepting the residual Single-AZ cross-AZ gap as a documented risk for development instances) is the **customer's** responsibility. Electing `-redundant` does not change `V$LOG`/`V$LOGFILE` (Multi-AZ is block-level storage replication, not Oracle redo member multiplexing), so the strict check fails on the redundant plan too — consistent with never auto-passing on RDS. `set_by: compensating_control` / `verified_by: compensating_control`. Refs: aws-broker#567 (redundant plan), aws-broker#558 (live proof), cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check). |
+
 ## Inherited controls with a platform-seeded allowlist input
 
 Some inherited baseline controls are **SQL-verifiable and kept running as-is**

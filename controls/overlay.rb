@@ -1680,13 +1680,12 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # this is not a finding." Only if the AO requires it and full-disk encryption is
   # NOT in use does it fall back to verifying Oracle TDE (dba_encrypted_columns /
   # v$encrypted_tablespaces). On managed Cloud.gov RDS, storage encryption at rest
-  # is enabled by the broker at provision (encrypted:true, backed by AWS KMS —
+  # is enabled by the broker at provision (encrypted:true, backed by RDS storage encryption —
   # control-layers.yml "at rest" entry / aws-broker), which is the full-disk /
   # storage-volume encryption the check's not-a-finding clause names. That
   # encryption is a platform/broker fact evidenced by AWS metadata (the DB
-  # instance StorageEncrypted flag + KMS key), NOT a tenant SQL assertion — the
-  # inherited baseline TDE queries would report "no encrypted tablespaces" and
-  # mislead even though volume-level encryption satisfies the control. Override to
+  # instance StorageEncrypted flag ), NOT a tenant SQL assertion.
+  # The inherited baseline TDE queries falsely returns empty; regardless, we override to
   # a platform disposition (impact 0.0). If a site's data owner/AO specifically
   # requires column/tablespace TDE beyond volume encryption, deploying/verifying
   # TDE for that data becomes the customer's responsibility.

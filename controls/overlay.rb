@@ -1433,4 +1433,143 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'server. See control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270578 (SC-4 / CCI-001090) — access to the Oracle Database files (data
+  # files, log files, backup files) must be limited to relevant processes and
+  # authorized administrative users. The DISA check is entirely OS/filesystem:
+  # `ls -ld [pathname]` on the oradata / audit / fast_recovery_area directories on
+  # Unix (finding on world access or any non-authorized reader), or Windows
+  # Explorer directory ACLs. The fix sets those filesystem permissions. Both need
+  # OS/filesystem access to the DB host, which the tenant lacks on managed RDS —
+  # the database files, redo/archive logs, and backup files live on AWS-managed,
+  # Oracle-Managed-Files storage that is not tenant-reachable, and RDS backups are
+  # AWS-managed snapshots. The inherited baseline body has no SQL (it is a
+  # documentation/manual control on the file permissions), so there is no valid
+  # tenant signal. File-level access protection is inherited from the AWS platform.
+  # Override to N/A in BOTH postures.
+  control 'SV-270578' do
+    impact 0.0
+    title 'Access to Oracle Database files must be limited to relevant processes ' \
+          'and to authorized, administrative users.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check is OS/filesystem-only: ' \
+         'on Unix `ls -ld [pathname]` against the database file, log, and backup ' \
+         'directories (e.g. .../oradata/db_name, .../oradata/db_name/audit, ' \
+         '.../fast_recovery_area/db_name) — a finding on world access or any ' \
+         'non-authorized reader — or the equivalent Windows Explorer directory ' \
+         'ACLs; the fix sets those filesystem permissions. Both require OS/' \
+         'filesystem access to the DB host, which the tenant does not have on ' \
+         'managed RDS: the data files, redo/archive logs, and backup files reside ' \
+         'on AWS-managed Oracle-Managed-Files storage that is not tenant-reachable, ' \
+         'and RDS backups are AWS-managed snapshots. The inherited baseline is a ' \
+         'documentation/manual control on file permissions with no SQL body, so ' \
+         'there is no valid tenant signal. File-level access protection is ' \
+         'inherited from the AWS platform (control-layers.yml: set_by ' \
+         'aws_inherited / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270578 (limit access to Oracle Database files, SC-4) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check is OS filesystem ' \
+           'permissions (`ls -ld`) on the data/log/backup directories and the fix ' \
+           'sets those permissions; on managed RDS the database files, logs, and ' \
+           'backups are AWS-managed (Oracle-Managed Files / RDS snapshots) with no ' \
+           'tenant OS access. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270579 (SC-8(1)/SC-8(2) / CCI-002420/002421) — the database must employ
+  # cryptographic mechanisms preventing unauthorized disclosure of information
+  # during transmission. The DISA check reads $ORACLE_HOME/network/admin/sqlnet.ora
+  # for the network-encryption / crypto-checksum parameters
+  # (SQLNET.ENCRYPTION_TYPES_* = AES256, SQLNET.CRYPTO_CHECKSUM_TYPES_* = SHA384,
+  # etc.), and the inherited baseline body asserts those same strings in that file.
+  # On managed RDS sqlnet.ora is AWS-managed and unreachable, so the inherited
+  # file() assertion resolves against the InSpec RUNNER host, not the DB server —
+  # a misleading signal. Encryption in transit on RDS Oracle is delivered by the
+  # broker SSL option group (a TCPS 2484 listener; TLS 1.2 with a FedRAMP/FIPS
+  # cipher, FIPS.SSLFIPS_140=TRUE), configured in the AWS-managed sqlnet.ora /
+  # fips.ora layer (aws-broker#564). Evidence is the option-group config + a
+  # client-side TCPS handshake, not a tenant SQL query. control-layers.yml already
+  # classifies the "during transmission" text_pattern as set_by:
+  # aws_rds_option_group / verified_by: not_applicable_rds and names this control.
+  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depends on
+  # the platform blocking 1521 (terraform-provision#2351).
+  control 'SV-270579' do
+    impact 0.0
+    title 'Oracle Database must employ cryptographic mechanisms preventing the ' \
+          'unauthorized disclosure of information during transmission unless the ' \
+          'transmitted data is otherwise protected by alternative physical ' \
+          'measures.'
+    desc 'Not Applicable on managed AWS RDS (satisfied by the platform). The DISA ' \
+         'check reads $ORACLE_HOME/network/admin/sqlnet.ora for the ' \
+         'network-encryption / crypto-checksum parameters (SQLNET.ENCRYPTION_' \
+         'TYPES_* = AES256, SQLNET.CRYPTO_CHECKSUM_TYPES_* = SHA384, ' \
+         'SQLNET.CRYPTO_CHECKSUM_SERVER = required, etc.), and the inherited ' \
+         'baseline body asserts those same strings in that file. On managed RDS ' \
+         'sqlnet.ora is AWS-managed and unreachable, so the inherited file() ' \
+         'assertion resolves against the InSpec runner host, not the DB server — a ' \
+         'misleading signal. Encryption in transit is delivered by the broker SSL ' \
+         'option group: a TCPS 2484 listener running TLS 1.2 with a FedRAMP/FIPS ' \
+         'cipher (TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) and FIPS.SSLFIPS_140=TRUE, ' \
+         'configured in the AWS-managed sqlnet.ora / fips.ora layer (aws-broker ' \
+         'options.yml, aws-broker#564). Evidence is the option-group config + a ' \
+         'client-side TCPS handshake, not a tenant SQL query. In-transit ' \
+         'encryption is inherited from the AWS platform (control-layers.yml: ' \
+         'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
+         'TLS-only posture also depends on the platform blocking 1521 ' \
+         '(terraform-provision#2351).'
+    tag responsibility: 'platform'
+    describe 'SV-270579 (encrypt information in transit, SC-8(1)/SC-8(2)) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check/fix target ' \
+           'SQLNET.ENCRYPTION_* / CRYPTO_CHECKSUM_* in sqlnet.ora, which is ' \
+           'AWS-managed on RDS (the inherited file assertion reflects the runner ' \
+           'host, not the DB server). Encryption in transit is provided by the ' \
+           'broker SSL option group (TCPS 2484, TLS 1.2, FIPS cipher), evidenced by ' \
+           'option-group config + a client TCPS handshake, not tenant SQL. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270589 (SC-17 b / CCI-004909) — the database must include only approved
+  # trust anchors in trust/certificate stores managed by the organization. The
+  # DISA check opens "If all accounts are authenticated by the OS or an
+  # enterprise-level authentication/access mechanism and not by Oracle, this is not
+  # a finding," then verifies TLS trust anchors by inspecting the Oracle Wallet and
+  # $ORACLE_HOME/network/admin/sqlnet.ora (WALLET_LOCATION, SSL_CIPHER_SUITES,
+  # SSL_VERSION, SSL_CLIENT_AUTHENTICATION). The wallet and sqlnet.ora are the same
+  # AWS-managed Oracle Net / SSL layer as SV-270579 — unreachable by the tenant on
+  # managed RDS. The TLS trust store / wallet is provisioned and managed by the
+  # broker SSL option group; approved-trust-anchor content is a platform
+  # responsibility evidenced by the option-group config, not a tenant SQL query.
+  # The inherited baseline has no SQL body (manual/documentable control). Override
+  # to N/A in BOTH postures.
+  control 'SV-270589' do
+    impact 0.0
+    title 'Oracle Database must include only approved trust anchors in trust ' \
+          'stores or certificate stores managed by the organization.'
+    desc 'Not Applicable on managed AWS RDS. The DISA check first notes it is Not ' \
+         'a Finding when accounts are authenticated by the OS or an ' \
+         'enterprise-level mechanism rather than by Oracle, then verifies TLS ' \
+         'trust anchors by inspecting the Oracle Wallet and ' \
+         '$ORACLE_HOME/network/admin/sqlnet.ora (WALLET_LOCATION, ' \
+         'SSL_CIPHER_SUITES, SSL_VERSION, SSL_CLIENT_AUTHENTICATION). The wallet ' \
+         'and sqlnet.ora are the same AWS-managed Oracle Net / SSL layer as ' \
+         'SV-270579 — unreachable by the tenant on managed RDS with no OS access. ' \
+         'The TLS trust store / Oracle Wallet is provisioned and managed by the ' \
+         'broker SSL option group (the TCPS 2484 / TLS 1.2 posture); which trust ' \
+         'anchors are present is a platform responsibility evidenced by the ' \
+         'option-group configuration, not a tenant SQL query. The inherited ' \
+         'baseline is a documentation/manual control with no SQL body. Trust-anchor ' \
+         'management is inherited from the AWS platform (control-layers.yml: ' \
+         'set_by aws_rds_option_group / verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270589 (only approved trust anchors, SC-17 b) is Not Applicable ' \
+             'on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check inspects the Oracle ' \
+           'Wallet and SSL_* entries in sqlnet.ora, which are AWS-managed on RDS ' \
+           'with no tenant OS access; the TLS trust store is provisioned by the ' \
+           'broker SSL option group and evidenced by its config, not tenant SQL. ' \
+           'See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
 end

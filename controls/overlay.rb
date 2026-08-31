@@ -1491,8 +1491,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # client-side TCPS handshake, not a tenant SQL query. control-layers.yml already
   # classifies the "during transmission" text_pattern as set_by:
   # aws_rds_option_group / verified_by: not_applicable_rds and names this control.
-  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depends on
-  # the platform blocking 1521 (terraform-provision#2351).
+  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depended
+  # on the platform blocking 1521 (terraform-provision#2351, implemented).
   control 'SV-270579' do
     impact 0.0
     title 'Oracle Database must employ cryptographic mechanisms preventing the ' \
@@ -1514,9 +1514,9 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'options.yml, aws-broker#564). Evidence is the option-group config + a ' \
          'client-side TCPS handshake, not a tenant SQL query. In-transit ' \
          'encryption is inherited from the AWS platform (control-layers.yml: ' \
-         'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
-         'TLS-only posture also depends on the platform blocking 1521 ' \
-         '(terraform-provision#2351).'
+          'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
+          'TLS-only posture also depended on the platform blocking 1521 ' \
+          '(terraform-provision#2351, implemented).'
     tag responsibility: 'platform'
     describe 'SV-270579 (encrypt information in transit, SC-8(1)/SC-8(2)) is Not ' \
              'Applicable on managed AWS RDS' do

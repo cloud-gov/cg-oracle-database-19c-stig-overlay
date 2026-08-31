@@ -45,6 +45,30 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # customer-responsibility profile-hardening path as SV-270495; they are not the
   # baseline check's assertion and are not re-implemented here. Override the
   # inherited control to N/A so an RDS run is not misled by a missing listener.ora.
+  control 'SV-270496' do
+    impact 0.0
+    title 'Oracle Database must protect against or limit the effects of ' \
+          'organization-defined types of denial-of-service (DoS) attacks.'
+    desc 'Not Applicable on managed AWS RDS. The baseline check reads ' \
+         '$ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT / ' \
+         'CONNECTION_RATE_LISTENER, but on managed RDS the listener is ' \
+         'AWS-managed and unreachable by the tenant (no OS/listener access). The ' \
+         'listener-level DoS rate limit is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_inherited / verified_by ' \
+         'not_applicable_rds). The STIG profile/quota DoS levers ' \
+         '(CPU_PER_CALL/IDLE_TIME/LOGICAL_READS, tablespace quotas) are ' \
+         'org-defined resource limits on the customer-responsibility hardening ' \
+         'path (see SV-270495, docs/RESPONSIBILITY.md), not this control\'s ' \
+         'listener.ora assertion.'
+    tag responsibility: 'platform'
+    describe 'SV-270496 (DoS mitigation) is Not Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the listener is AWS-managed on ' \
+           'RDS; the listener.ora RATE_LIMIT check is neither tenant-applicable ' \
+           'nor SQL-verifiable. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+
   # SV-270512 (CM-5) — logical access restrictions on DBMS configuration/software.
   # The DISA check is purely OS/filesystem: `ls -ld` on the Oracle software
   # install directory (Unix) or the install directory ACLs (Windows), and the fix
@@ -250,28 +274,6 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
-  control 'SV-270496' do
-    impact 0.0
-    title 'Oracle Database must protect against or limit the effects of ' \
-          'organization-defined types of denial-of-service (DoS) attacks.'
-    desc 'Not Applicable on managed AWS RDS. The baseline check reads ' \
-         '$ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT / ' \
-         'CONNECTION_RATE_LISTENER, but on managed RDS the listener is ' \
-         'AWS-managed and unreachable by the tenant (no OS/listener access). The ' \
-         'listener-level DoS rate limit is inherited from the AWS platform ' \
-         '(control-layers.yml: set_by aws_inherited / verified_by ' \
-         'not_applicable_rds). The STIG profile/quota DoS levers ' \
-         '(CPU_PER_CALL/IDLE_TIME/LOGICAL_READS, tablespace quotas) are ' \
-         'org-defined resource limits on the customer-responsibility hardening ' \
-         'path (see SV-270495, docs/RESPONSIBILITY.md), not this control\'s ' \
-         'listener.ora assertion.'
-    tag responsibility: 'platform'
-    describe 'SV-270496 (DoS mitigation) is Not Applicable on managed AWS RDS' do
-      skip 'Not Applicable (not_applicable_rds): the listener is AWS-managed on ' \
-           'RDS; the listener.ora RATE_LIMIT check is neither tenant-applicable ' \
-           'nor SQL-verifiable. See control-layers.yml and docs/RESPONSIBILITY.md.'
-    end
-  end
 
   # --- MANUAL disposition: satisfied by documentation / compensating control ---
   # These DISA checks are procedural (system-documentation / organizational
@@ -1538,19 +1540,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
-  # SV-270589 (SC-17 b / CCI-004909) — the database must include only approved
-  # trust anchors in trust/certificate stores managed by the organization. The
-  # DISA check opens "If all accounts are authenticated by the OS or an
-  # enterprise-level authentication/access mechanism and not by Oracle, this is not
-  # a finding," then verifies TLS trust anchors by inspecting the Oracle Wallet and
-  # $ORACLE_HOME/network/admin/sqlnet.ora (WALLET_LOCATION, SSL_CIPHER_SUITES,
-  # SSL_VERSION, SSL_CLIENT_AUTHENTICATION). The wallet and sqlnet.ora are the same
-  # AWS-managed Oracle Net / SSL layer as SV-270579 — unreachable by the tenant on
-  # managed RDS. The TLS trust store / wallet is provisioned and managed by the
-  # broker SSL option group; approved-trust-anchor content is a platform
-  # responsibility evidenced by the option-group config, not a tenant SQL query.
-  # The inherited baseline has no SQL body (manual/documentable control). Override
-  # to N/A in BOTH postures.
+
   # SV-270559 (IA-2(5)) — users must be authenticated with an individual
   # authenticator PRIOR to using a shared authenticator. The DISA check is
   # procedural and explicitly opens "If shared accounts do not exist, this is Not
@@ -1648,6 +1638,19 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # SV-270589 (SC-17 b / CCI-004909) — the database must include only approved
+  # trust anchors in trust/certificate stores managed by the organization. The
+  # DISA check opens "If all accounts are authenticated by the OS or an
+  # enterprise-level authentication/access mechanism and not by Oracle, this is not
+  # a finding," then verifies TLS trust anchors by inspecting the Oracle Wallet and
+  # $ORACLE_HOME/network/admin/sqlnet.ora (WALLET_LOCATION, SSL_CIPHER_SUITES,
+  # SSL_VERSION, SSL_CLIENT_AUTHENTICATION). The wallet and sqlnet.ora are the same
+  # AWS-managed Oracle Net / SSL layer as SV-270579 — unreachable by the tenant on
+  # managed RDS. The TLS trust store / wallet is provisioned and managed by the
+  # broker SSL option group; approved-trust-anchor content is a platform
+  # responsibility evidenced by the option-group config, not a tenant SQL query.
+  # The inherited baseline has no SQL body (manual/documentable control). Override
+  # to N/A in BOTH postures.
   control 'SV-270589' do
     impact 0.0
     title 'Oracle Database must include only approved trust anchors in trust ' \

@@ -137,6 +137,27 @@ controls:
       explicitly in parameters.yml for defense-in-depth (aws-broker#574).
 
   # --- broker infra SET, verified from AWS metadata (not SQL) ---
+  - id_pattern: "SV-270574"
+    set_by: broker_infra
+    verified_by: aws_inherited
+    rationale: >-
+      SV-270574 (SC-28) protect data at rest. The DISA check is procedural and
+      states "If full-disk encryption is being used, this is not a finding"; only
+      if data-at-rest encryption is required and full-disk encryption is not in
+      use does it fall back to Oracle TDE (dba_encrypted_columns /
+      v$encrypted_tablespaces). On managed RDS storage encryption at rest is
+      enabled by the broker at provision (StorageEncrypted set from the catalog
+      plan's encrypted:true -- the "at rest" entry below), which uses an
+      AWS-managed KMS key by default and is the full-disk / storage-volume
+      encryption the not-a-finding clause names — a platform fact evidenced by AWS
+      metadata (StorageEncrypted), not tenant SQL; the inherited control queries
+      would report no encrypted tablespaces and mislead. Customer caveat: if a
+      data owner/AO requires column/tablespace TDE beyond volume encryption,
+      deploying/verifying that TDE is the customer's responsibility. Overridden to
+      a platform disposition (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern BEFORE the broad "encrypted|...|at rest"
+      text_pattern default so it is unambiguous. See controls/overlay.rb
+      `SV-270574`. overlay_status: N/A (platform).
   - text_pattern: "tablespace encryption|encrypted|TDE|at rest"
     set_by: broker_infra
     verified_by: aws_inherited
@@ -1040,7 +1061,7 @@ controls:
       tenant SQL query. The inherited baseline is a documentation/manual control
       with no SQL body. Inherited from the AWS platform. Overridden to N/A (impact
       0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit id_pattern
-       before the broad defaults so it is unambiguous. See controls/overlay.rb
+      before the broad defaults so it is unambiguous. See controls/overlay.rb
       `SV-270589`. overlay_status: N/A (platform).
   - id_pattern: "SV-270569"
     set_by: aws_rds_option_group

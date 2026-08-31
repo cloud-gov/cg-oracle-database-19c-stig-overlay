@@ -1565,7 +1565,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     tag responsibility: 'platform'
     describe 'SV-270589 (only approved trust anchors, SC-17 b) is Not Applicable ' \
              'on managed AWS RDS' do
-       skip 'Not Applicable (not_applicable_rds): the check inspects the Oracle ' \
+      skip 'Not Applicable (not_applicable_rds): the check inspects the Oracle ' \
            'Wallet and SSL_* entries in sqlnet.ora, which are AWS-managed on RDS ' \
            'with no tenant OS access; the TLS trust store is provisioned by the ' \
            'broker SSL option group and evidenced by its config, not tenant SQL. ' \
@@ -1680,43 +1680,53 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # this is not a finding." Only if the AO requires it and full-disk encryption is
   # NOT in use does it fall back to verifying Oracle TDE (dba_encrypted_columns /
   # v$encrypted_tablespaces). On managed Cloud.gov RDS, storage encryption at rest
-  # is enabled by the broker at provision (encrypted:true, backed by RDS storage encryption —
-  # control-layers.yml "at rest" entry / aws-broker), which is the full-disk /
-  # storage-volume encryption the check's not-a-finding clause names. That
-  # encryption is a platform/broker fact evidenced by AWS metadata (the DB
-  # instance StorageEncrypted flag ), NOT a tenant SQL assertion.
-  # The inherited baseline TDE queries falsely returns empty; regardless, we override to
-  # a platform disposition (impact 0.0). If a site's data owner/AO specifically
-  # requires column/tablespace TDE beyond volume encryption, deploying/verifying
-  # TDE for that data becomes the customer's responsibility.
+  # is enabled by the broker at provision (StorageEncrypted set from the
+  # catalog plan's encrypted:true — control-layers.yml "at rest" entry /
+  # aws-broker), which uses an AWS-managed KMS key by default and is the
+  # full-disk / storage-volume encryption the check's not-a-finding clause
+  # names. That encryption is a platform/broker fact evidenced by AWS metadata
+  # (the DB instance StorageEncrypted flag), NOT a tenant SQL assertion. Cloud.gov
+  # has no data-at-rest encryption requirement beyond that full-disk/volume
+  # encryption (managed separately by the broker), so no TDE fallback applies. The
+  # inherited baseline TDE queries are not tenant-verifiable on RDS; we override to
+  # a platform Not Applicable disposition (impact 0.0). If a site's data owner/AO
+  # specifically requires column/tablespace TDE beyond volume encryption,
+  # deploying/verifying TDE for that data becomes the customer's responsibility.
   control 'SV-270574' do
     impact 0.0
     title 'Oracle Database must take steps to protect data at rest and ensure ' \
           'confidentiality and integrity of application data.'
-    desc 'Platform disposition (Not a Finding). The DISA check is procedural and ' \
-         'states "If full-disk encryption is being used, this is not a finding"; ' \
-         'only if data-at-rest encryption is required and full-disk encryption is ' \
-         'not in use does it fall back to Oracle TDE (dba_encrypted_columns / ' \
-         'v$encrypted_tablespaces). On managed Cloud.gov RDS, storage encryption at ' \
-         'rest is enabled by the broker at provision (encrypted:true, backed by AWS ' \
-         'KMS — control-layers.yml "at rest" entry), which is the full-disk / ' \
-         'storage-volume encryption the not-a-finding clause names. That encryption ' \
-         'is a platform/broker fact evidenced by AWS metadata (the DB instance ' \
-         'StorageEncrypted flag + KMS key), not a tenant SQL assertion — the ' \
-         'inherited TDE queries would report no encrypted tablespaces and mislead ' \
-         'even though volume-level encryption satisfies the control. Data-at-rest ' \
-         'confidentiality is inherited from the AWS platform (control-layers.yml: ' \
-         'set_by broker_infra / verified_by aws_inherited). If a data owner/AO ' \
-         'requires column/tablespace TDE beyond volume encryption, deploying and ' \
-         'verifying TDE for that data is the customer\'s responsibility.'
+    desc 'Not Applicable on managed AWS RDS (satisfied by the platform). The DISA ' \
+         'check is procedural and states "If full-disk encryption is being used, ' \
+         'this is not a finding"; only if data-at-rest encryption is required and ' \
+         'full-disk encryption is not in use does it fall back to Oracle TDE ' \
+         '(dba_encrypted_columns / v$encrypted_tablespaces). On managed Cloud.gov ' \
+         'RDS, storage encryption at rest is enabled by the broker at provision ' \
+         '(StorageEncrypted set from the catalog plan\'s encrypted:true — ' \
+         'control-layers.yml "at rest" entry), which uses an AWS-managed KMS key ' \
+         'by default and is the full-disk / storage-volume encryption named by the ' \
+         'check; Cloud.gov defines no data-at-rest encryption requirement beyond ' \
+         'that volume encryption, so the TDE fallback never applies. That ' \
+         'encryption is a platform/broker fact evidenced by AWS metadata (the DB ' \
+         'instance StorageEncrypted flag), not a tenant SQL assertion — ' \
+         'the inherited TDE queries would report no encrypted tablespaces and ' \
+         'mislead even though volume-level encryption satisfies the control. ' \
+         'Data-at-rest confidentiality is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by broker_infra / verified_by aws_inherited); ' \
+         'because the queried target is not tenant-reachable on RDS the overlay ' \
+         'overrides to Not Applicable (impact 0.0). If a data owner/AO requires ' \
+         'column/tablespace TDE beyond volume encryption, deploying and verifying ' \
+         'that TDE is the customer\'s responsibility.'
     tag responsibility: 'platform'
-    describe 'SV-270574 (protect data at rest, SC-28) is satisfied by the ' \
-             'platform on managed AWS RDS' do
-      skip 'Platform disposition: storage encryption at rest is enabled by the ' \
-           'broker at provision (encrypted:true, AWS KMS) — the full-disk ' \
-           'encryption the DISA check treats as Not a Finding — evidenced by AWS ' \
-           'metadata (StorageEncrypted + KMS key), not tenant SQL. The inherited ' \
-           'TDE queries would mislead on RDS. Customer-required column/tablespace ' \
+    describe 'SV-270574 (protect data at rest, SC-28) is Not Applicable on ' \
+             'managed AWS RDS' do
+      skip 'Not Applicable (platform): storage encryption at rest is enabled by ' \
+           'the broker at provision (StorageEncrypted from the plan\'s ' \
+           'encrypted:true, AWS-managed KMS key by default) — the full-disk ' \
+           'encryption the DISA check treats as not-a-finding — evidenced by AWS ' \
+           'metadata (StorageEncrypted flag), not tenant SQL, and Cloud.gov ' \
+           'has no data-at-rest requirement beyond it. The inherited TDE queries ' \
+           'are not tenant-verifiable on RDS. Customer-required column/tablespace ' \
            'TDE beyond volume encryption is a customer responsibility. See ' \
            'control-layers.yml and docs/RESPONSIBILITY.md.'
     end

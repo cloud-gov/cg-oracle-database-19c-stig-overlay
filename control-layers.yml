@@ -1019,9 +1019,9 @@ controls:
       handshake, not a tenant SQL query. Inherited from the AWS platform.
       Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
       as an explicit id_pattern before the broad "during transmission" text_pattern
-      (which shares this classification) so it is unambiguous. Depends on the
-      platform blocking 1521 (terraform-provision#2351) for a true TLS-only
-      posture. See controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
+      (which shares this classification) so it is unambiguous. Depended on the
+      platform blocking 1521 (terraform-provision#2351, implemented) for a true
+      TLS-only posture. See controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
   - id_pattern: "SV-270589"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds

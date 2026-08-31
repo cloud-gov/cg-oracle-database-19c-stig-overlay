@@ -488,12 +488,13 @@ controls:
       no temporary-account lifecycle exists to enforce out of the box. If the
       customer creates Oracle-managed temporary accounts, providing that mechanism
       is a CUSTOMER responsibility (sibling to SV-270546, identify temporary
-      accounts) on the SV-270495 pattern (set_by: sql_hardening). The baseline
-      control is a manual stub (no SQL assertion), so it is added to the overlay's
-      customer skip gate directly. Sample remediation:
+      accounts). The baseline control is a manual-review stub (no SQL assertion),
+      so — exactly like SV-270546 — it remains a baseline manual-review skip and is
+      NOT part of the overlay's SQL-only skip gate (that gate is reserved for
+      controls whose SQL-assessed element would produce a misleading finding in a
+      platform-provider run). Sample remediation:
       hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + hourly 72h
-      lock job). skip_control under --skip-customer-controls; runs under --all.
-      See controls/overlay.rb SV-270547 (skip line) and docs/RESPONSIBILITY.md.
+      lock job). See controls/overlay.rb (gate comment) and docs/RESPONSIBILITY.md.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"

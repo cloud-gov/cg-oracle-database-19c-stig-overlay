@@ -49,7 +49,8 @@ here (see `../control-layers.yml`).
 | `30_audit_policies.sql` | harden | create + enable `CG_AUDIT_POLICY` for events the RDS default policies miss (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE) |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
-| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `15`, `30`; `20` is only partially reversible — see below) |
+| `60_temporary_users.sql` | harden | SAMPLE mechanism for SV-270547: create a distinctively named `TEMPORARY_USERS` profile + an hourly job that LOCKS accounts on it older than 72h (SV-270546 sibling) — assigning accounts to the profile is a per-account customer step |
+| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `15`, `30`, `60`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script
 > currently only **locks/expires sample accounts**. Role/privilege tightening is a
@@ -89,6 +90,10 @@ here (see `../control-layers.yml`).
 - `rollback/30_audit_policies_rollback.sql` — `NOAUDIT` then `DROP` the tenant
   `CG_AUDIT_POLICY` (reduces posture; deliberate action only). Does not touch the
   RDS-default policies, which this script never enabled.
+- `rollback/60_temporary_users_rollback.sql` — drops the `CG_LOCK_TEMP_USERS_72H`
+  job and the `TEMPORARY_USERS` profile (reduces posture; deliberate action only).
+  Does **not** unlock/drop accounts, and refuses to drop the profile while accounts
+  are still assigned (reassign them first) — never CASCADEs.
 
 ## RDS caveats
 

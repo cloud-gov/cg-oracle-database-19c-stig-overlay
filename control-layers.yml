@@ -474,6 +474,26 @@ controls:
       ORA_STIG_PROFILE, which already sets INACTIVE_ACCOUNT_TIME 35 — the STIG's
       "ALTER USER ... PROFILE ORA_STIG_PROFILE" remediation). skip_control under
       --skip-customer-controls; runs under --all.
+  - id_pattern: "SV-270547"
+    set_by: sql_hardening
+    verified_by: manual_review
+    rationale: >-
+      SV-270547 (CM-6 b) temporary user accounts must be automatically removed or
+      disabled after 72 hours. The DISA check is Not a Finding if the organization
+      has a consistently enforced policy forbidding temporary/emergency accounts,
+      or if all accounts authenticate via the OS / an enterprise mechanism rather
+      than Oracle; only if the site uses Oracle-managed temporary accounts must it
+      provide the 72-hour auto-lock mechanism. The baseline satisfies this at
+      provisioning (the broker issues a single, non-temporary customer account), so
+      no temporary-account lifecycle exists to enforce out of the box. If the
+      customer creates Oracle-managed temporary accounts, providing that mechanism
+      is a CUSTOMER responsibility (sibling to SV-270546, identify temporary
+      accounts) on the SV-270495 pattern (set_by: sql_hardening). The baseline
+      control is a manual stub (no SQL assertion), so it is added to the overlay's
+      customer skip gate directly. Sample remediation:
+      hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + hourly 72h
+      lock job). skip_control under --skip-customer-controls; runs under --all.
+      See controls/overlay.rb SV-270547 (skip line) and docs/RESPONSIBILITY.md.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"

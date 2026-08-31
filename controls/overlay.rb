@@ -22,6 +22,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     skip_control 'SV-270549'  # PASSWORD_LOCK_TIME UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
     skip_control 'SV-270550'  # FAILED_LOGIN_ATTEMPTS <=3 — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
     skip_control 'SV-270551'  # INACTIVE_ACCOUNT_TIME <=35 — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
+    skip_control 'SV-270547'  # Auto-remove temp accounts after 72h — org-defined TEMPORARY_USERS profile + lock job; see docs/RESPONSIBILITY.md (SV-270546 sibling), 60_temporary_users.sql
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------

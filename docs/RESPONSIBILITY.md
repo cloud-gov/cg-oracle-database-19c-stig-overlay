@@ -57,8 +57,10 @@ classified in [`control-layers.yml`](../control-layers.yml) via its `set_by` /
   line inside the `include_controls` block, gated by the responsibility input.
   This is the file that actually drives the skip behavior at scan time.
 - **`tag responsibility:`** — the DISA baseline metadata carries a bare
-  `tag 'responsibility'`; overlay controls that document a platform disposition
-  may use `tag responsibility: 'platform'`.
+  `tag 'responsibility'`. Overlay controls in the **Manual / compensating-control**
+  table use `tag responsibility: 'customer'` (the manual/documentation
+  determination is the customer's to make); overlay controls documenting a
+  **platform not-applicable** disposition use `tag responsibility: 'platform'`.
 
 ## Platform not-applicable overrides (not_applicable_rds)
 

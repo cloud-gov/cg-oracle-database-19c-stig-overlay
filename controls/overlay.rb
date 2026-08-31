@@ -1574,7 +1574,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'customer/documentation responsibility. A documentation/policy ' \
          'determination, not a tenant SQL assertion. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'platform'
+    tag responsibility: 'customer'
     describe 'The implementation of this control, ensuring users are ' \
              '"authenticated with an individual authenticator prior to using a ' \
              'shared authenticator", is a manual/documentation determination: the ' \
@@ -1623,7 +1623,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'SQL assertion. If the customer creates additional users, issuing each a ' \
          'separate account is a customer responsibility. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'platform'
+    tag responsibility: 'customer'
     describe 'The implementation of this control, uniquely identifying and ' \
              'authenticating "organizational users (or processes acting on behalf ' \
              'of organizational users)", is satisfied by the FedRAMP-authorized ' \

@@ -29,6 +29,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     # remains a baseline manual-review skip; the customer disposition is documented
     # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
     # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
+    skip_control 'SV-270561'  # PASSWORD_VERIFY_FUNCTION — org-defined DoD-complexity function; 12_password_verify_function.sql / ORA_STIG_PROFILE
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -1550,6 +1551,103 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # responsibility evidenced by the option-group config, not a tenant SQL query.
   # The inherited baseline has no SQL body (manual/documentable control). Override
   # to N/A in BOTH postures.
+  # SV-270559 (IA-2(5)) — users must be authenticated with an individual
+  # authenticator PRIOR to using a shared authenticator. The DISA check is
+  # procedural and explicitly opens "If shared accounts do not exist, this is Not
+  # Applicable"; otherwise it reviews DBMS/OS/enterprise auth mechanism settings
+  # (and, optionally, Oracle Access Manager X.509 policy) for individual-before-
+  # shared authentication. There is no pass/fail SQL query. On brokered Cloud.gov
+  # RDS the broker provisions the database with a SINGLE customer user account via
+  # `cf create-service` (not a shared account) — the same "no shared accounts"
+  # basis that makes SV-270501 a platform disposition — so the DISA Not Applicable
+  # clause is satisfied at provision. If the customer later creates shared accounts,
+  # requiring individual authentication before their use (e.g. via OAM X.509 or an
+  # enterprise mechanism) is a customer/documentation responsibility. This is a
+  # documentation/policy determination, not a tenant SQL assertion; the inherited
+  # baseline body is a manual-review skip. Override to Manual (impact 0.0) so an RDS
+  # run reports it honestly rather than as a zero-test pass.
+  control 'SV-270559' do
+    impact 0.0
+    title 'Oracle Database must ensure users are authenticated with an ' \
+          'individual authenticator prior to using a shared authenticator.'
+    desc 'Manual disposition. The DISA check is procedural and opens "If shared ' \
+         'accounts do not exist, this is Not Applicable"; otherwise it reviews ' \
+         'DBMS/OS/enterprise authentication settings (optionally Oracle Access ' \
+         'Manager X.509 policy) to confirm individual authentication is required ' \
+         'before a shared authenticator is used — there is no pass/fail SQL query. ' \
+         'On brokered Cloud.gov RDS the broker provisions the database with a ' \
+         'single customer user account via `cf create-service` (not a shared ' \
+         'account), the same "no shared accounts" basis as SV-270501, so the DISA ' \
+         'Not Applicable clause is satisfied at provision. If the customer later ' \
+         'creates shared accounts, requiring individual authentication before ' \
+         'their use (OAM X.509 or an enterprise mechanism) is a ' \
+         'customer/documentation responsibility. A documentation/policy ' \
+         'determination, not a tenant SQL assertion. See docs/RESPONSIBILITY.md ' \
+         'and control-layers.yml.'
+    tag responsibility: 'platform'
+    describe 'The implementation of this control, ensuring users are ' \
+             '"authenticated with an individual authenticator prior to using a ' \
+             'shared authenticator", is a manual/documentation determination: the ' \
+             'broker issues a single customer user account (no shared account), ' \
+             'satisfying the DISA check\'s "if shared accounts do not exist, this ' \
+             'is Not Applicable" clause. If the customer creates shared accounts, ' \
+             'individual-before-shared authentication for them is a ' \
+             'customer/documentation responsibility.' do
+      skip 'Manual review: the broker provisions a single customer user account ' \
+           '(no shared account) at provision, satisfying the DISA "no shared ' \
+           'accounts = Not Applicable" clause; no SQL assertion is applicable on ' \
+           'managed RDS. Customer-created shared accounts are the customer\'s ' \
+           'responsibility (docs/RESPONSIBILITY.md).'
+    end
+  end
+
+  # SV-270560 (IA-2) — the DBMS must uniquely identify and authenticate
+  # organizational users (or processes acting on their behalf). The DISA check is
+  # purely procedural: "Review DBMS settings, OS settings, ... and site practices,
+  # to determine whether organizational users are uniquely identified and
+  # authenticated" — there is no pass/fail SQL query. On brokered Cloud.gov RDS
+  # database accounts are provisioned and authenticated through the standard
+  # CloudFoundry brokered-credentials model (each service binding issues a distinct
+  # credential), the FedRAMP-authorized enterprise-level authentication mechanism
+  # that is part of the Cloud.gov ATO — the same model that makes SV-270499 a
+  # platform disposition. Unique identification/authentication of organizational
+  # users is satisfied by that platform model plus the Cloud.gov SSP (IA-2), not by
+  # a tenant SQL assertion. If the customer creates additional users, giving each a
+  # separate account is a customer responsibility. Override to Manual (impact 0.0)
+  # so an RDS run reports it honestly rather than as a zero-test pass.
+  control 'SV-270560' do
+    impact 0.0
+    title 'Oracle Database must uniquely identify and authenticate ' \
+          'organizational users (or processes acting on behalf of organizational ' \
+          'users).'
+    desc 'Manual disposition. The DISA check is procedural: review DBMS/OS/' \
+         'enterprise-mechanism settings and site practices to determine whether ' \
+         'organizational users are uniquely identified and authenticated — there ' \
+         'is no pass/fail SQL query. On brokered Cloud.gov RDS database accounts ' \
+         'are provisioned and authenticated through the FedRAMP-authorized ' \
+         'CloudFoundry brokered-credentials model (each binding issues a distinct ' \
+         'credential), the enterprise-level authentication mechanism that is part ' \
+         'of the Cloud.gov ATO — the same model behind SV-270499. Unique ' \
+         'identification and authentication of organizational users is satisfied ' \
+         'by that platform model plus the Cloud.gov SSP (IA-2), not by a tenant ' \
+         'SQL assertion. If the customer creates additional users, issuing each a ' \
+         'separate account is a customer responsibility. See docs/RESPONSIBILITY.md ' \
+         'and control-layers.yml.'
+    tag responsibility: 'platform'
+    describe 'The implementation of this control, uniquely identifying and ' \
+             'authenticating "organizational users (or processes acting on behalf ' \
+             'of organizational users)", is satisfied by the FedRAMP-authorized ' \
+             'CloudFoundry brokered-credentials model (part of the Cloud.gov ATO) ' \
+             'and the Cloud.gov SSP (IA-2), which provision and authenticate ' \
+             'distinct database credentials — not by a tenant SQL assertion.' do
+      skip 'Manual review: database accounts are uniquely identified and ' \
+           'authenticated via the FedRAMP-authorized CloudFoundry ' \
+           'brokered-credentials model (part of the Cloud.gov ATO); no tenant SQL ' \
+           'assertion is applicable on managed RDS. Customer-created users are the ' \
+           'customer\'s responsibility (docs/RESPONSIBILITY.md).'
+    end
+  end
+
   control 'SV-270589' do
     impact 0.0
     title 'Oracle Database must include only approved trust anchors in trust ' \

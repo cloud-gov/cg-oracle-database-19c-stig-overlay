@@ -1491,8 +1491,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # client-side TCPS handshake, not a tenant SQL query. control-layers.yml already
   # classifies the "during transmission" text_pattern as set_by:
   # aws_rds_option_group / verified_by: not_applicable_rds and names this control.
-  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depends on
-  # the platform blocking 1521 (terraform-provision#2351).
+  # Override to N/A in BOTH postures. NOTE: a true TLS-only posture also depended
+  # on the platform blocking 1521 (terraform-provision#2351, implemented).
   control 'SV-270579' do
     impact 0.0
     title 'Oracle Database must employ cryptographic mechanisms preventing the ' \
@@ -1514,9 +1514,9 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'options.yml, aws-broker#564). Evidence is the option-group config + a ' \
          'client-side TCPS handshake, not a tenant SQL query. In-transit ' \
          'encryption is inherited from the AWS platform (control-layers.yml: ' \
-         'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
-         'TLS-only posture also depends on the platform blocking 1521 ' \
-         '(terraform-provision#2351).'
+          'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
+          'TLS-only posture also depended on the platform blocking 1521 ' \
+          '(terraform-provision#2351, implemented).'
     tag responsibility: 'platform'
     describe 'SV-270579 (encrypt information in transit, SC-8(1)/SC-8(2)) is Not ' \
              'Applicable on managed AWS RDS' do
@@ -1570,6 +1570,165 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'with no tenant OS access; the TLS trust store is provisioned by the ' \
            'broker SSL option group and evidenced by its config, not tenant SQL. ' \
            'See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270569 (IA-7 / CCI-000803) — the database must use NIST-validated FIPS
+  # 140-2/140-3 compliant cryptography for AUTHENTICATION mechanisms. The DISA
+  # check opens $ORACLE_HOME/ldap/admin/fips.ora (or the FIPS_HOME location) in an
+  # editor and is a finding if the line "SSLFIPS_140=TRUE" is not present. The fix
+  # edits that same fips.ora file. Both require host/OS access to read and edit a
+  # file under the Oracle Home, which the tenant does not have on managed RDS —
+  # fips.ora lives in the AWS-managed Oracle Net / SSL layer (the same layer as the
+  # broker SSL option group), and the inherited baseline body
+  # `file("#{oracle_home}/ldap/admin/fips.ora")` resolves ORACLE_HOME on the InSpec
+  # RUNNER host, not the DB server, so its `should include 'SSLFIPS_140=TRUE'` and
+  # `should exist` assertions reflect the runner and are a misleading signal. On
+  # RDS FIPS-mode SSL/TLS for the listener is set by the broker SSL option group
+  # (FIPS.SSLFIPS_140=TRUE on the TCPS 2484 / TLS 1.2 listener — the same posture
+  # SV-270579 documents), evidenced by the option-group config, not tenant SQL.
+  # control-layers.yml classifies the SSLFIPS_140 / fips.ora path as set_by
+  # aws_rds_option_group / verified_by not_applicable_rds. Override to N/A.
+  control 'SV-270569' do
+    impact 0.0
+    title 'Oracle Database must use NIST-validated FIPS 140-2/140-3 compliant ' \
+          'cryptography for authentication mechanisms.'
+    desc 'Not Applicable on managed AWS RDS (satisfied by the platform). The DISA ' \
+         'check opens fips.ora (default $ORACLE_HOME/ldap/admin/, or the FIPS_HOME ' \
+         'location) and is a finding if "SSLFIPS_140=TRUE" is not present; the fix ' \
+         'edits that same file. Both require host/OS access to a file under the ' \
+         'Oracle Home, which the tenant does not have on managed RDS — fips.ora is ' \
+         'in the AWS-managed Oracle Net / SSL layer, and the inherited baseline ' \
+         'file("#{oracle_home}/ldap/admin/fips.ora") assertion resolves ORACLE_HOME ' \
+         'on the InSpec runner host, not the DB server, so it is a misleading ' \
+         'signal. FIPS-mode SSL/TLS for authentication is provided by the broker ' \
+         'SSL option group (FIPS.SSLFIPS_140=TRUE on the TCPS 2484 / TLS 1.2 ' \
+         'listener — the SV-270579 posture), evidenced by the option-group config, ' \
+         'not tenant SQL. FIPS authentication cryptography is inherited from the ' \
+         'AWS platform (control-layers.yml: set_by aws_rds_option_group / ' \
+         'verified_by not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270569 (FIPS 140 cryptography for authentication, IA-7) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the check/fix target ' \
+           'SSLFIPS_140=TRUE in $ORACLE_HOME/ldap/admin/fips.ora, an AWS-managed ' \
+           'file with no tenant OS access (the inherited file() assertion reflects ' \
+           'the runner host). FIPS-mode SSL/TLS is set by the broker SSL option ' \
+           'group (the SV-270579 TCPS/TLS posture), evidenced by option-group ' \
+           'config, not tenant SQL. See control-layers.yml and docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270571 (SC-13 b / CCI-002450) — the database must implement NIST FIPS
+  # 140-2/140-3 validated cryptographic modules to protect unclassified data
+  # requiring confidentiality, per the data owner's requirements. The DISA check
+  # opens "If encryption is not required for the database, this is not a finding,"
+  # then verifies FIPS mode across three layers: DBFIPS_140 (V$PARAMETER) for TDE /
+  # DBMS_CRYPTO, SSLFIPS_140=TRUE in fips.ora for SSL/TLS, and SQLNET.FIPS_140=TRUE
+  # in sqlnet.ora for Native Network Encryption. The fips.ora and sqlnet.ora legs
+  # are host/OS files in the AWS-managed Oracle Net / SSL layer, unreachable by the
+  # tenant on managed RDS (same layer as SV-270579 / SV-270569). The DBFIPS_140
+  # parameter governing at-rest / DBMS_CRYPTO FIPS mode is set at the instance
+  # level by AWS (RDS parameter group / option group), not a tenant ALTER SYSTEM,
+  # and storage encryption at rest is already provided by the broker (encrypted:
+  # true, KMS — control-layers.yml "at rest" entry). The generic baseline is a
+  # needs_dev stub (no SQL body). The cryptographic-module posture for both in-
+  # transit (broker SSL option group) and at-rest (broker KMS storage encryption)
+  # is a platform fact evidenced by AWS metadata / option-group config, not a
+  # tenant SQL assertion. Override to N/A (platform).
+  control 'SV-270571' do
+    impact 0.0
+    title 'Oracle Database must implement NIST FIPS 140-2/140-3 validated ' \
+          'cryptographic modules to protect unclassified information requiring ' \
+          "confidentiality and cryptographic protection, in accordance with the " \
+          "data owner's requirements."
+    desc 'Not Applicable on managed AWS RDS (satisfied by the platform). The DISA ' \
+         'check is Not a Finding if encryption is not required, and otherwise ' \
+         'verifies FIPS mode across three layers: DBFIPS_140 (V$PARAMETER) for TDE ' \
+         '/ DBMS_CRYPTO, SSLFIPS_140=TRUE in fips.ora for SSL/TLS, and ' \
+         'SQLNET.FIPS_140=TRUE in sqlnet.ora for Native Network Encryption. The ' \
+         'fips.ora and sqlnet.ora legs are host/OS files in the AWS-managed Oracle ' \
+         'Net / SSL layer, unreachable by the tenant on managed RDS (the same layer ' \
+         'as SV-270579 / SV-270569). DBFIPS_140 is set at the instance level by AWS ' \
+         '(RDS parameter/option group), not a tenant ALTER SYSTEM. The validated ' \
+         'cryptographic-module posture is provided by the platform on both axes: ' \
+         'in transit by the broker SSL option group (TCPS 2484 / TLS 1.2 / ' \
+         'FIPS.SSLFIPS_140=TRUE, aws-broker#564) and at rest by broker storage ' \
+         'encryption (encrypted:true, KMS — control-layers.yml "at rest" entry), ' \
+         'evidenced by option-group config + AWS metadata, not a tenant SQL query. ' \
+         'The generic baseline is a needs_dev stub with no SQL body. FIPS ' \
+         'cryptographic modules are inherited from the AWS platform ' \
+         '(control-layers.yml: set_by aws_rds_option_group / verified_by ' \
+         'not_applicable_rds).'
+    tag responsibility: 'platform'
+    describe 'SV-270571 (FIPS 140 validated cryptographic modules, SC-13 b) is Not ' \
+             'Applicable on managed AWS RDS' do
+      skip 'Not Applicable (not_applicable_rds): the FIPS mode checks target ' \
+           'fips.ora / sqlnet.ora (AWS-managed, no tenant OS access) and DBFIPS_140 ' \
+           '(instance-level, set by AWS parameter/option group). Validated crypto ' \
+           'modules are platform-provided in transit (broker SSL option group) and ' \
+           'at rest (broker KMS storage encryption), evidenced by option-group ' \
+           'config + AWS metadata, not tenant SQL. See control-layers.yml and ' \
+           'docs/RESPONSIBILITY.md.'
+    end
+  end
+
+  # SV-270574 (SC-28 / CCI-002476) — the database must protect data at rest and
+  # ensure confidentiality and integrity of application data. The DISA check is
+  # procedural: review the system documentation for whether encryption of data at
+  # rest is required, and — key clause — "If full-disk encryption is being used,
+  # this is not a finding." Only if the AO requires it and full-disk encryption is
+  # NOT in use does it fall back to verifying Oracle TDE (dba_encrypted_columns /
+  # v$encrypted_tablespaces). On managed Cloud.gov RDS, storage encryption at rest
+  # is enabled by the broker at provision (StorageEncrypted set from the
+  # catalog plan's encrypted:true — control-layers.yml "at rest" entry /
+  # aws-broker), which uses an AWS-managed KMS key by default and is the
+  # full-disk / storage-volume encryption the check's not-a-finding clause
+  # names. That encryption is a platform/broker fact evidenced by AWS metadata
+  # (the DB instance StorageEncrypted flag), NOT a tenant SQL assertion. Cloud.gov
+  # has no data-at-rest encryption requirement beyond that full-disk/volume
+  # encryption (managed separately by the broker), so no TDE fallback applies. The
+  # inherited baseline TDE queries are not tenant-verifiable on RDS; we override to
+  # a platform Not Applicable disposition (impact 0.0). If a site's data owner/AO
+  # specifically requires column/tablespace TDE beyond volume encryption,
+  # deploying/verifying TDE for that data becomes the customer's responsibility.
+  control 'SV-270574' do
+    impact 0.0
+    title 'Oracle Database must take steps to protect data at rest and ensure ' \
+          'confidentiality and integrity of application data.'
+    desc 'Not Applicable on managed AWS RDS (satisfied by the platform). The DISA ' \
+         'check is procedural and states "If full-disk encryption is being used, ' \
+         'this is not a finding"; only if data-at-rest encryption is required and ' \
+         'full-disk encryption is not in use does it fall back to Oracle TDE ' \
+         '(dba_encrypted_columns / v$encrypted_tablespaces). On managed Cloud.gov ' \
+         'RDS, storage encryption at rest is enabled by the broker at provision ' \
+         '(StorageEncrypted set from the catalog plan\'s encrypted:true — ' \
+         'control-layers.yml "at rest" entry), which uses an AWS-managed KMS key ' \
+         'by default and is the full-disk / storage-volume encryption named by the ' \
+         'check; Cloud.gov defines no data-at-rest encryption requirement beyond ' \
+         'that volume encryption, so the TDE fallback never applies. That ' \
+         'encryption is a platform/broker fact evidenced by AWS metadata (the DB ' \
+         'instance StorageEncrypted flag), not a tenant SQL assertion — ' \
+         'the inherited TDE queries would report no encrypted tablespaces and ' \
+         'mislead even though volume-level encryption satisfies the control. ' \
+         'Data-at-rest confidentiality is inherited from the AWS platform ' \
+         '(control-layers.yml: set_by broker_infra / verified_by aws_inherited); ' \
+         'because the queried target is not tenant-reachable on RDS the overlay ' \
+         'overrides to Not Applicable (impact 0.0). If a data owner/AO requires ' \
+         'column/tablespace TDE beyond volume encryption, deploying and verifying ' \
+         'that TDE is the customer\'s responsibility.'
+    tag responsibility: 'platform'
+    describe 'SV-270574 (protect data at rest, SC-28) is Not Applicable on ' \
+             'managed AWS RDS' do
+      skip 'Not Applicable (platform): storage encryption at rest is enabled by ' \
+           'the broker at provision (StorageEncrypted from the plan\'s ' \
+           'encrypted:true, AWS-managed KMS key by default) — the full-disk ' \
+           'encryption the DISA check treats as not-a-finding — evidenced by AWS ' \
+           'metadata (StorageEncrypted flag), not tenant SQL, and Cloud.gov ' \
+           'has no data-at-rest requirement beyond it. The inherited TDE queries ' \
+           'are not tenant-verifiable on RDS. Customer-required column/tablespace ' \
+           'TDE beyond volume encryption is a customer responsibility. See ' \
+           'control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
 end

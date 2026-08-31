@@ -137,6 +137,27 @@ controls:
       explicitly in parameters.yml for defense-in-depth (aws-broker#574).
 
   # --- broker infra SET, verified from AWS metadata (not SQL) ---
+  - id_pattern: "SV-270574"
+    set_by: broker_infra
+    verified_by: aws_inherited
+    rationale: >-
+      SV-270574 (SC-28) protect data at rest. The DISA check is procedural and
+      states "If full-disk encryption is being used, this is not a finding"; only
+      if data-at-rest encryption is required and full-disk encryption is not in
+      use does it fall back to Oracle TDE (dba_encrypted_columns /
+      v$encrypted_tablespaces). On managed RDS storage encryption at rest is
+      enabled by the broker at provision (StorageEncrypted set from the catalog
+      plan's encrypted:true -- the "at rest" entry below), which uses an
+      AWS-managed KMS key by default and is the full-disk / storage-volume
+      encryption the not-a-finding clause names — a platform fact evidenced by AWS
+      metadata (StorageEncrypted), not tenant SQL; the inherited control queries
+      would report no encrypted tablespaces and mislead. Customer caveat: if a
+      data owner/AO requires column/tablespace TDE beyond volume encryption,
+      deploying/verifying that TDE is the customer's responsibility. Overridden to
+      a platform disposition (impact 0.0) in BOTH postures (controls/overlay.rb).
+      Placed as an explicit id_pattern BEFORE the broad "encrypted|...|at rest"
+      text_pattern default so it is unambiguous. See controls/overlay.rb
+      `SV-270574`. overlay_status: N/A (platform).
   - text_pattern: "tablespace encryption|encrypted|TDE|at rest"
     set_by: broker_infra
     verified_by: aws_inherited
@@ -1019,9 +1040,9 @@ controls:
       handshake, not a tenant SQL query. Inherited from the AWS platform.
       Overridden to N/A (impact 0.0) in BOTH postures (controls/overlay.rb). Placed
       as an explicit id_pattern before the broad "during transmission" text_pattern
-      (which shares this classification) so it is unambiguous. Depends on the
-      platform blocking 1521 (terraform-provision#2351) for a true TLS-only
-      posture. See controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
+      (which shares this classification) so it is unambiguous. Depended on the
+      platform blocking 1521 (terraform-provision#2351, implemented) for a true
+      TLS-only posture. See controls/overlay.rb `SV-270579`. overlay_status: N/A (platform).
   - id_pattern: "SV-270589"
     set_by: aws_rds_option_group
     verified_by: not_applicable_rds
@@ -1042,6 +1063,37 @@ controls:
       0.0) in BOTH postures (controls/overlay.rb). Placed as an explicit id_pattern
       before the broad defaults so it is unambiguous. See controls/overlay.rb
       `SV-270589`. overlay_status: N/A (platform).
+  - id_pattern: "SV-270569"
+    set_by: aws_rds_option_group
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270569 (IA-7) FIPS 140-2/140-3 cryptography for AUTHENTICATION. The DISA
+      check/fix target SSLFIPS_140=TRUE in $ORACLE_HOME/ldap/admin/fips.ora, a
+      host/OS file in the AWS-managed Oracle Net / SSL layer that the tenant cannot
+      reach on managed RDS; the inherited file() assertion resolves ORACLE_HOME on
+      the InSpec runner host, not the DB server. FIPS-mode SSL/TLS is set by the
+      broker SSL option group (FIPS.SSLFIPS_140=TRUE on the TCPS 2484 / TLS 1.2
+      listener — the SV-270579 posture), evidenced by option-group config, not
+      tenant SQL. Overridden to N/A (impact 0.0) in BOTH postures
+      (controls/overlay.rb). Placed as an explicit id_pattern before the broad
+      defaults so it is unambiguous. See controls/overlay.rb `SV-270569`.
+      overlay_status: N/A (platform).
+  - id_pattern: "SV-270571"
+    set_by: aws_rds_option_group
+    verified_by: not_applicable_rds
+    rationale: >-
+      SV-270571 (SC-13 b) FIPS 140-2/140-3 validated cryptographic modules for
+      unclassified data confidentiality. The DISA check verifies FIPS mode via
+      fips.ora / sqlnet.ora (AWS-managed Oracle Net / SSL files, tenant-unreachable
+      — same layer as SV-270569 / SV-270579) and DBFIPS_140 (V$PARAMETER, set at
+      the instance level by the AWS RDS parameter/option group, not a tenant ALTER
+      SYSTEM). Validated crypto modules are platform-provided on both axes: in
+      transit by the broker SSL option group (aws-broker#564) and at rest by broker
+      KMS storage encryption (the "at rest" entry above), evidenced by option-group
+      config + AWS metadata, not tenant SQL. Overridden to N/A (impact 0.0) in BOTH
+      postures (controls/overlay.rb). Placed as an explicit id_pattern before the
+      broad defaults so it is unambiguous. See controls/overlay.rb `SV-270571`.
+      overlay_status: N/A (platform).
   - text_pattern: "listener|tnslsnr|lsnrctl"
     set_by: aws_inherited
     verified_by: not_applicable_rds

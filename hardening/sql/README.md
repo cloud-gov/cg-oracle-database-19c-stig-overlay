@@ -14,7 +14,7 @@ here (see `../control-layers.yml`).
 ## Principles
 
 - **Assessment-first.** `*_assess.sql` and `01_inventory.sql` only *read* state.
-- **Idempotent (mostly).** Re-running `10`/`11`/`15`/`30` changes nothing on an
+- **Idempotent (mostly).** Re-running `10`/`11`/`12`/`15`/`30` changes nothing on an
   already-hardened DB. **`20` is idempotent only against accounts it left locked**
   — if an operator deliberately unlocks a sample account, re-running `20` will
   re-lock it (it acts on OPEN / expired-unlocked accounts). Document that intent
@@ -44,13 +44,14 @@ here (see `../control-layers.yml`).
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout limits on the **DEFAULT** profile (incl. SV-270549/550/551) |
 | `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Does not create/modify/verify the profile. |
+| `12_password_verify_function.sql` | harden | bind the Oracle-supplied **`ORA12C_STIG_VERIFY_FUNCTION`** to the **DEFAULT** profile for DOD password complexity (SV-270561), detect-first (`apply_fix=N` to report only). Preferred path is `11` (`ORA_STIG_PROFILE` already binds a compliant verify function); `12` covers accounts that stay on DEFAULT. |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
 | `30_audit_policies.sql` | harden | create + enable `CG_AUDIT_POLICY` for events the RDS default policies miss (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE) |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
 | `60_temporary_users.sql` | harden | SAMPLE mechanism for SV-270547: create a distinctively named `TEMPORARY_USERS` profile + an hourly job that LOCKS accounts on it older than 72h (SV-270546 sibling) — assigning accounts to the profile is a per-account customer step |
-| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `15`, `30`, `60`; `20` is only partially reversible — see below) |
+| `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `12`, `15`, `30`, `60`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script
 > currently only **locks/expires sample accounts**. Role/privilege tightening is a
@@ -81,6 +82,12 @@ here (see `../control-layers.yml`).
   capture from `01_inventory` for a true restore). Never drops `ORA_STIG_PROFILE`
   (it is Oracle-supplied/immutable). Reassigning to DEFAULT **re-opens**
   SV-270549/550/551 for those accounts unless DEFAULT was hardened by `10`.
+- `rollback/12_password_verify_function_rollback.sql` — resets DEFAULT
+  `PASSWORD_VERIFY_FUNCTION` to **NULL** (the Oracle out-of-the-box value), which
+  **re-opens the SV-270561 finding** for accounts on the DEFAULT profile. Not this
+  DB's pre-hardening value (capture from `01_inventory` for a true restore). Never
+  drops the Oracle-supplied `ORA12C_STIG_VERIFY_FUNCTION` (`catpvf.sql` owns its
+  lifecycle).
 - `rollback/15_concurrent_sessions_rollback.sql` — resets DEFAULT
   `SESSIONS_PER_USER` to the Oracle **19c vendor default (`UNLIMITED`)**; this
   **re-opens the SV-270495 finding** and is not this DB's pre-hardening value

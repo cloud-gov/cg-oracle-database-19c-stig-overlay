@@ -517,6 +517,31 @@ controls:
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
       ORA_STIG_PROFILE, which already sets FAILED_LOGIN_ATTEMPTS 3). skip_control
       under --skip-customer-controls; runs under --all.
+  - id_pattern: "SV-270561"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      SV-270561 (IA-5(1)(a)) enforce DOD password complexity. The DISA check is a
+      SQL predicate over SYS.DBA_PROFILES (PASSWORD_VERIFY_FUNCTION must be
+      non-null on every profile, DEFAULT resolving to the DEFAULT profile's
+      function) PLUS a source-code review of that function's rules (>=15 chars;
+      one each of upper/lower/numeric/special; >=8 changed) — and is Not a Finding
+      when all accounts are OS/enterprise-authenticated rather than by Oracle. The
+      db-altering fix binds a verify function to the site's profiles
+      (ALTER PROFILE ... LIMIT PASSWORD_VERIFY_FUNCTION <fn>, or ALTER USER ...
+      PROFILE ORA_STIG_PROFILE), which is org-defined — a CUSTOMER responsibility
+      on the SV-270495 pattern (set_by: sql_hardening, verified_by: sql). The
+      baseline stub was unwritten (needs_dev); implemented the SQL presence
+      assertion upstream in the mitre-baseline
+      (feat/sv-270561-password-verify-function, held for PR), modeled on
+      SV-270550/563 — baseline_status: fixed. The presence predicate is the
+      automatable portion; the complexity-RULE code review inside the function is
+      not portably SQL-decidable and is satisfied by using the Oracle-supplied
+      ORA12C_STIG_VERIFY_FUNCTION / ORA_STIG_PROFILE named by the DISA fix.
+      Remediated via hardening/sql/12_password_verify_function.sql (DEFAULT
+      profile) and/or hardening/sql/11_ora_stig_profile.sql (assign the
+      Oracle-supplied ORA_STIG_PROFILE, which already binds a compliant verify
+      function). skip_control under --skip-customer-controls; runs under --all.
   - id_pattern: "SV-270551"
     set_by: sql_hardening
     verified_by: sql
@@ -633,6 +658,35 @@ controls:
       not a managed-RDS platform fact; satisfied by the Cloud.gov SSP
       data-classification posture. Overridden to Manual (impact 0.0) in
       controls/overlay.rb.
+  - id_pattern: "SV-270559"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270559 (IA-2(5)) individual authentication before using a shared
+      authenticator. Procedural DISA check that opens "If shared accounts do not
+      exist, this is Not Applicable"; otherwise it reviews DBMS/OS/enterprise auth
+      settings (optionally Oracle Access Manager X.509 policy) — there is no
+      pass/fail SQL query. On brokered Cloud.gov RDS the broker provisions a single
+      customer user account via `cf create-service` (not a shared account), the
+      same "no shared accounts" basis as SV-270501, so the Not Applicable clause is
+      satisfied at provision. Customer-created shared accounts and their
+      individual-before-shared authentication are a customer/documentation
+      responsibility. A documentation/policy determination, not a tenant SQL
+      assertion. Overridden to Manual (impact 0.0) in controls/overlay.rb.
+  - id_pattern: "SV-270560"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270560 (IA-2) uniquely identify and authenticate organizational users.
+      Procedural DISA check with no pass/fail SQL query: review DBMS/OS/enterprise
+      settings and site practices for unique identification/authentication. On
+      brokered Cloud.gov RDS database accounts are provisioned and authenticated
+      through the FedRAMP-authorized CloudFoundry brokered-credentials model (each
+      binding issues a distinct credential) — part of the Cloud.gov ATO, the same
+      model behind SV-270499. Satisfied by that platform model plus the Cloud.gov
+      SSP (IA-2), not a tenant SQL assertion; customer-created users each getting a
+      separate account is a customer responsibility. Overridden to Manual (impact
+      0.0) in controls/overlay.rb.
   - id_pattern: "SV-270503"
     set_by: manual_review
     verified_by: manual_review

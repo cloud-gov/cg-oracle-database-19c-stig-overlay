@@ -584,23 +584,13 @@ controls:
     set_by: sql_hardening
     verified_by: sql
     rationale: >-
-      SV-270563 (IA-5(1)(a/d)) enforce password maximum lifetime. The DISA check
-      is a SQL predicate over DBA_PROFILES: a profile is a finding when its
-      EFFECTIVE_LIFE_TIME (PASSWORD_LIFE_TIME + PASSWORD_GRACE_TIME, resolving
-      DEFAULT to the DEFAULT profile) is greater than 60, or when either component
-      is UNLIMITED — and it is Not a Finding when all accounts are OS/enterprise-
-      authenticated rather than by Oracle. The db-altering fix is org-defined SQL
-      against a site profile (ALTER PROFILE <profile> LIMIT PASSWORD_LIFE_TIME 60
-      PASSWORD_GRACE_TIME 0, or ALTER USER ... PROFILE ORA_STIG_PROFILE), so this
-      is a CUSTOMER responsibility on the SV-270495 pattern (set_by: sql_hardening,
-      verified_by: sql). The baseline check is correct (baseline_status: fixed; the
-      STIG's DECODE effective-life-time query read via the .column(...) accessor,
-      should_not cmp 'UNLIMITED' and should cmp <= 60). Remediated via
-      hardening/sql/10_profiles.sql (DEFAULT profile — now sets both
-      PASSWORD_LIFE_TIME 60 (the standard DOD value) and PASSWORD_GRACE_TIME 0)
-      and/or hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
-      ORA_STIG_PROFILE, which already carries a compliant lifetime/grace pair).
-      skip_control under --skip-customer-controls; runs under --all.
+      SV-270563 (IA-5(1)(a/d)) enforce password maximum lifetime. SQL-verifiable
+      (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
+      fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
+      responsibility on the SV-270495 pattern. Remediated via
+      hardening/sql/10_profiles.sql / 11_ora_stig_profile.sql. skip_control under
+      --skip-customer-controls; runs under --all. See controls/overlay.rb
+      `SV-270563`.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"
@@ -792,36 +782,26 @@ controls:
     verified_by: manual_review
     rationale: >-
       SV-270562 (IA-5(1)(a/d)) procedures for establishing DOD-compliant temporary
-      passwords for new accounts. Procedural DISA check with no pass/fail SQL:
-      "If all user accounts are authenticated by the OS or an enterprise-level
-      authentication/access mechanism, and not by Oracle, this is not a finding";
-      otherwise review procedures and implementation evidence for temporary-
-      password creation. Temporary-password issuance is an organizational process,
-      not a queryable database setting. On Cloud.gov RDS database credentials are
-      issued through the FedRAMP-authorized CloudFoundry brokered-credentials model
-      (the enterprise-level mechanism the check anticipates) and any Oracle-managed
-      temporary credential is governed by documented procedures; satisfied by
-      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is
-      not SQL-based (baseline_status: not_applicable — a manual-review stub skip).
-      Overridden to Manual (impact 0.0) in controls/overlay.rb.
+      passwords for new accounts. Procedural DISA check, no pass/fail SQL
+      (temporary-password issuance is an organizational process, and "not a
+      finding" when accounts are OS/enterprise-authenticated). Satisfied by system
+      documentation / the Cloud.gov SSP (IA-5) via the brokered-credentials model;
+      inherited baseline is not SQL-based (baseline_status: not_applicable — a
+      manual-review stub skip). Overridden to Manual (impact 0.0). See
+      controls/overlay.rb `SV-270562`.
   - id_pattern: "SV-270564"
     set_by: manual_review
     verified_by: manual_review
     rationale: >-
       SV-270564 (IA-5(1)(c), HIGH) store passwords using an approved salted key
-      derivation function. Procedural DISA check with no pass/fail SQL: review DBMS
-      objects, configuration files, scripts, applications, and environment
-      files/settings to confirm no passwords are stored in clear text or with
-      reversible encryption, and that any external password store (Oracle Wallet)
-      is encrypted. Oracle Database stores its password verifiers as one-way salted
-      hashes by design, so the database-native portion is inherently satisfied; the
-      residual is a documentation review of scripts/config/external stores for
-      embedded plaintext/reversible credentials. On Cloud.gov RDS the tenant does
-      not embed credentials in database objects or host config, and credential
-      handling rides the FedRAMP-authorized broker credential model; satisfied by
-      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is
-      not SQL-based (baseline_status: not_applicable — a manual-review stub skip).
-      Overridden to Manual (impact 0.0) in controls/overlay.rb.
+      derivation function. Procedural DISA check, no pass/fail SQL: Oracle stores
+      password verifiers as one-way salted hashes by design (database-native
+      portion inherently satisfied), leaving a documentation review of
+      scripts/config/external stores for embedded plaintext/reversible credentials.
+      Satisfied by system documentation / the Cloud.gov SSP (IA-5); inherited
+      baseline is not SQL-based (baseline_status: not_applicable — a manual-review
+      stub skip). Overridden to Manual (impact 0.0). See controls/overlay.rb
+      `SV-270564`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

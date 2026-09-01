@@ -801,8 +801,9 @@ controls:
       issued through the FedRAMP-authorized CloudFoundry brokered-credentials model
       (the enterprise-level mechanism the check anticipates) and any Oracle-managed
       temporary credential is governed by documented procedures; satisfied by
-      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is a
-      manual-review skip. Overridden to Manual (impact 0.0) in controls/overlay.rb.
+      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is
+      not SQL-based (baseline_status: not_applicable — a manual-review stub skip).
+      Overridden to Manual (impact 0.0) in controls/overlay.rb.
   - id_pattern: "SV-270564"
     set_by: manual_review
     verified_by: manual_review
@@ -818,8 +819,9 @@ controls:
       embedded plaintext/reversible credentials. On Cloud.gov RDS the tenant does
       not embed credentials in database objects or host config, and credential
       handling rides the FedRAMP-authorized broker credential model; satisfied by
-      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is a
-      manual-review skip. Overridden to Manual (impact 0.0) in controls/overlay.rb.
+      system documentation / the Cloud.gov SSP (IA-5). The inherited baseline is
+      not SQL-based (baseline_status: not_applicable — a manual-review stub skip).
+      Overridden to Manual (impact 0.0) in controls/overlay.rb.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

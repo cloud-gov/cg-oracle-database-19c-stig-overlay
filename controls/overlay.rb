@@ -709,8 +709,9 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # and otherwise directs the reviewer to "review procedures and implementation
   # evidence for creation of temporary passwords" — there is no pass/fail SQL
   # predicate (the temporary-password issuance procedure is an organizational
-  # process, not a queryable database setting). The inherited baseline body is a
-  # manual-review skip. Satisfied by the Cloud.gov account-provisioning process
+  # process, not a queryable database setting). The inherited baseline is not
+  # SQL-based (baseline_status: not_applicable — a manual-review stub skip).
+  # Satisfied by the Cloud.gov account-provisioning process
   # and SSP (IA-5): database credentials are issued through the FedRAMP-authorized
   # CloudFoundry brokered-credentials model (the enterprise-level mechanism the
   # check's "not a finding" clause anticipates), and any Oracle-managed temporary
@@ -735,7 +736,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Oracle-managed temporary credential is governed by documented ' \
          'procedures satisfying DOD length/complexity requirements. Satisfied by ' \
          'system documentation / the Cloud.gov SSP (IA-5); no tenant SQL ' \
-         'assertion applies. The inherited baseline is a manual-review skip. See ' \
+         'assertion applies. The inherited baseline is not SQL-based ' \
+         '(a manual-review stub skip). See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
     tag responsibility: 'customer'
     describe 'Procedures for establishing DOD-compliant temporary passwords for ' \
@@ -762,7 +764,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # database-native portion is inherently satisfied; the residual is a
   # documentation review of scripts/config/external stores for embedded
   # plaintext/reversible credentials, which is not a pass/fail SQL predicate. The
-  # inherited baseline body is a manual-review skip. On Cloud.gov RDS the tenant
+  # inherited baseline is not SQL-based (baseline_status: not_applicable — a
+  # manual-review stub skip). On Cloud.gov RDS the tenant
   # does not embed credentials in database objects or host config, and any
   # external password handling rides the broker credential model; satisfied by
   # system documentation / the Cloud.gov SSP (IA-5). The overlay overrides the
@@ -786,7 +789,8 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'objects or host configuration, and credential handling rides the ' \
          'FedRAMP-authorized broker credential model. Satisfied by system ' \
          'documentation / the Cloud.gov SSP (IA-5); no tenant SQL assertion ' \
-         'applies. The inherited baseline is a manual-review skip. See ' \
+         'applies. The inherited baseline is not SQL-based (a manual-review ' \
+         'stub skip). See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
     tag responsibility: 'customer'
     describe 'Approved salted hashing of stored passwords is a ' \

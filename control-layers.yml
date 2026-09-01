@@ -720,7 +720,7 @@ controls:
       assertion. The inherited baseline body runs an UNCONDITIONAL FGA-count
       query that would FAIL whenever no FGA policy exists (misleading on RDS,
       since the STIG treats that as Not a Finding absent additional
-      requirements).       Overridden to Manual (impact 0.0) in controls/overlay.rb.
+      requirements). Overridden to Manual (impact 0.0) in controls/overlay.rb.
       If additional detailed-audit requirements are later defined, deploying and
       verifying FGA becomes the customer's responsibility.
   - id_pattern: "SV-270575"

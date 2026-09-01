@@ -1866,7 +1866,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Cloud.gov SSP (SC-28(1)), not a tenant SQL assertion. Where such ' \
          'protection is required, it is delivered by the broker-provisioned ' \
          'storage encryption that also satisfies SV-270574 (StorageEncrypted, ' \
-          'AWS-managed KMS key), evidenced by AWS metadata rather than SQL — a ' \
+         'AWS-managed KMS key), evidenced by AWS metadata rather than SQL — a ' \
          'platform fact, the same mechanism behind SV-270574. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'

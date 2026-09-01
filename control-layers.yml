@@ -256,6 +256,22 @@ controls:
     set_by: aws_inherited
     verified_by: sql
     rationale: Version is AWS-managed but readable via V$INSTANCE/V$VERSION.
+  - id_pattern: "SV-270552"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270552 (CM-7 a) default demonstration/sample databases, objects, and
+      applications must be removed. The DISA check is a pure SQL predicate over
+      dba_users for the Oracle default sample-schema accounts
+      (BI, HR, OE, PM, IX, SH, SCOTT); any present is a finding. A stock brokered
+      RDS instance does not install the sample schemas (they are not part of the
+      broker DBCA/provisioning selection, which AWS owns), so a compliant instance
+      returns zero rows — the compliant posture is inherited from the AWS/RDS
+      provisioning default (aws_inherited) with no org-defined value and no
+      allowlist needed. The baseline control's `should be_empty` assertion is
+      correct (baseline_status: ok) and runs in BOTH postures to detect drift
+      (e.g. a customer-loaded sample schema); it is never suppressed (two-axis
+      rule). Overlay inherits as-is (overlay_status: inherited).
   - id_pattern: "SV-270553"
     set_by: aws_inherited
     verified_by: sql
@@ -275,9 +291,32 @@ controls:
       pattern): run the DISA query and FAIL on any returned comp_id not in the
       org-defined authorized_components allowlist (default CONTEXT — the RDS
       default-installed component, documented and authorized). Detect-first:
-      removal is not possible on RDS; the assertion flags any unauthorized/
-      undocumented component for review. Runs in BOTH postures. overlay_status:
-      overlay-sql.
+       removal is not possible on RDS; the assertion flags any unauthorized/
+       undocumented component for review. Runs in BOTH postures. overlay_status:
+       overlay-sql.
+  - id_pattern: "SV-270554"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270554 (CM-7 a) unused DBMS components that are integrated and cannot be
+      uninstalled must be disabled. The DISA check is SQL over v$option for five
+      chopt-manageable options (Data Mining, .NET extensions, OLAP, Partitioning,
+      Real Application Testing) and is a finding only if an installed component
+      (value=TRUE) is unused and NOT authorized. The DISA fix is the OS-level chopt
+      utility + Oracle service restart (unreachable on managed RDS; the option set
+      is fixed at database creation, which AWS owns and the tenant cannot chopt),
+      so the enabled-component set is inherited from the AWS provisioning default
+      (aws_inherited). The check remains SQL-verifiable, so the overlay inherits the
+      baseline control as-is (overlay_status: inherited) — no override or allowlist
+      needed: a stock brokered RDS instance has these options FALSE, so the
+      value='TRUE' filter returns an empty installed set and the control passes
+      detect-first, flagging any future enabled+unauthorized option. Runs in BOTH
+      postures; never suppressed (two-axis rule). CONDITIONAL ON A BASELINE FIX:
+      the pre-fix baseline body listed v$option rows regardless of value, false-
+      failing on options reported FALSE; corrected to filter value='TRUE' on the
+      baseline branch fix/sv-270554-voption-value-filter (baseline_status: fixed,
+      PR cloud-gov/oracle-database-19c-stig-baseline#14). Merge #14, then re-vendor
+      the baseline here (inspec.lock) to pick up the fix.
 
   # --- detect-first (assessment only; never auto-remediated) ---
   - id_pattern: "SV-270510"
@@ -495,6 +534,27 @@ controls:
       ORA_STIG_PROFILE, which already sets INACTIVE_ACCOUNT_TIME 35 — the STIG's
       "ALTER USER ... PROFILE ORA_STIG_PROFILE" remediation). skip_control under
       --skip-customer-controls; runs under --all.
+  - id_pattern: "SV-270547"
+    set_by: sql_hardening
+    verified_by: manual_review
+    rationale: >-
+      SV-270547 (CM-6 b) temporary user accounts must be automatically removed or
+      disabled after 72 hours. The DISA check is Not a Finding if the organization
+      has a consistently enforced policy forbidding temporary/emergency accounts,
+      or if all accounts authenticate via the OS / an enterprise mechanism rather
+      than Oracle; only if the site uses Oracle-managed temporary accounts must it
+      provide the 72-hour auto-lock mechanism. The baseline satisfies this at
+      provisioning (the broker issues a single, non-temporary customer account), so
+      no temporary-account lifecycle exists to enforce out of the box. If the
+      customer creates Oracle-managed temporary accounts, providing that mechanism
+      is a CUSTOMER responsibility (sibling to SV-270546, identify temporary
+      accounts). The baseline control is a manual-review stub (no SQL assertion),
+      so — exactly like SV-270546 — it remains a baseline manual-review skip and is
+      NOT part of the overlay's SQL-only skip gate (that gate is reserved for
+      controls whose SQL-assessed element would produce a misleading finding in a
+      platform-provider run). Sample remediation:
+      hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + hourly 72h
+      lock job). See controls/overlay.rb (gate comment) and docs/RESPONSIBILITY.md.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"

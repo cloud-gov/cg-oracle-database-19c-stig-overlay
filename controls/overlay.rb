@@ -22,6 +22,13 @@ include_controls 'oracle-database-19c-stig-baseline' do
     skip_control 'SV-270549'  # PASSWORD_LOCK_TIME UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
     skip_control 'SV-270550'  # FAILED_LOGIN_ATTEMPTS <=3 — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
     skip_control 'SV-270551'  # INACTIVE_ACCOUNT_TIME <=35 — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
+    # SV-270547 (auto-remove temp accounts after 72h) is NOT added here. Like its
+    # sibling SV-270546, its baseline body is a pure manual-review stub with no SQL
+    # assertion, so it produces no misleading finding in a platform-provider run —
+    # the gate's own criterion (above) excludes manual-review-only controls. It
+    # remains a baseline manual-review skip; the customer disposition is documented
+    # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
+    # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------

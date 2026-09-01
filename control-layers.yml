@@ -805,6 +805,51 @@ controls:
       customer creates additional users, individual attribution for them is the
       customer's responsibility. Overridden to a platform disposition (impact 0.0)
       in controls/overlay.rb.
+  - id_pattern: "SV-270567"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural PKI-to-account mapping review; no pass/fail SQL predicate on
+      managed RDS. See controls/overlay.rb `SV-270567`.
+  - id_pattern: "SV-270568"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Customer-owned documentation/training/AO review for client-side alternative
+      logon to plain-text-capable tools; no pass/fail SQL predicate. See
+      controls/overlay.rb `SV-270568`.
+  - id_pattern: "SV-270570"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural review of unique nonorganizational-user authentication; no
+      pass/fail SQL predicate. See controls/overlay.rb `SV-270570`.
+  - id_pattern: "SV-270572"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural separation-of-duties/design review; no pass/fail SQL predicate.
+      See controls/overlay.rb `SV-270572`.
+
+  # --- inherited SQL-verifiable, compliant by platform ---
+  - id_pattern: "SV-270573"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270573 (SC-24) preserve system state on failure. The DISA check confirms
+      ARCHIVELOG mode via `select log_mode from v$database`; on managed RDS the
+      brokered master user CAN select v$database.log_mode by default (no extra
+      grant — confirmed against live RDS: returns ARCHIVELOG), so the inherited
+      baseline assertion (`log_mode should cmp 'ARCHIVELOG'`) is tenant-runnable
+      and SQL-verifiable. RDS enforces ARCHIVELOG (given backup retention > 0,
+      which the broker sets) to provide automated backups and point-in-time
+      recovery
+      (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html),
+      so the compliant posture is inherited from the AWS
+      platform (Oracle/RDS default), not a tenant hardening step. The baseline
+      check is correct and detectable; kept running in both postures per the
+      two-axis / fail-closed rule (never suppressed). Overlay inherits as-is
+      (overlay_status: inherited); no overlay control. baseline_status stays ok.
 
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270506"

@@ -766,6 +766,33 @@ controls:
       it. Procedural source-code review of customer-owned PL/SQL and application
       code; no portable pass/fail SQL predicate — customer secure-coding
       responsibility. See controls/overlay.rb `SV-270581`.
+  - id_pattern: "SV-270582"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270582 (SI-10) SQL-injection protection for dynamic code execution.
+      Procedural source-code review of customer-owned PL/SQL and application code;
+      no portable pass/fail SQL predicate and no customer code runs at platform
+      provision — customer secure-coding responsibility. See controls/overlay.rb
+      `SV-270582`.
+  - id_pattern: "SV-270583"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270583 (SI-11) error messages must not reveal sensitive/harmful
+      information. Procedural DBMS-settings/application-code review; error content
+      is a customer application-design fact with no portable SQL predicate (log
+      delivery to CloudWatch/Cloud.gov logs under tenant isolation is a platform
+      fact). See controls/overlay.rb `SV-270583`.
+  - id_pattern: "SV-270584"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270584 (SI-11) restrict error messages to authorized personnel.
+      Procedural review of customer end-user applications and tool access; who may
+      view error content has no portable SQL predicate (tenant isolation of the
+      CloudWatch/Cloud.gov log stream is a platform boundary fact) — customer
+      responsibility. See controls/overlay.rb `SV-270584`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

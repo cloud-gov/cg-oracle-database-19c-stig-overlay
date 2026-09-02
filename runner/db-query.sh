@@ -47,7 +47,7 @@ set -euo pipefail
 # script and run-validation.sh cannot drift on how they reach the database.
 LOG_PREFIX=db-query
 export LOG_PREFIX  # consumed by the sourced lib/db-connect.sh (SC2034)
-# shellcheck source=lib/db-connect.sh
+# shellcheck source=lib/db-connect.sh disable=SC1091
 . "$(dirname "$0")/lib/db-connect.sh"
 
 ORAQUERY_BIN="${ORAQUERY_BIN:-/usr/local/bin/oraquery}"
@@ -134,14 +134,23 @@ if [ -n "$have_file" ]; then
     # a final statement with no trailing ';'. Simple ';' split, NOT a SQL parser —
     # a ';' inside a string literal or PL/SQL block would be mis-split.
     ran_any=
+    rc=0
     file_sql="$(cat "$FILE")"
     while IFS= read -r -d ';' stmt || [ -n "$stmt" ]; do
         [ -n "${stmt//[[:space:]]/}" ] || continue
         ran_any=1
-        run_statement "$stmt"
+        # Do NOT let a failing statement abort or be swallowed: capture each
+        # statement's exit code and remember the last non-zero one, so a partial
+        # failure is reported (rc!=0) rather than masked by the final `exit 0`.
+        stmt_rc=0
+        run_statement "$stmt" || stmt_rc=$?
+        if [ "$stmt_rc" -ne 0 ]; then
+            rc=$stmt_rc
+            echo "db-query: statement failed (exit ${stmt_rc}); continuing" >&2
+        fi
     done <<<"$file_sql"
     [ -n "$ran_any" ] || { echo "db-query: no SQL statements found in ${FILE}" >&2; exit 2; }
-    exit 0
+    exit "$rc"
 fi
 
 # No -c/-f: read a single statement from stdin.

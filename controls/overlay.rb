@@ -1870,7 +1870,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'platform fact, the same mechanism behind SV-270574. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'platform'
+    tag responsibility: 'customer'
     describe 'The implementation of this control, cryptographic protection ' \
              'against unauthorized modification of organization-defined data at ' \
              'rest, is a manual/documentation determination: per the DISA check, ' \
@@ -1909,7 +1909,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          '(SC-3/SC-2), and the broker provisions the database with distinct ' \
          'privileged versus application accounts. The inherited baseline is a ' \
          'manual-review skip. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'platform'
+    tag responsibility: 'customer'
     describe 'The implementation of this control, isolating security functions ' \
              'from nonsecurity functions via separate security domains, is a ' \
              'design/documentation determination: Oracle by default stores ' \

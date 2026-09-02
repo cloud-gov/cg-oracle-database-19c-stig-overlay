@@ -723,6 +723,49 @@ controls:
       requirements). Overridden to Manual (impact 0.0) in controls/overlay.rb.
       If additional detailed-audit requirements are later defined, deploying and
       verifying FGA becomes the customer's responsibility.
+  - id_pattern: "SV-270575"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270575 (SC-28(1)) crypto protection against unauthorized MODIFICATION of
+      data at rest. Procedural DISA check ("if no information is identified as
+      requiring such protection, this is not a finding"); org documentation/SSP
+      determination, satisfied where required by broker storage encryption
+      (SV-270574) — no pass/fail SQL predicate. See controls/overlay.rb
+      `SV-270575`.
+  - id_pattern: "SV-270576"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270576 (SC-3/SC-2) isolate security functions via separate security
+      domains. Procedural design/documentation review; Oracle stores security
+      functionality in separate data-dictionary schemas by default — no pass/fail
+      SQL predicate. See controls/overlay.rb `SV-270576`.
+  - id_pattern: "SV-270577"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270577 (SC-4) enforce a data-transfer policy protecting DB contents from
+      unauthorized/unintended transfer. Procedural review of dev/test data-refresh
+      procedures and data-movement code; org policy determination, customer
+      responsibility for customer-owned data — no pass/fail SQL predicate. See
+      controls/overlay.rb `SV-270577`.
+  - id_pattern: "SV-270580"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270580 (SI-10) check validity of data inputs. Procedural source-code/
+      schema review of the customer-owned application schema (constraints, field
+      definitions, triggers); no portable pass/fail SQL predicate — customer
+      application-design responsibility. See controls/overlay.rb `SV-270580`.
+  - id_pattern: "SV-270581"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270581 (SI-10) reserve dynamic code execution for situations that require
+      it. Procedural source-code review of customer-owned PL/SQL and application
+      code; no portable pass/fail SQL predicate — customer secure-coding
+      responsibility. See controls/overlay.rb `SV-270581`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

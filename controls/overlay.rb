@@ -1839,4 +1839,206 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'control-layers.yml and docs/RESPONSIBILITY.md.'
     end
   end
+
+  # SV-270575 (SC-28(1)) — cryptographic mechanisms to prevent unauthorized
+  # MODIFICATION of organization-defined data at rest (PII/classified). The DISA
+  # check is procedural and opens "If no information is identified as requiring
+  # such protection, this is not a finding," otherwise reviewing whether the
+  # DBMS/OS/filesystem encryption in use provides the required integrity
+  # protection. Whether data requires integrity protection at rest is an
+  # organization documentation/policy determination governed by the Cloud.gov SSP
+  # (SC-28(1)); there is no pass/fail SQL predicate. Where such protection is
+  # required, it is delivered by the same broker-provisioned storage encryption
+  # that satisfies SV-270574 (StorageEncrypted / AWS-managed KMS, evidenced by AWS
+  # metadata, not tenant SQL). The inherited baseline is a manual-review skip.
+  control 'SV-270575' do
+    impact 0.0
+    title 'Oracle Database must implement cryptographic mechanisms to prevent ' \
+          'unauthorized modification of organization-defined information at rest ' \
+          '(to include, at a minimum, PII and classified information) on ' \
+          'organization-defined information system components.'
+    desc 'Manual disposition. The DISA check is procedural: "If no information is ' \
+         'identified as requiring such protection [from modification], this is not ' \
+         'a finding"; otherwise review whether the DBMS/OS/filesystem encryption ' \
+         'in use provides the required level of integrity protection. Whether data ' \
+         'at rest requires cryptographic modification-protection is an ' \
+         'organization documentation/policy determination governed by the ' \
+         'Cloud.gov SSP (SC-28(1)), not a tenant SQL assertion. Where such ' \
+         'protection is required, it is delivered by the broker-provisioned ' \
+         'storage encryption that also satisfies SV-270574 (StorageEncrypted, ' \
+         'AWS-managed KMS key), evidenced by AWS metadata rather than SQL — a ' \
+         'platform fact, the same mechanism behind SV-270574. The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, cryptographic protection ' \
+             'against unauthorized modification of organization-defined data at ' \
+             'rest, is a manual/documentation determination: per the DISA check, ' \
+             'if no information is identified as requiring such protection this is ' \
+             'Not a Finding. It is satisfied by the Cloud.gov SSP ' \
+             'data-classification posture (SC-28(1)) plus, where required, the ' \
+             'broker-provisioned storage encryption (SV-270574), not by an ' \
+             'automated SQL assertion.' do
+      skip 'Manual review: satisfied by system documentation / SSP (SC-28(1)) and ' \
+           'broker-provisioned storage encryption (see SV-270574); no SQL ' \
+           'assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270576 (SC-3 / SC-2) — isolate security functions from nonsecurity
+  # functions via separate security domains. The DISA check is procedural: verify
+  # that objects/code implementing security functionality live in a separate
+  # security domain (a dedicated database or schema). The check itself notes this
+  # is Oracle's DEFAULT behavior — roles, permissions, profiles, and password
+  # complexity requirements are stored in separate data-dictionary schemas — and
+  # directs the reviewer to inspect only site-specific security modules. There is
+  # no pass/fail SQL predicate; it is a design/documentation determination. The
+  # inherited baseline is a manual-review skip.
+  control 'SV-270576' do
+    impact 0.0
+    title 'Oracle Database must isolate security functions from nonsecurity ' \
+          'functions by means of separate security domains.'
+    desc 'Manual disposition. The DISA check is procedural: verify that objects ' \
+         'or code implementing security functionality are located in a separate ' \
+         'security domain (a separate database or schema). Per the check, this is ' \
+         'the DEFAULT behavior for Oracle — roles, permissions, profiles, and ' \
+         'password-complexity requirements are stored in separate Oracle Data ' \
+         'Dictionary schemas — and the reviewer inspects only any site-specific ' \
+         'security modules. There is no pass/fail SQL predicate; it is a ' \
+         'design/documentation determination governed by the Cloud.gov SSP ' \
+         '(SC-3/SC-2), and the broker provisions the database with distinct ' \
+         'privileged versus application accounts. The inherited baseline is a ' \
+         'manual-review skip. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, isolating security functions ' \
+             'from nonsecurity functions via separate security domains, is a ' \
+             'design/documentation determination: Oracle by default stores ' \
+             'security functionality (roles, permissions, profiles) in separate ' \
+             'data-dictionary schemas, and no site-specific security module ' \
+             'commingles it with application logic. Satisfied by the Cloud.gov ' \
+             'SSP (SC-3/SC-2), not by an automated SQL assertion.' do
+      skip 'Manual review: Oracle isolates security functionality in separate ' \
+           'data-dictionary schemas by default; satisfied by system documentation ' \
+           '/ SSP (SC-3/SC-2). No SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270577 (SC-4) — protect DB contents from unauthorized/unintended transfer
+  # by enforcing a data-transfer policy. The DISA check is procedural: review the
+  # procedures and any scripts/code used to refresh dev/test data from production,
+  # confirming copies of production data are not left in unprotected locations and
+  # that sensitive data is de-sensitized or access-authorized before import. There
+  # is no pass/fail SQL predicate; it is an organizational policy/procedure
+  # determination (data-transfer / dev-test-refresh policy) governed by the
+  # Cloud.gov SSP (SC-4). Managing production-to-nonproduction data movement for
+  # customer-owned data is a customer responsibility. The inherited baseline is a
+  # manual-review skip.
+  control 'SV-270577' do
+    impact 0.0
+    title 'Oracle Database contents must be protected from unauthorized and ' \
+          'unintended information transfer by enforcement of a data-transfer ' \
+          'policy.'
+    desc 'Manual disposition. The DISA check is procedural: review the procedures ' \
+         'and any scripts/code that move production data to dev/test systems (or ' \
+         'elsewhere), verifying copies are not left in unprotected locations and ' \
+         'that sensitive data is de-sensitized or access-authorized before import. ' \
+         'There is no pass/fail SQL predicate; it is an organizational ' \
+         'policy/procedure determination (a data-transfer / dev-test-refresh ' \
+         'policy) governed by the Cloud.gov SSP (SC-4). For brokered RDS, ' \
+         'controlling how customer-owned production data is copied to ' \
+         'non-production environments is a customer responsibility. The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, protecting database contents ' \
+             'from unauthorized/unintended transfer by enforcing a data-transfer ' \
+             'policy, is a policy/procedure determination: review of dev/test ' \
+             'data-refresh procedures and data-movement code to ensure production ' \
+             'data is not left unprotected. Satisfied by the Cloud.gov SSP (SC-4) ' \
+             'and customer data-handling procedures, not by an automated SQL ' \
+             'assertion.' do
+      skip 'Manual review: satisfied by the organizational data-transfer policy / ' \
+           'SSP (SC-4) and customer dev-test-refresh procedures; no SQL assertion ' \
+           'is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270580 (SI-10) — the DBMS must check the validity of data inputs. The DISA
+  # check is a procedural source-code/schema review: inspect DBMS code, field
+  # definitions, constraints, and triggers to confirm data input is validated, and
+  # the fix adds field definitions and enabled constraints to the application
+  # schema. Which inputs require validation and how is an application-design fact
+  # of the customer-owned application schema; there is no portable pass/fail SQL
+  # predicate (a generic query cannot decide whether every required constraint
+  # exists across arbitrary customer tables). It is a documentation/application
+  # determination governed by the Cloud.gov SSP (SI-10) and the customer's
+  # application. The inherited baseline is a manual-review skip.
+  control 'SV-270580' do
+    impact 0.0
+    title 'Oracle Database must check the validity of data inputs.'
+    desc 'Manual disposition. The DISA check is a procedural source-code/schema ' \
+         'review: inspect DBMS code, field definitions, constraints, and triggers ' \
+         'to determine whether input data is validated, and the fix adds field ' \
+         'definitions and enabled constraints to the application schema. Which ' \
+         'inputs require validation, and the constraints/field definitions that ' \
+         'enforce it, are application-design facts of the customer-owned schema — ' \
+         'there is no portable pass/fail SQL predicate (a generic query cannot ' \
+         'decide whether every required constraint exists across arbitrary ' \
+         'customer tables). It is a documentation/application determination ' \
+         'governed by the Cloud.gov SSP (SI-10); designing and enforcing input ' \
+         'validation in the customer application schema is a customer ' \
+         'responsibility. The inherited baseline is a manual-review skip. See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, checking the validity of data ' \
+             'inputs, is a source-code/schema-design determination reviewed ' \
+             'against the customer-owned application schema (field definitions, ' \
+             'constraints, triggers). It has no portable SQL predicate and is ' \
+             'satisfied by the Cloud.gov SSP (SI-10) and customer application ' \
+             'design, not by an automated assertion.' do
+      skip 'Manual review: input validation is an application schema-design fact ' \
+           '(constraints/field definitions/triggers) with no portable SQL ' \
+           'predicate; satisfied by system documentation / SSP (SI-10) and ' \
+           'customer application design. No SQL assertion is applicable on ' \
+           'managed RDS.'
+    end
+  end
+
+  # SV-270581 (SI-10) — reserve dynamic code execution for situations that require
+  # it. The DISA check is a procedural source-code review of stored procedures,
+  # functions, triggers, and application code to identify dynamic code execution
+  # that could practically be replaced by static execution with strongly typed
+  # parameters; the fix rewrites such code. This is a customer-owned
+  # application/PL/SQL design determination with no portable pass/fail SQL
+  # predicate. It is governed by the Cloud.gov SSP (SI-10) and the customer's
+  # secure-coding practices. The inherited baseline is a manual-review skip.
+  control 'SV-270581' do
+    impact 0.0
+    title 'The database management system (DBMS) and associated applications ' \
+          'must reserve the use of dynamic code execution for situations that ' \
+          'require it.'
+    desc 'Manual disposition. The DISA check is a procedural source-code review — ' \
+         'inspect stored procedures, functions, triggers, and application code to ' \
+         'find dynamic code execution employed where the objective could ' \
+         'practically be met by static execution with strongly typed parameters — ' \
+         'and the fix rewrites that code. This is a customer-owned ' \
+         'application/PL/SQL secure-coding determination with no portable ' \
+         'pass/fail SQL predicate. It is governed by the Cloud.gov SSP (SI-10) and ' \
+         'the customer\'s secure-coding practices; reviewing and remediating ' \
+         'dynamic code in the customer application is a customer responsibility. ' \
+         'The inherited baseline is a manual-review skip. See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, reserving dynamic code ' \
+             'execution for situations that require it, is a source-code review ' \
+             'of customer-owned stored procedures/functions/triggers and ' \
+             'application code. It has no portable SQL predicate and is satisfied ' \
+             'by the Cloud.gov SSP (SI-10) and customer secure-coding practices, ' \
+             'not by an automated assertion.' do
+      skip 'Manual review: dynamic-code-execution usage is a customer ' \
+           'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
+           'satisfied by system documentation / SSP (SI-10) and customer ' \
+           'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+    end
+  end
 end

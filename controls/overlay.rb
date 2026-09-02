@@ -274,6 +274,76 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # --- SHARED-RESPONSIBILITY compensating control (accepted deviation D-5) -----
+  # SV-276000 (CM-6 b) — a minimum of three Oracle redo log groups AND a minimum of
+  # two members per group, on separate/archived physical disks or a RAID device.
+  #
+  # Split by evidence source:
+  #   * SQL-visible (V$LOG): BOTH halves are actually queryable — the baseline runs
+  #     `select count(group#) from V$LOG` (>=3 groups) AND
+  #     `select group# from V$LOG where members < 2`. So SQL sees the DEFICIT.
+  #   * NOT SQL-visible: the COMPENSATING MECHANISM — EBS intra-AZ replication plus
+  #     CUSTOMER-elected Multi-AZ synchronous cross-AZ replication (aws-broker
+  #     `medium-oracle-se2-redundant`, redundant:true -> MultiAZ), the RAID/mirroring
+  #     equivalent the STIG check text exempts, plus automated backup/PITR.
+  # That asymmetry — deficit visible, compensation invisible — is exactly why
+  # control-layers.yml classifies this `verified_by: compensating_control` and not
+  # `sql`.
+  #
+  # The member requirement is FACTUALLY UNMET on managed RDS (MEMBERS=1) and is not
+  # remediable by any party: ALTER DATABASE ADD LOGFILE MEMBER needs OS filesystem
+  # paths no tenant has. It is therefore an ACCEPTED DEVIATION with a compensating
+  # control, NOT "satisfied by the platform" — recorded as D-5 in
+  # docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md and PENDING ISSO ACCEPTANCE.
+  #
+  # Overridden to impact 0.0 on that basis so the deviation is reported once, with
+  # its rationale, instead of recurring as a permanent unactionable failure that
+  # trains reviewers to ignore the report. This is a deliberate, documented
+  # disposition — NOT an auto-pass: the compensating evidence lives in AWS metadata
+  # and the CRM, and the ISSO acceptance is the authority for the N/A, not this file.
+  # If the ISSO declines D-5, revert this override and carry SV-276000 as an open
+  # POA&M finding.
+  #
+  # Shared responsibility: the PLATFORM provides EBS replication, tenant-controllable
+  # >=3 log groups, and the AVAILABILITY of a Multi-AZ tier; ELECTING that plan when
+  # data-criticality/RTO warrants it (or accepting the residual single-AZ gap for
+  # development instances) is the CUSTOMER's decision, recorded in the CRM.
+  # NOTE: electing the -redundant (Multi-AZ) plan does NOT change V$LOG/V$LOGFILE —
+  # Multi-AZ is block-level storage replication, not Oracle-level redo member
+  # multiplexing — so the underlying deficit is identical on both plans.
+  # Refs: aws-broker#567 (redundant plan), aws-broker#558 (live proof),
+  # docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md D-5, control-layers.yml.
+  control 'SV-276000' do
+    impact 0.0
+    title 'Oracle Database must be configured with a minimum of three redo log ' \
+          'groups, each with a minimum of two members.'
+    desc 'Accepted deviation (D-5) on managed AWS RDS, pending ISSO acceptance. ' \
+         'The >=3 redo log groups requirement is met and SQL-verifiable. The ' \
+         '>=2-members-per-group requirement is NOT met (V$LOG.MEMBERS = 1) and is ' \
+         'not remediable by any party: ALTER DATABASE ADD LOGFILE MEMBER requires ' \
+         'OS filesystem paths that no tenant has on managed RDS. The compensating ' \
+         'mechanism is storage-layer rather than Oracle-layer — EBS intra-AZ ' \
+         'replication, customer-elected Multi-AZ synchronous replication, and ' \
+         'automated backups with point-in-time recovery — which is the class of ' \
+         'hardware/RAID redundancy the DISA check text exempts. SQL can see the ' \
+         'deficit but not the compensation, hence verified_by ' \
+         'compensating_control rather than sql. This is an accepted deviation ' \
+         'with a documented compensating control, NOT a claim that the platform ' \
+         'satisfies the requirement as written. See ' \
+         'docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md (D-5) and ' \
+         'control-layers.yml.'
+    tag responsibility: 'platform'
+    describe 'SV-276000 (three+ redo log groups, two+ members each) is an ' \
+             'accepted deviation with a compensating control on managed AWS RDS' do
+      skip 'Accepted deviation D-5 (PENDING ISSO ACCEPTANCE): redo log member ' \
+           'multiplexing is unachievable on managed RDS (MEMBERS=1; ALTER ' \
+           'DATABASE ADD LOGFILE MEMBER needs OS paths no tenant has). ' \
+           'Compensated at the storage layer by EBS intra-AZ replication, ' \
+           'customer-elected Multi-AZ, and automated backup/PITR — evidence in ' \
+           'AWS metadata and the CRM, not tenant SQL. See ' \
+           'docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md (D-5).'
+    end
+  end
 
   # --- MANUAL disposition: satisfied by documentation / compensating control ---
   # These DISA checks are procedural (system-documentation / organizational

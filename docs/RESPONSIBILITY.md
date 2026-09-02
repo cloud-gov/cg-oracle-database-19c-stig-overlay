@@ -162,6 +162,32 @@ manual_review`, then record it in the table below.
 | SV-270559 | Individual auth before shared authenticator (IA-2(5)) | Procedural: "If shared accounts do not exist, this is Not Applicable." The broker provisions a single customer user account via `cf create-service` (not a shared account) — the same "no shared accounts" basis as SV-270501 — so the Not Applicable clause is satisfied at provision. No pass/fail SQL query. If the customer later creates shared accounts, individual-before-shared authentication for them is a customer/documentation responsibility. |
 | SV-270560 | Uniquely identify/authenticate organizational users (IA-2) | Procedural, no pass/fail SQL: review DBMS/OS/enterprise settings and site practices. Database accounts are provisioned/authenticated through the FedRAMP-authorized CloudFoundry brokered-credentials model (each binding issues a distinct credential) — part of the Cloud.gov ATO, the same model behind SV-270499. Satisfied by that platform model plus the Cloud.gov SSP (IA-2). Customer-created users each getting a separate account is a customer responsibility. |
 
+## Shared-responsibility compensating control (strict check kept running)
+
+A control can be **partly SQL-verifiable** while its full satisfaction depends on
+a **customer-elected platform option** plus compensating evidence that lives
+**outside the database** (AWS metadata / the Customer Responsibility Matrix /
+POA&M). The defining property is an **asymmetry of visibility**: tenant SQL can see
+the *deficit* but not the *compensating mechanism*, which lives in AWS metadata and
+the CRM. A blanket "RDS -> pass" would therefore be a false pass.
+
+These are overridden to `impact 0.0` **only on the authority of a recorded ISSO
+acceptance** — each has a numbered entry in
+[`DEVIATIONS-AND-COMPENSATING-CONTROLS.md`](DEVIATIONS-AND-COMPENSATING-CONTROLS.md)
+§2a. That distinction matters: the override reports the deviation once with its
+rationale instead of recurring as a permanent unactionable failure, but the N/A rests
+on the acceptance, **not** on this repo asserting the requirement is satisfied. If an
+acceptance is declined, the override is reverted and the control is carried as an open
+POA&M finding. The disposition is documented in `control-layers.yml`
+(`verified_by: compensating_control`; `set_by` names whoever *applies* the
+compensation) and recorded in the CRM, split by evidence source.
+
+### Current shared-responsibility compensating controls
+
+| Control | Intent | How satisfied |
+| --- | --- | --- |
+| SV-276000 | Three+ redo log groups AND two+ members per group, mirrored / RAID (CM-6 b) | **Accepted deviation D-5 — pending ISSO acceptance.** Split by evidence source. **SQL-visible (`V$LOG`):** BOTH halves are queryable — the baseline runs `count(group#) >= 3` *and* `select group# from V$LOG where members < 2`, so SQL sees the **deficit**. **NOT SQL-visible:** the **compensating mechanism** — EBS intra-AZ replication plus **customer-elected Multi-AZ** synchronous replication (aws-broker `medium-oracle-se2-redundant`, `redundant:true` -> MultiAZ) and automated backup/PITR, the RAID/mirroring class the DISA check text exempts. That asymmetry (deficit visible, compensation invisible) is why this is `verified_by: compensating_control` and not `sql`. The `>=2 members` requirement is **factually unmet** (`MEMBERS=1`) and not remediable by any party — `ALTER DATABASE ADD LOGFILE MEMBER` needs OS filesystem paths no tenant has — so it is an **accepted deviation with a compensating control, not "satisfied by the platform"**. Overridden to `impact 0.0` on that basis so the deviation reports once with its rationale rather than recurring as a permanent unactionable failure; the **ISSO acceptance is the authority for the N/A**, not the overlay. If D-5 is declined, revert the override and carry SV-276000 as an open POA&M finding. **Shared responsibility:** the platform provides EBS replication, tenant-controllable `>=3` log groups, and the *availability* of a Multi-AZ tier; **electing** that plan when data-criticality/RTO warrants it (or accepting the residual single-AZ gap for development instances) is the **customer's** decision, recorded in the CRM. Electing `-redundant` does **not** change `V$LOG`/`V$LOGFILE` (Multi-AZ is block-level storage replication, not Oracle redo member multiplexing), so the underlying deficit is identical on both plans. `set_by: aws_inherited` / `verified_by: compensating_control`. Refs: `docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md` (D-5), aws-broker#567, aws-broker#558. |
+
 ## Inherited controls with a platform-seeded allowlist input
 
 Some inherited baseline controls are **SQL-verifiable and kept running as-is**

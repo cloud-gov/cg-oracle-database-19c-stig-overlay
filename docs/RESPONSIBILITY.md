@@ -167,19 +167,26 @@ manual_review`, then record it in the table below.
 A control can be **partly SQL-verifiable** while its full satisfaction depends on
 a **customer-elected platform option** plus compensating evidence that lives
 **outside the database** (AWS metadata / the Customer Responsibility Matrix /
-POA&M). Unlike the not-applicable and manual overrides above, the overlay does
-**NOT** override these to `impact 0.0`: the (strict) baseline check is kept
-running so the SQL-visible portion stays enforced, and — crucially — it is **not
-auto-passed**, because SQL cannot see the compensating mechanism and a blanket
-"RDS -> pass" would re-introduce a false pass. The disposition is documented
-in `control-layers.yml` (`set_by: compensating_control` / `verified_by:
-compensating_control`) and recorded in the CRM, split by evidence source.
+POA&M). The defining property is an **asymmetry of visibility**: tenant SQL can see
+the *deficit* but not the *compensating mechanism*, which lives in AWS metadata and
+the CRM. A blanket "RDS -> pass" would therefore be a false pass.
+
+These are overridden to `impact 0.0` **only on the authority of a recorded ISSO
+acceptance** — each has a numbered entry in
+[`DEVIATIONS-AND-COMPENSATING-CONTROLS.md`](DEVIATIONS-AND-COMPENSATING-CONTROLS.md)
+§2a. That distinction matters: the override reports the deviation once with its
+rationale instead of recurring as a permanent unactionable failure, but the N/A rests
+on the acceptance, **not** on this repo asserting the requirement is satisfied. If an
+acceptance is declined, the override is reverted and the control is carried as an open
+POA&M finding. The disposition is documented in `control-layers.yml`
+(`verified_by: compensating_control`; `set_by` names whoever *applies* the
+compensation) and recorded in the CRM, split by evidence source.
 
 ### Current shared-responsibility compensating controls
 
 | Control | Intent | How satisfied |
 | --- | --- | --- |
-| SV-276000 | Three+ redo log groups AND two+ members per group, mirrored / RAID (CM-6 b) | Split by evidence source. **SQL-visible (strict baseline check, kept running):** `>=3` redo log groups via `V$LOG` — the only part SQL can confirm; `V$LOG`/`V$LOGFILE` can only ever show the single-member deficit (`MEMBERS=1`), never the compensating redundancy, so the strict check correctly FAILS the member-multiplexing half on RDS and is **not auto-passed**. **NOT SQL-visible (AWS metadata / CRM / POA&M):** member multiplexing is unsupported on managed RDS (`ALTER DATABASE ADD LOGFILE MEMBER` needs OS filesystem paths the tenant cannot reach); the compensating mechanism is EBS intra-AZ replication plus **customer-elected Multi-AZ** synchronous cross-AZ replication (aws-broker `medium-oracle-se2-redundant`, `redundant:true` -> MultiAZ) — the RAID/mirroring equivalent the STIG check text exempts. **Shared responsibility:** the platform provides EBS replication, tenant-controllable `>=3` log groups, and the *availability* of a Multi-AZ tier; **electing** that Multi-AZ plan when data-criticality/RTO warrants it (or accepting the residual Single-AZ cross-AZ gap as a documented risk for development instances) is the **customer's** responsibility. Electing `-redundant` does not change `V$LOG`/`V$LOGFILE` (Multi-AZ is block-level storage replication, not Oracle redo member multiplexing), so the strict check fails on the redundant plan too — consistent with never auto-passing on RDS. `set_by: compensating_control` / `verified_by: compensating_control`. Refs: aws-broker#567 (redundant plan), aws-broker#558 (live proof), cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check). |
+| SV-276000 | Three+ redo log groups AND two+ members per group, mirrored / RAID (CM-6 b) | **Accepted deviation D-5 — pending ISSO acceptance.** Split by evidence source. **SQL-visible (`V$LOG`):** BOTH halves are queryable — the baseline runs `count(group#) >= 3` *and* `select group# from V$LOG where members < 2`, so SQL sees the **deficit**. **NOT SQL-visible:** the **compensating mechanism** — EBS intra-AZ replication plus **customer-elected Multi-AZ** synchronous replication (aws-broker `medium-oracle-se2-redundant`, `redundant:true` -> MultiAZ) and automated backup/PITR, the RAID/mirroring class the DISA check text exempts. That asymmetry (deficit visible, compensation invisible) is why this is `verified_by: compensating_control` and not `sql`. The `>=2 members` requirement is **factually unmet** (`MEMBERS=1`) and not remediable by any party — `ALTER DATABASE ADD LOGFILE MEMBER` needs OS filesystem paths no tenant has — so it is an **accepted deviation with a compensating control, not "satisfied by the platform"**. Overridden to `impact 0.0` on that basis so the deviation reports once with its rationale rather than recurring as a permanent unactionable failure; the **ISSO acceptance is the authority for the N/A**, not the overlay. If D-5 is declined, revert the override and carry SV-276000 as an open POA&M finding. **Shared responsibility:** the platform provides EBS replication, tenant-controllable `>=3` log groups, and the *availability* of a Multi-AZ tier; **electing** that plan when data-criticality/RTO warrants it (or accepting the residual single-AZ gap for development instances) is the **customer's** decision, recorded in the CRM. Electing `-redundant` does **not** change `V$LOG`/`V$LOGFILE` (Multi-AZ is block-level storage replication, not Oracle redo member multiplexing), so the underlying deficit is identical on both plans. `set_by: aws_inherited` / `verified_by: compensating_control`. Refs: `docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md` (D-5), aws-broker#567, aws-broker#558. |
 
 ## Inherited controls with a platform-seeded allowlist input
 

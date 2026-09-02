@@ -30,7 +30,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
     # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
     skip_control 'SV-270561'  # PASSWORD_VERIFY_FUNCTION — org-defined DoD-complexity function; 12_password_verify_function.sql / ORA_STIG_PROFILE
-    skip_control 'SV-270563'  # PASSWORD_LIFE_TIME<=60 / GRACE_TIME not UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql / 11_ora_stig_profile.sql
+    skip_control 'SV-270563'  # PASSWORD_LIFE_TIME<=60 / GRACE_TIME not UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql (vendor 35+7=42<=60 already satisfies)
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------

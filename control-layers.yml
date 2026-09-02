@@ -588,7 +588,7 @@ controls:
       (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
       fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
       responsibility on the SV-270495 pattern. Remediated via
-      hardening/sql/10_profiles.sql / 11_ora_stig_profile.sql. skip_control under
+      hardening/sql/10_profiles.sql. skip_control under
       --skip-customer-controls; runs under --all. See controls/overlay.rb
       `SV-270563`.
 
@@ -787,8 +787,10 @@ controls:
       finding" when accounts are OS/enterprise-authenticated). Satisfied by system
       documentation / the Cloud.gov SSP (IA-5) via the brokered-credentials model;
       inherited baseline is not SQL-based (baseline_status: not_applicable — a
-      manual-review stub skip). Overridden to Manual (impact 0.0). See
-      controls/overlay.rb `SV-270562`.
+      manual-review stub skip). Overridden to Manual (impact 0.0). Placed as an
+      explicit id_pattern; the broad "password.*lifetime" pattern at L210 also
+      matches this body (562's desc copies 563's password-lifetime prose) but
+      resolves to sql_hardening/sql. See controls/overlay.rb `SV-270562`.
   - id_pattern: "SV-270564"
     set_by: manual_review
     verified_by: manual_review
@@ -800,7 +802,9 @@ controls:
       scripts/config/external stores for embedded plaintext/reversible credentials.
       Satisfied by system documentation / the Cloud.gov SSP (IA-5); inherited
       baseline is not SQL-based (baseline_status: not_applicable — a manual-review
-      stub skip). Overridden to Manual (impact 0.0). See controls/overlay.rb
+      stub skip). Overridden to Manual (impact 0.0). Placed as an explicit
+      id_pattern; the broad "encrypted" pattern at L161 also matches this body but
+      resolves to broker_infra/aws_inherited. See controls/overlay.rb
       `SV-270564`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited

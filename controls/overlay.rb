@@ -2041,4 +2041,146 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'secure-coding practices. No SQL assertion is applicable on managed RDS.'
     end
   end
+
+  # SV-270582 (SI-10) — take steps against invalid values usable in a SQL
+  # injection attack where dynamic code execution is used. The DISA check is a
+  # procedural source-code review of stored procedures, functions, triggers, and
+  # application code to identify dynamic code execution lacking injection
+  # protections; the fix rewrites that code. This is a customer-owned
+  # application/PL/SQL secure-coding determination with no portable pass/fail SQL
+  # predicate. On brokered RDS the platform runs no customer code or functions at
+  # provision, so there is nothing for the platform to remediate; reviewing and
+  # protecting any dynamic code the customer later deploys is a customer
+  # responsibility governed by the Cloud.gov SSP (SI-10). Sibling to SV-270581.
+  # The inherited baseline is a manual-review skip.
+  control 'SV-270582' do
+    impact 0.0
+    title 'The database management system (DBMS) and associated applications, ' \
+          'when making use of dynamic code execution, must take steps against ' \
+          'invalid values that may be used in a SQL injection attack, therefore ' \
+          'resulting in steps to prevent a SQL injection attack.'
+    desc 'Manual disposition. The DISA check is a procedural source-code review — ' \
+         'inspect stored procedures, functions, triggers, and application code to ' \
+         'find dynamic code execution employed without protections against code ' \
+         'injection — and the fix rewrites that code. This is a customer-owned ' \
+         'application/PL/SQL secure-coding determination with no portable ' \
+         'pass/fail SQL predicate (a generic query cannot decide whether arbitrary ' \
+         'customer dynamic code is injection-safe). The platform provisions the ' \
+         'database with no customer code or functions running, so there is nothing ' \
+         'for the platform to remediate at provision; reviewing and protecting any ' \
+         'dynamic code the customer later deploys is a customer responsibility ' \
+         'governed by the Cloud.gov SSP (SI-10). Sibling to SV-270581. The ' \
+         'inherited baseline is a manual-review skip. See docs/RESPONSIBILITY.md ' \
+         'and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, taking steps against invalid ' \
+             'values usable in a SQL injection attack, is a source-code review of ' \
+             'customer-owned dynamic code (stored procedures/functions/triggers ' \
+             'and application code). The platform runs no customer code at ' \
+             'provision; it has no portable SQL predicate and is satisfied by the ' \
+             'Cloud.gov SSP (SI-10) and customer secure-coding practices, not by ' \
+             'an automated assertion.' do
+      skip 'Manual review: SQL-injection protection of dynamic code is a customer ' \
+           'application/PL/SQL secure-coding fact with no portable SQL predicate ' \
+           '(no customer code runs at platform provision); satisfied by system ' \
+           'documentation / SSP (SI-10) and customer secure-coding practices. No ' \
+           'SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270583 (SI-11 a) — only generate error messages that provide information
+  # necessary for corrective action without revealing sensitive/harmful data. The
+  # DISA check is a procedural DBMS-settings and custom-code review to verify
+  # errors do not carry PII, sensitive business data, or host-identifying detail.
+  # Out of the box Oracle does not expose transactional data in errors; only
+  # custom code could. There is no pass/fail SQL predicate — the content of any
+  # error is an application-design fact. On brokered RDS, error output is shipped
+  # to CloudWatch and the Cloud.gov logs under the usual tenant isolation
+  # (delivery is a platform fact), but the CONTENT of those messages is determined
+  # by customer application code and is a customer responsibility governed by the
+  # Cloud.gov SSP (SI-11). The inherited baseline is a manual-review skip.
+  control 'SV-270583' do
+    impact 0.0
+    title 'Oracle Database must only generate error messages that provide ' \
+          'information necessary for corrective actions without revealing ' \
+          'organization-defined sensitive or potentially harmful information in ' \
+          'error logs and administrative messages that could be exploited.'
+    desc 'Manual disposition. The DISA check is a procedural DBMS-settings and ' \
+         'custom-code review: verify error messages carry no PII, sensitive ' \
+         'business data, or host-identifying information. Out of the box Oracle ' \
+         'does not expose transactional data in errors (a missing-privilege error ' \
+         'reports only that the table/view does not exist); only custom code could ' \
+         'divulge more. There is no pass/fail SQL predicate — error content is an ' \
+         'application-design fact. On brokered RDS the error/alert output is ' \
+         'shipped to CloudWatch and the Cloud.gov logs under the usual tenant ' \
+         'isolation (log delivery is a platform fact), but the CONTENT of those ' \
+         'messages is produced by customer application code and is a customer ' \
+         'responsibility governed by the Cloud.gov SSP (SI-11). The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, generating error messages that ' \
+             'do not reveal sensitive/harmful information, is a DBMS-settings and ' \
+             'application source-code determination. Oracle does not divulge ' \
+             'transactional data in errors by default; the message content is a ' \
+             'customer application-design fact with no portable SQL predicate. ' \
+             'Error/alert output is delivered to CloudWatch and Cloud.gov logs ' \
+             'under tenant isolation (platform), while content is satisfied by the ' \
+             'Cloud.gov SSP (SI-11) and customer application design, not by an ' \
+             'automated assertion.' do
+      skip 'Manual review: error-message content is a customer application-design ' \
+           'fact with no portable SQL predicate (Oracle does not expose ' \
+           'transactional data by default; log delivery to CloudWatch/Cloud.gov ' \
+           'logs under tenant isolation is a platform fact). Satisfied by system ' \
+           'documentation / SSP (SI-11) and customer application design. No SQL ' \
+           'assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270584 (SI-11 b) — restrict error messages so only authorized personnel may
+  # view them. The DISA check is procedural: review end-user-facing applications
+  # for displayed DBMS errors and review which tools (SQL*Plus, reporting,
+  # development tools) expose DBMS errors to non-administrators, then confirm the
+  # access and any need to see detailed errors is authorized and documented. There
+  # is no pass/fail SQL predicate. On brokered RDS the error/alert stream is
+  # delivered to CloudWatch and the Cloud.gov logs under the usual tenant
+  # isolation (who can reach the tenant's log stream is a platform boundary fact),
+  # but WHO is authorized to view error content, and suppression of errors in
+  # customer end-user applications and tools, are customer responsibilities
+  # governed by the Cloud.gov SSP (SI-11). Sibling to SV-270583. The inherited
+  # baseline is a manual-review skip.
+  control 'SV-270584' do
+    impact 0.0
+    title 'Oracle Database must restrict error messages so only authorized ' \
+          'personnel may view them.'
+    desc 'Manual disposition. The DISA check is procedural: review end-user-facing ' \
+         'applications for displayed DBMS errors, review which tools (SQL*Plus, ' \
+         'reporting/analysis, database and development tools) expose DBMS-generated ' \
+         'errors to non-administrators, and confirm that such access and any need ' \
+         'to view detailed errors are authorized and documented. There is no ' \
+         'pass/fail SQL predicate. On brokered RDS the error/alert stream is ' \
+         'shipped to CloudWatch and the Cloud.gov logs under the usual tenant ' \
+         'isolation (which tenant can reach a given log stream is a platform ' \
+         'boundary fact), but WHO within the customer organization is authorized ' \
+         'to view error content, and suppression of DBMS errors in customer ' \
+         'end-user applications and tools, are customer responsibilities governed ' \
+         'by the Cloud.gov SSP (SI-11). Sibling to SV-270583. The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, restricting error messages to ' \
+             'authorized personnel, is a procedural review of customer end-user ' \
+             'applications and tool access. Tenant isolation of the CloudWatch / ' \
+             'Cloud.gov log stream is a platform boundary fact; authorization of ' \
+             'who may view error content and suppression of errors in customer ' \
+             'applications/tools have no portable SQL predicate and are satisfied ' \
+             'by the Cloud.gov SSP (SI-11) and customer procedures, not by an ' \
+             'automated assertion.' do
+      skip 'Manual review: authorization to view error messages is a customer ' \
+           'procedure/application-design fact with no portable SQL predicate ' \
+           '(tenant isolation of the CloudWatch/Cloud.gov log stream is a platform ' \
+           'boundary fact). Satisfied by system documentation / SSP (SI-11) and ' \
+           'customer procedures. No SQL assertion is applicable on managed RDS.'
+    end
+  end
 end

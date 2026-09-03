@@ -7,6 +7,9 @@ required_audit_policies:
   - ORA_LOGON_FAILURES
 customer_audit_policies:
   - CG_AUDIT_POLICY
+approved_password_verify_functions:
+  - ORA12C_STIG_VERIFY_FUNCTION
+  - ORA_STIG_PROFILE
 users_allowed_access_to_public:
   - SYS
   - SYSTEM

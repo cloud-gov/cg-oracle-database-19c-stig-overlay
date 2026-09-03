@@ -177,6 +177,18 @@ inputs:
     type: Array
     value:
       - CG_AUDIT_POLICY
+  # --- Approved password verify functions (SV-270561 / SV-270587) ------------
+  # SV-270587 is inherited from the depended-on baseline and reads this input
+  # directly, so run-validation.sh/rds-inputs.yml must provide it via --input-file.
+  - name: approved_password_verify_functions
+    description: >-
+      Password verification functions approved for Oracle-managed password
+      accounts (SV-270561 / SV-270587). Defaults to Oracle's STIG verify function
+      and the ORA_STIG_PROFILE setting used by the sample hardening scripts.
+    type: Array
+    value:
+      - ORA12C_STIG_VERIFY_FUNCTION
+      - ORA_STIG_PROFILE
   # --- Authorized installed components (SV-270553) ---------------------------
   # Org-defined allowlist of Oracle component comp_ids that are documented and
   # authorized to remain installed (CM-7 a). SV-270553 runs the DISA dba_registry

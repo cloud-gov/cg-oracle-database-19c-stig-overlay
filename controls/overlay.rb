@@ -2036,10 +2036,10 @@ include_controls 'oracle-database-19c-stig-baseline' do
              'application code. It has no portable SQL predicate and is satisfied ' \
              'by the Cloud.gov SSP (SI-10) and customer secure-coding practices, ' \
              'not by an automated assertion.' do
-       skip 'Manual review: dynamic-code-execution usage is a customer ' \
-            'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
-            'satisfied by system documentation / SSP (SI-10) and customer ' \
-            'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+      skip 'Manual review: dynamic-code-execution usage is a customer ' \
+           'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
+           'satisfied by system documentation / SSP (SI-10) and customer ' \
+           'secure-coding practices. No SQL assertion is applicable on managed RDS.'
     end
   end
 

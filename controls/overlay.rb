@@ -30,6 +30,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
     # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
     skip_control 'SV-270561'  # PASSWORD_VERIFY_FUNCTION — org-defined DoD-complexity function; 12_password_verify_function.sql / ORA_STIG_PROFILE
+    skip_control 'SV-270587'  # PASSWORD_VERIFY_FUNCTION (IA-5(1)(b), compromised-password rejection) — SV-270561 sibling; same org-defined function; 12_password_verify_function.sql / ORA_STIG_PROFILE
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -2035,10 +2036,54 @@ include_controls 'oracle-database-19c-stig-baseline' do
              'application code. It has no portable SQL predicate and is satisfied ' \
              'by the Cloud.gov SSP (SI-10) and customer secure-coding practices, ' \
              'not by an automated assertion.' do
-      skip 'Manual review: dynamic-code-execution usage is a customer ' \
-           'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
-           'satisfied by system documentation / SSP (SI-10) and customer ' \
-           'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+       skip 'Manual review: dynamic-code-execution usage is a customer ' \
+            'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
+            'satisfied by system documentation / SSP (SI-10) and customer ' \
+            'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270588 (IA-5(1)(e)) — require immediate selection of a new password upon
+  # account recovery. The DISA check is procedural: review all scripts, functions,
+  # triggers, and stored procedures that create a user or reset a password to
+  # confirm they include `ALTER USER <username> PASSWORD EXPIRE;`. There is no
+  # pass/fail SQL predicate over database state — EXPIRE forces a password change
+  # at next logon, but the requirement is a property of the customer's provisioning/
+  # reset CODE, not a queryable profile setting. On brokered RDS, account creation
+  # and credential reset are performed by the CloudFoundry broker's provisioning
+  # flow (platform), while any customer-authored account/reset scripts are a
+  # customer responsibility. Sibling to the procedural password controls
+  # SV-270562/564. The inherited baseline is a manual-review skip.
+  control 'SV-270588' do
+    impact 0.0
+    title 'Oracle Database must, for password-based authentication, require ' \
+          'immediate selection of a new password upon account recovery.'
+    desc 'Manual disposition. The DISA check is procedural: review all scripts, ' \
+         'functions, triggers, and stored procedures that create a user or reset ' \
+         'a password to confirm they issue `ALTER USER <username> PASSWORD ' \
+         'EXPIRE;`, forcing selection of a new password at next logon. This is a ' \
+         'property of the provisioning/reset CODE, not a queryable database-state ' \
+         'predicate, so it is not SQL-verifiable. On brokered RDS, account ' \
+         'creation and credential reset are performed by the FedRAMP-authorized ' \
+         'CloudFoundry broker provisioning flow (platform); any customer-authored ' \
+         'account or password-reset scripts are a customer responsibility governed ' \
+         'by the Cloud.gov SSP (IA-5). Sibling to SV-270562/564. The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+         'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'The implementation of this control, requiring immediate selection ' \
+             'of a new password upon account recovery (ALTER USER ... PASSWORD ' \
+             'EXPIRE in account-creation/reset code), is a procedural code review ' \
+             'with no portable SQL predicate. Broker provisioning/reset is a ' \
+             'platform fact; customer-authored account/reset scripts are a ' \
+             'customer responsibility satisfied by the Cloud.gov SSP (IA-5), not ' \
+             'by an automated assertion.' do
+      skip 'Manual review: requiring a new password on account recovery is a ' \
+           'property of provisioning/reset code (ALTER USER ... PASSWORD EXPIRE), ' \
+           'not a queryable database-state predicate. Broker provisioning/reset ' \
+           'is a platform fact; customer-authored scripts are a customer ' \
+           'responsibility. Satisfied by system documentation / SSP (IA-5). No ' \
+           'SQL assertion is applicable on managed RDS.'
     end
   end
 end

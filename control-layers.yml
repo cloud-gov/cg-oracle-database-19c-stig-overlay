@@ -542,6 +542,19 @@ controls:
       profile) and/or hardening/sql/11_ora_stig_profile.sql (assign the
       Oracle-supplied ORA_STIG_PROFILE, which already binds a compliant verify
       function). skip_control under --skip-customer-controls; runs under --all.
+  - id_pattern: "SV-270587"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      SV-270587 (IA-5(1)(b)) reject commonly-used/expected/compromised passwords.
+      Same PASSWORD_VERIFY_FUNCTION SQL predicate and remediation as its sibling
+      SV-270561 (IA-5(1)(a)) — CUSTOMER responsibility on the SV-270495 pattern;
+      the compromised-password logic lives in the verify-function code (satisfied
+      by the Oracle-supplied ORA12C_STIG_VERIFY_FUNCTION / ORA_STIG_PROFILE).
+      Baseline SQL presence assertion implemented upstream in the mitre-baseline
+      (feat/sv-270587-password-verify-compromised, held for PR) — baseline_status:
+      fixed. skip_control under --skip-customer-controls; runs under --all.
+      See controls/overlay.rb skip gate and the SV-270561 baseline .rb.
   - id_pattern: "SV-270551"
     set_by: sql_hardening
     verified_by: sql
@@ -766,6 +779,16 @@ controls:
       it. Procedural source-code review of customer-owned PL/SQL and application
       code; no portable pass/fail SQL predicate — customer secure-coding
       responsibility. See controls/overlay.rb `SV-270581`.
+  - id_pattern: "SV-270588"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270588 (IA-5(1)(e)) require immediate selection of a new password upon
+      account recovery. Procedural review of account-creation/reset code for
+      `ALTER USER ... PASSWORD EXPIRE`; a property of provisioning/reset CODE, not
+      a queryable database-state predicate. Broker provisioning/reset is a platform
+      fact; customer-authored scripts are a customer responsibility. No portable
+      SQL predicate. See controls/overlay.rb `SV-270588`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

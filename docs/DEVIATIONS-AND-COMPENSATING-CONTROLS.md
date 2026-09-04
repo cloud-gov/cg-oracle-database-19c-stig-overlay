@@ -3,22 +3,29 @@
 > **Audience:** ISSO / Authorizing Official reviewing the STIG-hardened Oracle
 > Database 19c offering on brokered AWS RDS (GovCloud).
 > **Baseline:** FedRAMP / NIST 800-53 **Moderate**; DISA **Oracle Database 19c STIG**.
-> **System component:** `oracle-se2-license-included-dev` RDS plan in the cloud.gov
-> `aws-broker`, validated out-of-band by the
+> **System component:** the Oracle SE2 RDS plans in the cloud.gov `aws-broker` —
+> `medium-oracle-se2` and `medium-oracle-se2-redundant` (Multi-AZ) — validated
+> out-of-band by the
 > [`cg-oracle-database-19c-stig-overlay`](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay).
-> **Status at time of writing:** DEV/TEST plan, `ENABLE_ORACLE`-gated; **not yet
-> authorized for production**. This document is the deviation/compensating-control
-> record the ISSO needs to make that determination.
-> **Last reviewed:** 2026-09-01. The initial Oracle broker work has **merged**
-> (`aws-broker` #564 minimal SE2 + TLS/TCPS, #567 Multi-AZ plan, #573 `max_idle_time`);
-> remaining hardening is tracked in `aws-broker` #568. Control dispositions in
-> `control-layers.yml` are still landing in batches — re-check this package against
-> the merged code and the final `control-layers.yml` before an authorization decision.
+> **Status at time of writing:** DEV/TEST only; **not yet authorized for
+> staging/production**. This document is the deviation/compensating-control record
+> the ISSO needs to make that determination.
+> **Last reviewed:** 2026-09-04.
+>
+> **Read this first.** The Oracle broker code is on the long-lived integration branch
+> `feat/oracle-19c-stig-brokered-rds`, **not on `aws-broker`'s `main`** — `main`
+> carries the catalog plans only. Merged so far: cloud-gov/aws-broker#564 (minimal
+> SE2 + TLS/TCPS), #567 (Multi-AZ plan), #573 (`max_idle_time`), #562 (storage
+> autoscaling, opt-in). Remaining hardening: cloud-gov/aws-broker#568. Control
+> dispositions in this repo are still landing in batches — re-check this package
+> against the code and `controls/overlay.rb` before an authorization decision.
 
-This is a summary/rollup for the ISSO. The authoritative technical detail lives in
-the broker's `docs/oracle19c/` (in `aws-broker`) and in this repo's
-`control-layers.yml`; where this document and the code disagree, **the code and
-`control-layers.yml` are authoritative**.
+This is a summary/rollup for the ISSO. **`controls/overlay.rb` is authoritative** —
+it is the executable profile that produces the assessment result, and each
+control's canonical rationale lives in its `control` block. `control-layers.yml` is
+a machine-readable index over those dispositions, and this document is a narrative
+rollup of them. Where any of the three disagree, the order of precedence is
+`controls/overlay.rb` → `control-layers.yml` → this document.
 
 > **Two kinds of deviation in this package.** §2 (**D-1…D-4**) are *feature-absence*
 > deviations — capabilities SE2 does not have. §2a (**D-5…D-10**) are
@@ -44,27 +51,26 @@ consequence of this boundary:
 |-------|-------|----------|
 | Host OS, hypervisor, physical, patching of the managed engine, listener process | **AWS (inherited)** | OS STIG controls, `sqlnet.ora` on disk, file permissions |
 | Instance-level config (encryption, private networking, backups, parameter/option groups, log exports) | **Broker (this repo)** | at-rest encryption, `audit_trail`, TLS option group |
-| Network ingress/egress (open TCPS 2484, deny plaintext 1521) | **cg-provision platform** (security groups) | TLS-only enforcement (#541) |
+| Network ingress/egress (open TCPS 2484, deny plaintext 1521) | **cg-provision platform** (security groups) | TLS-only enforced by [terraform-provision#2351](https://github.com/cloud-gov/terraform-provision/pull/2351) (merged); cloud-gov/aws-broker#541 closed |
 | In-database hardening (profiles, account lockout, unified audit policies, PUBLIC-grant review, least-privilege app users) | **Customer**, validated by the **overlay** | SQL-layer STIG controls; per-binding least-privilege users |
 
 Because this is **managed RDS**, no party has host/OS/listener-file access. That is
 the root cause of the "not applicable / AWS-inherited" control set in §3.
 
-> **⚠️ Open design decision affecting this boundary (issue #557).** The
-> **in-database** SQL hardening (row 4: password profiles, unified audit
-> *policies*, PUBLIC-grant revocation, least-privilege users) is **not applied
-> automatically at provision today** — the broker hardens the control-plane layer
-> (parameter/option groups, encryption, networking) but never connects to the
-> provisioned database. Those SQL controls exist in the overlay's
-> `hardening/sql/` but nothing in the `cf create-service` flow runs them, so the
-> in-DB layer is currently **operator/customer-applied, validated by the overlay**
-> — not "born-hardened on first boot." A consensus review recommends a **dedicated
-> post-provision hardening component** (not the broker itself, to preserve the
-> broker-never-touches-tenant-DB invariant) to close this. **Before production
-> authorization, the AO/ISSO must decide what "hardened" contractually means for
-> this offering** (control-plane-only vs. fully-STIG-on-first-boot) and, if the
-> latter, #557's mechanism must land. Until then, treat in-DB hardening as an
-> operator prerequisite, not an automatic guarantee.
+> **⚠️ In-database hardening is not automatic (issue
+> [#557](https://github.com/cloud-gov/aws-broker/issues/557)).** The broker hardens
+> the control-plane layer (parameter/option groups, encryption, networking) and
+> never connects to the provisioned database. The row-4 SQL controls exist in this
+> repo's `hardening/sql/` but nothing in the `cf create-service` flow runs them, so
+> the in-database layer is **operator/customer-applied and overlay-validated**, not
+> applied at provision. Some of it could not be applied at provision in any case —
+> SQL must run against a started instance, and some parameter-group values only
+> take effect after a reboot.
+>
+> **The ISSO/AO decision this forces:** what "STIG-hardened" means contractually
+> for this offering — control-plane-only, with in-database hardening as a documented
+> operator prerequisite, or something stronger. cloud-gov/aws-broker#557 tracks that decision; no
+> mechanism is proposed here.
 
 ---
 
@@ -138,13 +144,13 @@ Four deviations require an explicit risk-acceptance decision. Each is stated as:
   rotation runbook provided (`ops/oracle19c/credential-rotation.md`). Encryption in
   transit (§5, TCPS/TLS) protects the credential on the wire; the broker stores
   bound credentials encrypted at rest per its existing model (see the crypto note
-  in §5 re: **#554** — the at-rest cipher is being migrated to an authenticated/
+  in §5 re: **cloud-gov/aws-broker#554** — the at-rest cipher is being migrated to an authenticated/
   FIPS-validated mode).
 - **Residual risk:** this is a **known pre-release blocker for any non-dev /
-  production plan** — tracked as **#534** (broker-managed per-binding
-  least-privilege users). Until #534 lands, the offering stays `ENABLE_ORACLE`-gated
-  and **dev-tier only**. **This deviation is acceptable for the dev/test plan; it is
-  NOT yet acceptable for production** — see §6.
+  production plan** — tracked as **cloud-gov/aws-broker#534** (broker-managed per-binding
+  least-privilege users). Until cloud-gov/aws-broker#534 lands, the offering stays **dev/test only**.
+  **This deviation is acceptable for the dev/test plan; it is NOT yet acceptable for
+  staging/production** — see §6.
 
 ---
 
@@ -281,14 +287,14 @@ in `control-layers.yml`. Each requires ISSO acceptance before production.
   the unified trail (`AUDSYS.AUD$UNIFIED`) is not an OS file either. Getting the
   *unified* trail off-box requires **Database Activity Streams**, which is out of
   scope for this offering. The correct `audit_trail` value and off-box mechanism are
-  still being decided in **overlay #48**. Until that closes, D-10's compensating
+  still being decided in [**overlay #48**](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/48). Until that closes, D-10's compensating
   control is **partially evidenced**: what currently reaches CloudWatch is the
   mandatory/`audit_sys_operations` OS-file records, not the full unified trail.
 - **Residual risk:** between purge and export (or for records never exported), a
   privileged customer could remove evidence of their own actions. Mitigated in
   practice because the master credential is intended for provisioning, not
   application runtime (see **D-4** and the least-privilege guidance).
-- **Status:** **pending ISSO acceptance, and pending overlay #48.** This entry should
+- **Status:** **pending ISSO acceptance, and pending [overlay #48](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/48).** This entry should
   not be signed off until the off-box mechanism for the unified trail is settled.
 
 ---
@@ -387,7 +393,7 @@ Two credential-at-rest items are **not weaknesses specific to Oracle** — they
 affect the broker's existing Postgres/MySQL/Redis/ES handling too — but are
 disclosed here for completeness because they touch the credential model in D-4:
 
-- **Credential-at-rest cipher (SC-13, SC-28(1)) — tracked #554.** The broker
+- **Credential-at-rest cipher (SC-13, SC-28(1)) — tracked cloud-gov/aws-broker#554.** The broker
   encrypts stored credentials with AES in **CFB** mode (`helpers/crypto.go`). CFB
   is unauthenticated and **not part of a FIPS 140-3 validated module**. Mitigated
   today by the underlying **RDS-KMS / S3-SSE at-rest encryption** (so credentials
@@ -395,7 +401,7 @@ disclosed here for completeness because they touch the credential model in D-4:
   to an authenticated AEAD mode (AES-GCM) on a FIPS-validated provider. Requires a
   migration path for existing ciphertext — hence its own tracked work, not a code
   change folded in silently.
-- **Plaintext IAM `SecretKey` in the ES restore manifest — tracked #552.** The
+- **Plaintext IAM `SecretKey` in the ES restore manifest — tracked cloud-gov/aws-broker#552.** The
   Elasticsearch delete/snapshot path marshals the instance (incl. a long-lived IAM
   `SecretKey`) in plaintext into an `instance_manifest.json` written to the broker's
   **private, SSE-AES256** snapshots bucket. Encrypted at rest and not
@@ -408,27 +414,29 @@ disclosed here for completeness because they touch the credential model in D-4:
 
 ## 6. Outstanding preconditions before production authorization
 
-The dev/test plan is deployable behind `ENABLE_ORACLE` for branch validation. The
-following MUST be resolved before any **production / non-dev** authorization. Each is
-tracked as a GitHub issue:
+The Oracle plans are deployable for dev/test validation. The following MUST be
+resolved before any **staging/production** authorization. Each is tracked as a GitHub
+issue:
 
 | # | Precondition | Why it gates production |
 |---|---|---|
-| **#541** | Platform security group must **allow TCPS 2484 and deny plaintext 1521** | Until then, TLS is *offered* on 2484 but plaintext 1521 is not *denied* — TLS-only (SC-8) is not enforced. The broker cannot make this change (outside its IAM). |
-| **#534** | Broker-managed **per-binding least-privilege users** | Resolves deviation **D-4**; returning a DBA-class master per binding is not acceptable for production. |
-| **#539** | Apply static (pending-reboot) hardened params on **modify** + reboot | New instances get the full baseline; the modify path must not leave pending-reboot params unapplied. |
-| **#540** | Enable RDS **storage autoscaling** (`MaxAllocatedStorage`) | Operational availability (A-family) before customers land. Implemented in `aws-broker` **#562** (approved, awaiting merge; autoscaling is **opt-in** per instance via `max_storage`, no plan default). |
-| **WS15** (live proof) | **Validate the overlay against a real GovCloud RDS Oracle instance** | All hardening/parameter/option/log support is verified offline + via moto/local only. Compliance **evidence** requires a live run — see `docs/oracle19c/limitations.md`. The overlay profile is committed and runnable (`controls/overlay.rb` + `control-layers.yml`); what is missing is a run against a live brokered instance — `aws-broker` **#558**. |
-| **#557** | **Decide + implement how in-database SQL hardening is applied** (see §1 warning) | Today the in-DB STIG controls are not applied automatically at provision. Production requires either an AO/ISSO-accepted "control-plane-hardened + operator-applies-SQL" model, or the dedicated post-provision hardening component from #557. |
+| ~~**cloud-gov/aws-broker#541**~~ | ~~Platform security group must **allow TCPS 2484 and deny plaintext 1521**~~ | **SATISFIED.** [terraform-provision#2351](https://github.com/cloud-gov/terraform-provision/pull/2351) removed the plaintext 1521 ingress rule (merged 2026-08-13; `#2359` fixed the resulting apply oscillation), and cloud-gov/aws-broker#541 closed 2026-08-31. TLS-only (SC-8) is now enforced at the security group. Retained here so the ISSO can see the gate was closed rather than dropped. |
+| **cloud-gov/aws-broker#534** | Broker-managed **per-binding least-privilege users** | Resolves deviation **D-4**; returning a DBA-class master per binding is not acceptable for production. |
+| **cloud-gov/aws-broker#539** | Apply static (pending-reboot) hardened params on **modify** + reboot | New instances get the full baseline; the modify path must not leave pending-reboot params unapplied. |
+| **cloud-gov/aws-broker#540** | Enable RDS **storage autoscaling** (`MaxAllocatedStorage`) | Operational availability (A-family) before customers land. Implemented in **cloud-gov/aws-broker#562** (merged to the Oracle integration branch; autoscaling is **opt-in** per instance via `max_storage`, no plan default). |
+| **WS15** (live proof) | **Validate the overlay against a real GovCloud RDS Oracle instance** | All hardening/parameter/option/log support is verified offline + via moto/local only. Compliance **evidence** requires a live run — see `docs/oracle19c/limitations.md`. The overlay profile is committed and runnable (`controls/overlay.rb` + `control-layers.yml`); what is missing is a run against a live brokered instance — `aws-broker` **cloud-gov/aws-broker#558**. |
+| **cloud-gov/aws-broker#557** | **Decide + implement how in-database SQL hardening is applied** (see §1 warning) | Today the in-DB STIG controls are not applied automatically at provision. Production requires either an AO/ISSO-accepted "control-plane-hardened + operator-applies-SQL" model, or the dedicated post-provision hardening component from cloud-gov/aws-broker#557. |
 | this doc | **ISSO acceptance of deviations D-1…D-4 (feature-absence) and D-5…D-10 (compensating-control)** — and the §1 in-DB-hardening model | The formal risk-acceptance decision this package supports. **D-9 (this overlay substituting for Oracle DBSAT) is the weakest equivalence claim and should be raised explicitly.** |
 
 Related hardening items (not strictly production gates for the Oracle plan, but on
-the broker-wide backlog and disclosed in §5a): **#554** (at-rest cipher → AEAD/FIPS),
-**#552** (plaintext IAM SecretKey in ES manifest), **#553** (HTTP server graceful
+the broker-wide backlog and disclosed in §5a): **cloud-gov/aws-broker#554** (at-rest cipher → AEAD/FIPS),
+**cloud-gov/aws-broker#552** (plaintext IAM SecretKey in ES manifest), **cloud-gov/aws-broker#553** (HTTP server graceful
 shutdown).
 
-`ENABLE_ORACLE` itself is a **staged-rollout switch, not a security control** — it
-governs when the offering appears, not per-request approval. The credential model is
+**Where the code lives.** `aws-broker`'s `main` carries the Oracle catalog plans but
+not the Oracle provisioning code; that work is on the long-lived integration branch
+`feat/oracle-19c-stig-brokered-rds` and has not merged to `main`. An ISSO reading
+`main` alone will not see the hardening described in §5. The credential model is
 identical to the Postgres/MySQL plans.
 
 ---

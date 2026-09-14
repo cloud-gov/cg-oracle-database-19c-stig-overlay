@@ -580,6 +580,17 @@ controls:
       platform-provider run). Sample remediation:
       hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + hourly 72h
       lock job). See controls/overlay.rb (gate comment) and docs/RESPONSIBILITY.md.
+  - id_pattern: "SV-270563"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      SV-270563 (IA-5(1)(a/d)) enforce password maximum lifetime. SQL-verifiable
+      (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
+      fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
+      responsibility on the SV-270495 pattern. Remediated via
+      hardening/sql/10_profiles.sql. skip_control under
+      --skip-customer-controls; runs under --all. See controls/overlay.rb
+      `SV-270563`.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"
@@ -766,6 +777,35 @@ controls:
       it. Procedural source-code review of customer-owned PL/SQL and application
       code; no portable pass/fail SQL predicate — customer secure-coding
       responsibility. See controls/overlay.rb `SV-270581`.
+  - id_pattern: "SV-270562"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270562 (IA-5(1)(a/d)) procedures for establishing DOD-compliant temporary
+      passwords for new accounts. Procedural DISA check, no pass/fail SQL
+      (temporary-password issuance is an organizational process, and "not a
+      finding" when accounts are OS/enterprise-authenticated). Satisfied by system
+      documentation / the Cloud.gov SSP (IA-5) via the brokered-credentials model;
+      inherited baseline is not SQL-based (baseline_status: not_applicable — a
+      manual-review stub skip). Overridden to Manual (impact 0.0). Placed as an
+      explicit id_pattern; the broad "password.*lifetime" pattern at L210 also
+      matches this body (562's desc copies 563's password-lifetime prose) but
+      resolves to sql_hardening/sql. See controls/overlay.rb `SV-270562`.
+  - id_pattern: "SV-270564"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270564 (IA-5(1)(c), HIGH) store passwords using an approved salted key
+      derivation function. Procedural DISA check, no pass/fail SQL: Oracle stores
+      password verifiers as one-way salted hashes by design (database-native
+      portion inherently satisfied), leaving a documentation review of
+      scripts/config/external stores for embedded plaintext/reversible credentials.
+      Satisfied by system documentation / the Cloud.gov SSP (IA-5); inherited
+      baseline is not SQL-based (baseline_status: not_applicable — a manual-review
+      stub skip). Overridden to Manual (impact 0.0). Placed as an explicit
+      id_pattern; the broad "encrypted" pattern at L161 also matches this body but
+      resolves to broker_infra/aws_inherited. See controls/overlay.rb
+      `SV-270564`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control

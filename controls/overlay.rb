@@ -30,6 +30,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
     # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
     skip_control 'SV-270561'  # PASSWORD_VERIFY_FUNCTION — org-defined DoD-complexity function; 12_password_verify_function.sql / ORA_STIG_PROFILE
+    skip_control 'SV-270563'  # PASSWORD_LIFE_TIME<=60 / GRACE_TIME not UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql (vendor 35+7=42<=60 already satisfies)
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -697,6 +698,112 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'options, this is Not a Finding. None is defined for Cloud.gov RDS. ' \
            'Satisfied by system documentation; no SQL assertion is applicable ' \
            '(the inherited unconditional FGA-count query would mislead on RDS).'
+    end
+  end
+
+  # SV-270562 (IA-5(1)(a/d)) — procedures for establishing TEMPORARY PASSWORDS
+  # that meet DOD requirements for new accounts must be defined, documented, and
+  # implemented. MANUAL disposition. The DISA check is procedural: it opens "If
+  # all user accounts are authenticated by the OS or an enterprise-level
+  # authentication/access mechanism, and not by Oracle, this is not a finding,"
+  # and otherwise directs the reviewer to "review procedures and implementation
+  # evidence for creation of temporary passwords" — there is no pass/fail SQL
+  # predicate (the temporary-password issuance procedure is an organizational
+  # process, not a queryable database setting). The inherited baseline is not
+  # SQL-based (baseline_status: not_applicable — a manual-review stub skip).
+  # Satisfied by the Cloud.gov account-provisioning process
+  # and SSP (IA-5): database credentials are issued through the FedRAMP-authorized
+  # CloudFoundry brokered-credentials model (the enterprise-level mechanism the
+  # check's "not a finding" clause anticipates), and any Oracle-managed temporary
+  # credential is governed by documented procedures. The overlay overrides the
+  # inherited control in-place so it reports once, honestly, as a Manual
+  # disposition rather than a zero-test pass. See docs/RESPONSIBILITY.md and
+  # control-layers.yml.
+  control 'SV-270562' do
+    impact 0.0
+    title 'Procedures for establishing temporary passwords that meet DOD ' \
+          'password requirements for new accounts must be defined, documented, ' \
+          'and implemented.'
+    desc 'Manual disposition. The DISA check is procedural: "If all user ' \
+         'accounts are authenticated by the OS or an enterprise-level ' \
+         'authentication/access mechanism, and not by Oracle, this is not a ' \
+         'finding"; otherwise review procedures and implementation evidence for ' \
+         'creation of temporary passwords. There is no pass/fail SQL predicate — ' \
+         'temporary-password issuance is an organizational process, not a ' \
+         'queryable database setting. Database credentials on Cloud.gov RDS are ' \
+         'issued through the FedRAMP-authorized CloudFoundry brokered-credentials ' \
+         'model (the enterprise-level mechanism the check anticipates), and any ' \
+         'Oracle-managed temporary credential is governed by documented ' \
+         'procedures satisfying DOD length/complexity requirements. Satisfied by ' \
+         'system documentation / the Cloud.gov SSP (IA-5); no tenant SQL ' \
+         'assertion applies. The inherited baseline is not SQL-based ' \
+         '(a manual-review stub skip). See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'Procedures for establishing DOD-compliant temporary passwords for ' \
+             'new accounts are a manual/documentation determination: database ' \
+             'credentials are issued through the Cloud.gov brokered-credentials ' \
+             'model and any Oracle-managed temporary credential is governed by ' \
+             'documented procedures (Cloud.gov SSP, IA-5). No SQL assertion ' \
+             'applies.' do
+      skip 'Manual review: temporary-password issuance is an organizational ' \
+           'process, not a queryable database setting. Satisfied by system ' \
+           'documentation / the Cloud.gov SSP (IA-5); credentials are issued via ' \
+           'the FedRAMP-authorized brokered-credentials model.'
+    end
+  end
+
+  # SV-270564 (IA-5(1)(c), HIGH) — for password-based authentication, store
+  # passwords using an approved SALTED key derivation function, preferably a keyed
+  # hash. MANUAL disposition. The DISA check is a procedural review: enumerate
+  # DBMS objects, configuration files, associated scripts, applications, and
+  # environment files/settings, and confirm none store passwords in clear text or
+  # with reversible encryption, and that any external password store (Oracle
+  # Wallet) is encrypted. Oracle Database itself stores password verifiers as
+  # one-way salted hashes by design (SHA-2/SHA-512 verifiers on 19c), so the
+  # database-native portion is inherently satisfied; the residual is a
+  # documentation review of scripts/config/external stores for embedded
+  # plaintext/reversible credentials, which is not a pass/fail SQL predicate. The
+  # inherited baseline is not SQL-based (baseline_status: not_applicable — a
+  # manual-review stub skip). On Cloud.gov RDS the tenant
+  # does not embed credentials in database objects or host config, and any
+  # external password handling rides the broker credential model; satisfied by
+  # system documentation / the Cloud.gov SSP (IA-5). The overlay overrides the
+  # inherited control in-place so it reports once as a Manual disposition rather
+  # than a zero-test pass. See docs/RESPONSIBILITY.md and control-layers.yml.
+  control 'SV-270564' do
+    impact 0.0
+    title 'Oracle Database must, for password-based authentication, store ' \
+          'passwords using an approved salted key derivation function, ' \
+          'preferably using a keyed hash.'
+    desc 'Manual disposition. The DISA check is a procedural review of DBMS ' \
+         'objects, configuration files, scripts, applications, and environment ' \
+         'files/settings to confirm no passwords are stored in clear text or ' \
+         'with reversible encryption, and that any external password store ' \
+         '(Oracle Wallet) is encrypted — there is no pass/fail SQL predicate. ' \
+         'Oracle Database stores its password verifiers as one-way salted hashes ' \
+         'by design, so the database-native portion is inherently satisfied; the ' \
+         'residual is a documentation review of scripts/config/external stores ' \
+         'for embedded plaintext or reversibly-encrypted credentials. On ' \
+         'Cloud.gov RDS the tenant does not embed credentials in database ' \
+         'objects or host configuration, and credential handling rides the ' \
+         'FedRAMP-authorized broker credential model. Satisfied by system ' \
+         'documentation / the Cloud.gov SSP (IA-5); no tenant SQL assertion ' \
+         'applies. The inherited baseline is not SQL-based (a manual-review ' \
+         'stub skip). See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'Approved salted hashing of stored passwords is a ' \
+             'manual/documentation determination: Oracle stores password ' \
+             'verifiers as one-way salted hashes by design, and confirming no ' \
+             'clear-text/reversible passwords are embedded in scripts, config, ' \
+             'or an external store is a documentation review (Cloud.gov SSP, ' \
+             'IA-5). No SQL assertion applies.' do
+      skip 'Manual review: Oracle stores password verifiers as one-way salted ' \
+           'hashes by design; confirming no plaintext/reversible credentials are ' \
+           'embedded in objects/scripts/config/external stores is a ' \
+           'documentation review. Satisfied by system documentation / the ' \
+           'Cloud.gov SSP (IA-5).'
     end
   end
 

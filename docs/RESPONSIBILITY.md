@@ -161,6 +161,10 @@ manual_review`, then record it in the table below.
 | SV-270505 | Additional detailed audit info (AU-3(1)) | Conditional/procedural: "if there are none [additional site-specific detailed-audit requirements], this is not a finding." None defined for Cloud.gov RDS, so the not-a-finding clause is satisfied. The inherited baseline body runs an unconditional FGA-count query that would mislead on RDS; overridden to Manual. If additional detailed-audit requirements are later defined, deploying/verifying Fine-Grained Auditing is the customer's responsibility. |
 | SV-270559 | Individual auth before shared authenticator (IA-2(5)) | Procedural: "If shared accounts do not exist, this is Not Applicable." The broker provisions a single customer user account via `cf create-service` (not a shared account) — the same "no shared accounts" basis as SV-270501 — so the Not Applicable clause is satisfied at provision. No pass/fail SQL query. If the customer later creates shared accounts, individual-before-shared authentication for them is a customer/documentation responsibility. |
 | SV-270560 | Uniquely identify/authenticate organizational users (IA-2) | Procedural, no pass/fail SQL: review DBMS/OS/enterprise settings and site practices. Database accounts are provisioned/authenticated through the FedRAMP-authorized CloudFoundry brokered-credentials model (each binding issues a distinct credential) — part of the Cloud.gov ATO, the same model behind SV-270499. Satisfied by that platform model plus the Cloud.gov SSP (IA-2). Customer-created users each getting a separate account is a customer responsibility. |
+| SV-270567 | Map authenticated identity to account via PKI (IA-5(2)) | Manual documentation review; no pass/fail SQL predicate on managed RDS. See `controls/overlay.rb`. |
+| SV-270568 | Alternative logon for plain-text-capable CLI tools (CM-6 b / IA-6, HIGH) | Customer manual evidence: AO approval, user training, and approved client-side alternative logon method. **HIGH severity, customer-evidence deviation:** the control is overridden to impact 0.0 (no SQL predicate) but the underlying DISA finding is HIGH — ISSO review must confirm the customer evidence. See `controls/overlay.rb`. |
+| SV-270570 | Uniquely auth nonorganizational users (IA-8) | Manual documentation review; set at provision via brokered credentials, with customer caveat for later customer-created users. See `controls/overlay.rb`. |
+| SV-270572 | Separate user vs. database-management functionality (SC-2) | Manual separation-of-duties/design review; no pass/fail SQL predicate. See `controls/overlay.rb`. |
 | SV-270575 | Crypto protection against unauthorized modification of data at rest (SC-28(1)) | Procedural: "if no information is identified as requiring such protection, this is not a finding." Org documentation/SSP determination; where required, satisfied by broker-provisioned storage encryption (SV-270574), not tenant SQL. See `controls/overlay.rb`. |
 | SV-270576 | Isolate security functions via separate security domains (SC-3/SC-2) | Procedural design/documentation review; Oracle stores security functionality (roles/permissions/profiles) in separate data-dictionary schemas by default, and the broker provisions distinct privileged vs. application accounts. No pass/fail SQL predicate. See `controls/overlay.rb`. |
 | SV-270577 | Enforce a data-transfer policy protecting DB contents (SC-4) | Procedural review of dev/test data-refresh procedures and data-movement code (production copies not left unprotected; sensitive data de-sensitized/authorized before import). Org policy determination; controlling customer-owned production-to-nonproduction data movement is a customer responsibility. No pass/fail SQL predicate. See `controls/overlay.rb`. |
@@ -195,6 +199,13 @@ the runner's default.
 > instance returns zero rows — the compliant posture is inherited from the AWS/RDS
 > default. Overlay stays `inherited` (no override); the `should be_empty` assertion
 > runs in both postures and still fails if a customer later loads a sample schema.
+
+> **SV-270573 (preserve secure state on failure, SC-24)** is inherited and
+> SQL-verified with no override: the baseline asserts `v$database.log_mode` cmp
+> `ARCHIVELOG`. On managed RDS ARCHIVELOG is enforced by the platform (given
+> backup retention > 0, which the broker sets, for automated backups/PITR), so a
+> brokered instance passes; the assertion still fails on drift. Overlay stays
+> `inherited` (`aws_inherited` / `sql`); baseline SQL runs in both postures.
 
 ## Run postures
 

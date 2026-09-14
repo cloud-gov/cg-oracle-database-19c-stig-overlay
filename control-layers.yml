@@ -580,6 +580,17 @@ controls:
       platform-provider run). Sample remediation:
       hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + hourly 72h
       lock job). See controls/overlay.rb (gate comment) and docs/RESPONSIBILITY.md.
+  - id_pattern: "SV-270563"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      SV-270563 (IA-5(1)(a/d)) enforce password maximum lifetime. SQL-verifiable
+      (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
+      fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
+      responsibility on the SV-270495 pattern. Remediated via
+      hardening/sql/10_profiles.sql. skip_control under
+      --skip-customer-controls; runs under --all. See controls/overlay.rb
+      `SV-270563`.
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"
@@ -793,6 +804,35 @@ controls:
       view error content has no portable SQL predicate (tenant isolation of the
       CloudWatch/Cloud.gov log stream is a platform boundary fact) — customer
       responsibility. See controls/overlay.rb `SV-270584`.
+  - id_pattern: "SV-270562"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270562 (IA-5(1)(a/d)) procedures for establishing DOD-compliant temporary
+      passwords for new accounts. Procedural DISA check, no pass/fail SQL
+      (temporary-password issuance is an organizational process, and "not a
+      finding" when accounts are OS/enterprise-authenticated). Satisfied by system
+      documentation / the Cloud.gov SSP (IA-5) via the brokered-credentials model;
+      inherited baseline is not SQL-based (baseline_status: not_applicable — a
+      manual-review stub skip). Overridden to Manual (impact 0.0). Placed as an
+      explicit id_pattern; the broad "password.*lifetime" pattern at L210 also
+      matches this body (562's desc copies 563's password-lifetime prose) but
+      resolves to sql_hardening/sql. See controls/overlay.rb `SV-270562`.
+  - id_pattern: "SV-270564"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      SV-270564 (IA-5(1)(c), HIGH) store passwords using an approved salted key
+      derivation function. Procedural DISA check, no pass/fail SQL: Oracle stores
+      password verifiers as one-way salted hashes by design (database-native
+      portion inherently satisfied), leaving a documentation review of
+      scripts/config/external stores for embedded plaintext/reversible credentials.
+      Satisfied by system documentation / the Cloud.gov SSP (IA-5); inherited
+      baseline is not SQL-based (baseline_status: not_applicable — a manual-review
+      stub skip). Overridden to Manual (impact 0.0). Placed as an explicit
+      id_pattern; the broad "encrypted" pattern at L161 also matches this body but
+      resolves to broker_infra/aws_inherited. See controls/overlay.rb
+      `SV-270564`.
   - id_pattern: "SV-270499"
     set_by: aws_inherited
     verified_by: compensating_control
@@ -832,6 +872,51 @@ controls:
       customer creates additional users, individual attribution for them is the
       customer's responsibility. Overridden to a platform disposition (impact 0.0)
       in controls/overlay.rb.
+  - id_pattern: "SV-270567"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural PKI-to-account mapping review; no pass/fail SQL predicate on
+      managed RDS. See controls/overlay.rb `SV-270567`.
+  - id_pattern: "SV-270568"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Customer-owned documentation/training/AO review for client-side alternative
+      logon to plain-text-capable tools; no pass/fail SQL predicate. See
+      controls/overlay.rb `SV-270568`.
+  - id_pattern: "SV-270570"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural review of unique nonorganizational-user authentication; no
+      pass/fail SQL predicate. See controls/overlay.rb `SV-270570`.
+  - id_pattern: "SV-270572"
+    set_by: manual_review
+    verified_by: manual_review
+    rationale: >-
+      Procedural separation-of-duties/design review; no pass/fail SQL predicate.
+      See controls/overlay.rb `SV-270572`.
+
+  # --- inherited SQL-verifiable, compliant by platform ---
+  - id_pattern: "SV-270573"
+    set_by: aws_inherited
+    verified_by: sql
+    rationale: >-
+      SV-270573 (SC-24) preserve system state on failure. The DISA check confirms
+      ARCHIVELOG mode via `select log_mode from v$database`; on managed RDS the
+      brokered master user CAN select v$database.log_mode by default (no extra
+      grant — confirmed against live RDS: returns ARCHIVELOG), so the inherited
+      baseline assertion (`log_mode should cmp 'ARCHIVELOG'`) is tenant-runnable
+      and SQL-verifiable. RDS enforces ARCHIVELOG (given backup retention > 0,
+      which the broker sets) to provide automated backups and point-in-time
+      recovery
+      (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html),
+      so the compliant posture is inherited from the AWS
+      platform (Oracle/RDS default), not a tenant hardening step. The baseline
+      check is correct and detectable; kept running in both postures per the
+      two-axis / fail-closed rule (never suppressed). Overlay inherits as-is
+      (overlay_status: inherited); no overlay control. baseline_status stays ok.
 
   # --- not applicable / inherited on RDS ---
   - id_pattern: "SV-270506"

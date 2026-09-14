@@ -30,6 +30,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     # in control-layers.yml / docs/RESPONSIBILITY.md and remediated by the sample
     # hardening/sql/60_temporary_users.sql (TEMPORARY_USERS profile + 72h lock job).
     skip_control 'SV-270561'  # PASSWORD_VERIFY_FUNCTION — org-defined DoD-complexity function; 12_password_verify_function.sql / ORA_STIG_PROFILE
+    skip_control 'SV-270563'  # PASSWORD_LIFE_TIME<=60 / GRACE_TIME not UNLIMITED — org-defined ALTER PROFILE; 10_profiles.sql (vendor 35+7=42<=60 already satisfies)
   end
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
@@ -697,6 +698,112 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'options, this is Not a Finding. None is defined for Cloud.gov RDS. ' \
            'Satisfied by system documentation; no SQL assertion is applicable ' \
            '(the inherited unconditional FGA-count query would mislead on RDS).'
+    end
+  end
+
+  # SV-270562 (IA-5(1)(a/d)) — procedures for establishing TEMPORARY PASSWORDS
+  # that meet DOD requirements for new accounts must be defined, documented, and
+  # implemented. MANUAL disposition. The DISA check is procedural: it opens "If
+  # all user accounts are authenticated by the OS or an enterprise-level
+  # authentication/access mechanism, and not by Oracle, this is not a finding,"
+  # and otherwise directs the reviewer to "review procedures and implementation
+  # evidence for creation of temporary passwords" — there is no pass/fail SQL
+  # predicate (the temporary-password issuance procedure is an organizational
+  # process, not a queryable database setting). The inherited baseline is not
+  # SQL-based (baseline_status: not_applicable — a manual-review stub skip).
+  # Satisfied by the Cloud.gov account-provisioning process
+  # and SSP (IA-5): database credentials are issued through the FedRAMP-authorized
+  # CloudFoundry brokered-credentials model (the enterprise-level mechanism the
+  # check's "not a finding" clause anticipates), and any Oracle-managed temporary
+  # credential is governed by documented procedures. The overlay overrides the
+  # inherited control in-place so it reports once, honestly, as a Manual
+  # disposition rather than a zero-test pass. See docs/RESPONSIBILITY.md and
+  # control-layers.yml.
+  control 'SV-270562' do
+    impact 0.0
+    title 'Procedures for establishing temporary passwords that meet DOD ' \
+          'password requirements for new accounts must be defined, documented, ' \
+          'and implemented.'
+    desc 'Manual disposition. The DISA check is procedural: "If all user ' \
+         'accounts are authenticated by the OS or an enterprise-level ' \
+         'authentication/access mechanism, and not by Oracle, this is not a ' \
+         'finding"; otherwise review procedures and implementation evidence for ' \
+         'creation of temporary passwords. There is no pass/fail SQL predicate — ' \
+         'temporary-password issuance is an organizational process, not a ' \
+         'queryable database setting. Database credentials on Cloud.gov RDS are ' \
+         'issued through the FedRAMP-authorized CloudFoundry brokered-credentials ' \
+         'model (the enterprise-level mechanism the check anticipates), and any ' \
+         'Oracle-managed temporary credential is governed by documented ' \
+         'procedures satisfying DOD length/complexity requirements. Satisfied by ' \
+         'system documentation / the Cloud.gov SSP (IA-5); no tenant SQL ' \
+         'assertion applies. The inherited baseline is not SQL-based ' \
+         '(a manual-review stub skip). See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'Procedures for establishing DOD-compliant temporary passwords for ' \
+             'new accounts are a manual/documentation determination: database ' \
+             'credentials are issued through the Cloud.gov brokered-credentials ' \
+             'model and any Oracle-managed temporary credential is governed by ' \
+             'documented procedures (Cloud.gov SSP, IA-5). No SQL assertion ' \
+             'applies.' do
+      skip 'Manual review: temporary-password issuance is an organizational ' \
+           'process, not a queryable database setting. Satisfied by system ' \
+           'documentation / the Cloud.gov SSP (IA-5); credentials are issued via ' \
+           'the FedRAMP-authorized brokered-credentials model.'
+    end
+  end
+
+  # SV-270564 (IA-5(1)(c), HIGH) — for password-based authentication, store
+  # passwords using an approved SALTED key derivation function, preferably a keyed
+  # hash. MANUAL disposition. The DISA check is a procedural review: enumerate
+  # DBMS objects, configuration files, associated scripts, applications, and
+  # environment files/settings, and confirm none store passwords in clear text or
+  # with reversible encryption, and that any external password store (Oracle
+  # Wallet) is encrypted. Oracle Database itself stores password verifiers as
+  # one-way salted hashes by design (SHA-2/SHA-512 verifiers on 19c), so the
+  # database-native portion is inherently satisfied; the residual is a
+  # documentation review of scripts/config/external stores for embedded
+  # plaintext/reversible credentials, which is not a pass/fail SQL predicate. The
+  # inherited baseline is not SQL-based (baseline_status: not_applicable — a
+  # manual-review stub skip). On Cloud.gov RDS the tenant
+  # does not embed credentials in database objects or host config, and any
+  # external password handling rides the broker credential model; satisfied by
+  # system documentation / the Cloud.gov SSP (IA-5). The overlay overrides the
+  # inherited control in-place so it reports once as a Manual disposition rather
+  # than a zero-test pass. See docs/RESPONSIBILITY.md and control-layers.yml.
+  control 'SV-270564' do
+    impact 0.0
+    title 'Oracle Database must, for password-based authentication, store ' \
+          'passwords using an approved salted key derivation function, ' \
+          'preferably using a keyed hash.'
+    desc 'Manual disposition. The DISA check is a procedural review of DBMS ' \
+         'objects, configuration files, scripts, applications, and environment ' \
+         'files/settings to confirm no passwords are stored in clear text or ' \
+         'with reversible encryption, and that any external password store ' \
+         '(Oracle Wallet) is encrypted — there is no pass/fail SQL predicate. ' \
+         'Oracle Database stores its password verifiers as one-way salted hashes ' \
+         'by design, so the database-native portion is inherently satisfied; the ' \
+         'residual is a documentation review of scripts/config/external stores ' \
+         'for embedded plaintext or reversibly-encrypted credentials. On ' \
+         'Cloud.gov RDS the tenant does not embed credentials in database ' \
+         'objects or host configuration, and credential handling rides the ' \
+         'FedRAMP-authorized broker credential model. Satisfied by system ' \
+         'documentation / the Cloud.gov SSP (IA-5); no tenant SQL assertion ' \
+         'applies. The inherited baseline is not SQL-based (a manual-review ' \
+         'stub skip). See ' \
+         'docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'Approved salted hashing of stored passwords is a ' \
+             'manual/documentation determination: Oracle stores password ' \
+             'verifiers as one-way salted hashes by design, and confirming no ' \
+             'clear-text/reversible passwords are embedded in scripts, config, ' \
+             'or an external store is a documentation review (Cloud.gov SSP, ' \
+             'IA-5). No SQL assertion applies.' do
+      skip 'Manual review: Oracle stores password verifiers as one-way salted ' \
+           'hashes by design; confirming no plaintext/reversible credentials are ' \
+           'embedded in objects/scripts/config/external stores is a ' \
+           'documentation review. Satisfied by system documentation / the ' \
+           'Cloud.gov SSP (IA-5).'
     end
   end
 
@@ -1840,7 +1947,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
-  # SV-270575 (SC-28(1)) — cryptographic mechanisms to prevent unauthorized
+   # SV-270575 (SC-28(1)) — cryptographic mechanisms to prevent unauthorized
   # MODIFICATION of organization-defined data at rest (PII/classified). The DISA
   # check is procedural and opens "If no information is identified as requiring
   # such protection, this is not a finding," otherwise reviewing whether the
@@ -1879,8 +1986,48 @@ include_controls 'oracle-database-19c-stig-baseline' do
              'data-classification posture (SC-28(1)) plus, where required, the ' \
              'broker-provisioned storage encryption (SV-270574), not by an ' \
              'automated SQL assertion.' do
-      skip 'Manual review: satisfied by system documentation / SSP (SC-28(1)) and ' \
+       skip 'Manual review: satisfied by system documentation / SSP (SC-28(1)) and ' \
            'broker-provisioned storage encryption (see SV-270574); no SQL ' \
+           'assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270567 (IA-5(2)(a)(2)) — map the authenticated identity to the DBMS user
+  # account using PKI-based authentication. MANUAL disposition. The DISA check is
+  # procedural: review DBMS configuration/documentation to verify user accounts
+  # are mapped directly to unique identifying information within the validated PKI
+  # certificate — there is no pass/fail SQL predicate. On managed Cloud.gov RDS the
+  # tenant does not operate the PKI-to-account mapping layer: database accounts are
+  # provisioned and authenticated through the FedRAMP-authorized CloudFoundry
+  # brokered-credentials model, and any DOD-PKI identity mapping is an
+  # organizational/documentation determination governed by the Cloud.gov SSP
+  # (IA-5), not a queryable database setting. The inherited baseline body is a
+  # manual-review skip. Override in-place (impact 0.0) so it reports once with a
+  # Cloud.gov rationale rather than a bare baseline manual-review skip.
+  control 'SV-270567' do
+    impact 0.0
+    title 'Oracle Database must map the authenticated identity to the user ' \
+          'account using public key infrastructure (PKI)-based authentication.'
+    desc 'Manual disposition. The DISA check is procedural: verify (via DBMS ' \
+         'configuration and documentation) that DBMS user accounts are mapped ' \
+         'directly to unique identifying information within the validated PKI ' \
+         'certificate — there is no pass/fail SQL predicate. On managed Cloud.gov ' \
+         'RDS the tenant does not operate the PKI-to-account mapping layer: ' \
+         'database accounts are provisioned and authenticated through the ' \
+         'FedRAMP-authorized CloudFoundry brokered-credentials model, and any ' \
+         'DOD-PKI identity mapping is an organizational/documentation ' \
+         'determination governed by the Cloud.gov SSP (IA-5), not a queryable ' \
+         'database setting. The inherited baseline is a manual-review skip. ' \
+         'Satisfied by system documentation / the Cloud.gov SSP (IA-5); no tenant ' \
+          'SQL assertion applies. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'SV-270567 (map authenticated identity to the user account via ' \
+             'PKI-based authentication, IA-5(2)) is a manual/documentation ' \
+             'determination: PKI-to-account mapping is not a queryable database ' \
+             'setting on managed RDS. Database accounts are provisioned and ' \
+             'authenticated through the FedRAMP-authorized CloudFoundry ' \
+             'brokered-credentials model; satisfied by the Cloud.gov SSP (IA-5).' do
+      skip 'Manual review: satisfied by system documentation / SSP (IA-5); no SQL ' \
            'assertion is applicable on managed RDS.'
     end
   end
@@ -2035,10 +2182,140 @@ include_controls 'oracle-database-19c-stig-baseline' do
              'application code. It has no portable SQL predicate and is satisfied ' \
              'by the Cloud.gov SSP (SI-10) and customer secure-coding practices, ' \
              'not by an automated assertion.' do
-      skip 'Manual review: dynamic-code-execution usage is a customer ' \
-           'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
-           'satisfied by system documentation / SSP (SI-10) and customer ' \
-           'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+       skip 'Manual review: dynamic-code-execution usage is a customer ' \
+            'application/PL/SQL secure-coding fact with no portable SQL predicate; ' \
+            'satisfied by system documentation / SSP (SI-10) and customer ' \
+            'secure-coding practices. No SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270568 (CM-6 b / IA-6, HIGH) — when using command-line tools such as Oracle
+  # SQL*Plus that can accept a plain-text password, users must use an alternative
+  # logon method that does not expose the password. MANUAL disposition. The DISA
+  # check is procedural: verify system documentation explains the need for the
+  # tool, who uses it, and mitigations; confirm authorizing-official (AO) approval;
+  # and obtain evidence that users are trained not to use the plain-text password
+  # option and adhere to that practice — there is no pass/fail SQL predicate. This
+  # is a customer-owned organizational documentation/training/AO-approval
+  # determination, not a queryable database setting. The Cloud.gov broker securely
+  # issues credentials, but it does not control which client tools customers use or
+  # whether they configure an external password store / wrapper. The inherited
+  # baseline is a manual-review skip. Override in-place (impact 0.0).
+  control 'SV-270568' do
+    impact 0.0
+    title 'When using command-line tools such as Oracle SQL*Plus, which can ' \
+          'accept a plain-text password, users must use an alternative logon ' \
+          'method that does not expose the password.'
+    desc 'Manual disposition. The DISA check is procedural: verify the system ' \
+         'documentation explains the need for any plain-text-capable tool (e.g. ' \
+         'SQL*Plus), who uses it, and relevant mitigations; confirm ' \
+         'authorizing-official (AO) approval; and obtain evidence that users are ' \
+         'trained in not using the plain-text password option and in keeping the ' \
+         'password hidden — there is no pass/fail SQL predicate. This is an ' \
+         'customer-owned organizational documentation/training/AO-approval ' \
+         'determination, not a queryable database setting; the fix (Oracle ' \
+         'external password store / wallet, SQLNET.WALLET_OVERRIDE) is client-side ' \
+         'configuration outside the tenant database on managed RDS. The Cloud.gov ' \
+         'broker securely issues credentials, but it does not control whether ' \
+         'customers invoke SQL*Plus with a plain-text password or configure an ' \
+         'external password store / wrapper. Customer evidence must show AO ' \
+         'approval, applicable user training, and the approved alternative logon ' \
+         'method for any plain-text-capable tools. The inherited baseline is a ' \
+         'manual-review skip. See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'SV-270568 (alternative logon for plain-text-capable CLI tools, ' \
+             'CM-6 b / IA-6) is a customer manual/documentation determination: it ' \
+             'requires system documentation, AO approval, user training evidence, ' \
+             'and an approved client-side alternative logon method, not a SQL ' \
+             'predicate.' do
+      skip 'Manual review: customer must provide AO approval, user training, and ' \
+           'approved client-side alternative logon evidence for any ' \
+           'plain-text-capable tools; no SQL assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270570 (IA-8) — uniquely identify and authenticate nonorganizational users
+  # (or processes acting on their behalf). MANUAL disposition. The DISA check is
+  # procedural: review DBMS settings to determine whether nonorganizational users
+  # are uniquely identified and authenticated — there is no pass/fail SQL
+  # predicate. On managed Cloud.gov RDS this stance is SET AT PROVISION: the
+  # database is provisioned for the customer with unique, individually
+  # authenticated brokered credentials (the FedRAMP-authorized CloudFoundry
+  # brokered-credentials model), and AWS and Cloud.gov personnel are already
+  # covered by the platform's own policies and SSP. MAINTAINING that stance
+  # thereafter — ensuring any nonorganizational users the customer subsequently
+  # provisions remain uniquely identified and authenticated — is the CUSTOMER's
+  # responsibility. The inherited baseline is a manual-review skip. Override
+  # in-place (impact 0.0).
+  control 'SV-270570' do
+    impact 0.0
+    title 'Oracle Database must uniquely identify and authenticate ' \
+          'nonorganizational users (or processes acting on behalf of ' \
+          'nonorganizational users).'
+    desc 'Manual disposition. The DISA check is procedural: review DBMS settings ' \
+         'to determine whether nonorganizational users are uniquely identified and ' \
+         'authenticated — there is no pass/fail SQL predicate. On managed ' \
+         'Cloud.gov RDS the stance is set at provision: the database is provisioned ' \
+         'for the customer with unique, individually authenticated credentials via ' \
+         'the FedRAMP-authorized CloudFoundry brokered-credentials model, and AWS ' \
+         'and Cloud.gov personnel are already covered by the platform\'s policies ' \
+         'and SSP. Maintaining that stance for any nonorganizational users the ' \
+         'customer subsequently provisions is the customer\'s responsibility. ' \
+         'Satisfied by system documentation / the Cloud.gov SSP (IA-8); no tenant ' \
+         'SQL assertion applies. The inherited baseline is a manual-review skip. ' \
+         'See docs/RESPONSIBILITY.md and control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'SV-270570 (uniquely identify and authenticate nonorganizational ' \
+             'users, IA-8) is a manual/documentation determination satisfied at ' \
+             'provision by the FedRAMP-authorized CloudFoundry brokered-credentials ' \
+             'model (AWS/Cloud.gov personnel covered by platform policy and SSP); ' \
+             'maintaining that stance for customer-provisioned nonorganizational ' \
+             'users is the customer\'s responsibility. No SQL predicate applies.' do
+      skip 'Manual review: unique identification/authentication of ' \
+           'nonorganizational users is set at provision (brokered credentials) and ' \
+           'satisfied by the Cloud.gov SSP (IA-8); maintaining it for ' \
+           'customer-provisioned users is a customer responsibility. No SQL ' \
+           'assertion is applicable on managed RDS.'
+    end
+  end
+
+  # SV-270572 (SC-2) — separate user functionality (including user-interface
+  # services) from database management functionality. MANUAL disposition. The DISA
+  # check is procedural: review DBMS settings and vendor documentation to verify
+  # administrative functionality is separated (physically or logically) from
+  # general-user functionality — there is no pass/fail SQL predicate. The fix is an
+  # organizational separation-of-duties design (separate admin vs. general-user
+  # accounts; Oracle Database Vault is the vendor recommendation). On managed
+  # Cloud.gov RDS the broker provisions the database with distinct privileged
+  # (administrative) versus application (general-user) accounts, and the
+  # separation-of-duties posture is a documentation/design determination governed
+  # by the Cloud.gov SSP, not a queryable database setting. The inherited baseline
+  # is a manual-review skip. Override in-place (impact 0.0).
+  control 'SV-270572' do
+    impact 0.0
+    title 'Oracle Database must separate user functionality (including user ' \
+          'interface services) from database management functionality.'
+    desc 'Manual disposition. The DISA check is procedural: review DBMS settings ' \
+         'and vendor documentation to verify administrative functionality is ' \
+         'separated — physically or logically — from general-user functionality; ' \
+         'there is no pass/fail SQL predicate. The fix is an organizational ' \
+         'separation-of-duties design (distinct administrative, schema-owner, and ' \
+         'application accounts; Oracle Database Vault is the vendor recommendation). ' \
+         'On managed Cloud.gov RDS the broker provisions the database with distinct ' \
+         'privileged versus application accounts, and the separation-of-duties ' \
+         'posture is a documentation/design determination governed by the ' \
+         'Cloud.gov SSP (SC-2), not a queryable database setting. The inherited ' \
+         'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
+          'control-layers.yml.'
+    tag responsibility: 'customer'
+    describe 'SV-270572 (separate user functionality from database management ' \
+             'functionality, SC-2) is a manual/documentation determination: ' \
+             'separation of duties is a design/documentation posture, not a SQL ' \
+             'predicate. The broker provisions distinct privileged vs. application ' \
+              'accounts; satisfied by the Cloud.gov SSP (SC-2).' do
+      skip 'Manual review: satisfied by system documentation / SSP (SC-2) and the ' \
+           'broker\'s distinct privileged vs. application accounts; no SQL ' \
+           'assertion is applicable on managed RDS.'
     end
   end
 

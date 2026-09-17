@@ -52,25 +52,39 @@ consequence of this boundary:
 | Host OS, hypervisor, physical, patching of the managed engine, listener process | **AWS (inherited)** | OS STIG controls, `sqlnet.ora` on disk, file permissions |
 | Instance-level config (encryption, private networking, backups, parameter/option groups, log exports) | **Broker (this repo)** | at-rest encryption, `audit_trail`, TLS option group |
 | Network ingress/egress (open TCPS 2484, deny plaintext 1521) | **cg-provision platform** (security groups) | TLS-only enforced by [terraform-provision#2351](https://github.com/cloud-gov/terraform-provision/pull/2351) (merged); cloud-gov/aws-broker#541 closed |
-| In-database hardening (profiles, account lockout, unified audit policies, PUBLIC-grant review, least-privilege app users) | **Customer**, validated by the **overlay** | SQL-layer STIG controls; per-binding least-privilege users |
+| In-database hardening (profiles, account lockout, unified audit policies, PUBLIC-grant review, least-privilege app users) | **Customer** — by design, per the Cloud.gov PaaS model — applied via `hardening/sql/` and validated by the **overlay** | SQL-layer STIG controls; per-binding least-privilege users |
 
 Because this is **managed RDS**, no party has host/OS/listener-file access. That is
 the root cause of the "not applicable / AWS-inherited" control set in §3.
 
-> **⚠️ In-database hardening is not automatic (issue
-> [#557](https://github.com/cloud-gov/aws-broker/issues/557)).** The broker hardens
-> the control-plane layer (parameter/option groups, encryption, networking) and
-> never connects to the provisioned database. The row-4 SQL controls exist in this
-> repo's `hardening/sql/` but nothing in the `cf create-service` flow runs them, so
-> the in-database layer is **operator/customer-applied and overlay-validated**, not
-> applied at provision. Some of it could not be applied at provision in any case —
-> SQL must run against a started instance, and some parameter-group values only
-> take effect after a reboot.
+> **Scope of the offering: the platform hardens the control plane; the customer
+> hardens inside the database.** This is deliberate and matches the Cloud.gov PaaS
+> responsibility model used elsewhere — the platform delivers a hardened,
+> STIG-aligned way to *create and manage* the database; what the tenant then does
+> inside it is the tenant's to secure, as with an application pushed to the
+> platform.
 >
-> **The ISSO/AO decision this forces:** what "STIG-hardened" means contractually
-> for this offering — control-plane-only, with in-database hardening as a documented
-> operator prerequisite, or something stronger. cloud-gov/aws-broker#557 tracks that decision; no
-> mechanism is proposed here.
+> Concretely, the broker owns and enforces at provision: at-rest encryption, private
+> networking, TLS/TCPS transport, the hardened parameter and option groups, audit
+> configuration, backups, and log exports. It does **not** connect to the provisioned
+> database, by design — that boundary is what keeps the broker out of tenant data and
+> preserves separation of duties between the thing being audited and the thing
+> auditing it.
+>
+> The row-4 SQL controls (password profiles, account lockout, unified audit policies,
+> PUBLIC-grant review, least-privilege application users) are therefore **customer
+> responsibility, applied by the customer and validated by this overlay**. This repo
+> ships the `hardening/sql/` scripts so the customer is not left to derive them from
+> the STIG, and the overlay is the assessment tool that proves whether they were
+> applied. Some of this could not be applied at provision in any case: SQL requires a
+> started instance, and some parameter-group values take effect only after a reboot.
+>
+> **This model has security approval.** The AO/ISSO-accepted meaning of
+> "STIG-hardened" for this offering is control-plane hardening by the platform plus
+> documented, overlay-validated customer responsibility for in-database hardening —
+> not automatic in-database configuration at provision. `aws-broker#557` remains open
+> as the record of that boundary decision, not as a gap to close before
+> authorization.
 
 ---
 
@@ -425,7 +439,7 @@ issue:
 | **cloud-gov/aws-broker#539** | Apply static (pending-reboot) hardened params on **modify** + reboot | New instances get the full baseline; the modify path must not leave pending-reboot params unapplied. |
 | **cloud-gov/aws-broker#540** | Enable RDS **storage autoscaling** (`MaxAllocatedStorage`) | Operational availability (A-family) before customers land. Implemented in **cloud-gov/aws-broker#562** (merged to the Oracle integration branch; autoscaling is **opt-in** per instance via `max_storage`, no plan default). |
 | **WS15** (live proof) | **Validate the overlay against a real GovCloud RDS Oracle instance** | All hardening/parameter/option/log support is verified offline + via moto/local only. Compliance **evidence** requires a live run — see `docs/oracle19c/limitations.md`. The overlay profile is committed and runnable (`controls/overlay.rb` + `control-layers.yml`); what is missing is a run against a live brokered instance — `aws-broker` **cloud-gov/aws-broker#558**. |
-| **cloud-gov/aws-broker#557** | **Decide + implement how in-database SQL hardening is applied** (see §1 warning) | Today the in-DB STIG controls are not applied automatically at provision. Production requires either an AO/ISSO-accepted "control-plane-hardened + operator-applies-SQL" model, or the dedicated post-provision hardening component from cloud-gov/aws-broker#557. |
+| ~~**cloud-gov/aws-broker#557**~~ | ~~Decide how in-database SQL hardening is applied~~ | **RESOLVED — not a production gate.** The boundary is decided and security-approved: the platform hardens the control plane, the customer hardens inside the database, validated by this overlay (§1). Matches the Cloud.gov PaaS responsibility model. #557 stays open as the record of the decision. What production *does* require is that the customer-responsibility set is documented and the `hardening/sql/` scripts are delivered — both satisfied by this repo and `docs/RESPONSIBILITY.md`. |
 | this doc | **ISSO acceptance of deviations D-1…D-4 (feature-absence) and D-5…D-10 (compensating-control)** — and the §1 in-DB-hardening model | The formal risk-acceptance decision this package supports. **D-9 (this overlay substituting for Oracle DBSAT) is the weakest equivalence claim and should be raised explicitly.** |
 
 Related hardening items (not strictly production gates for the Oracle plan, but on

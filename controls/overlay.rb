@@ -2458,7 +2458,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
            'procedure/application-design fact with no portable SQL predicate ' \
            '(tenant isolation of the CloudWatch/Cloud.gov log stream is a platform ' \
            'boundary fact). Satisfied by system documentation / SSP (SI-11) and ' \
-            'customer procedures. No SQL assertion is applicable on managed RDS.'
+           'customer procedures. No SQL assertion is applicable on managed RDS.'
     end
   end
 

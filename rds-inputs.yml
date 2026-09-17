@@ -7,9 +7,13 @@ required_audit_policies:
   - ORA_LOGON_FAILURES
 customer_audit_policies:
   - CG_AUDIT_POLICY
+# approved_password_verify_functions (SV-270561 / SV-270587) holds FUNCTION names
+# compared against DBA_PROFILES.LIMIT for resource_name =
+# 'PASSWORD_VERIFY_FUNCTION'. A PROFILE name (e.g. ORA_STIG_PROFILE) can never
+# match — allowlist the function that profile binds instead (see inspec.yml and
+# cg-overlay#77).
 approved_password_verify_functions:
   - ORA12C_STIG_VERIFY_FUNCTION
-  - ORA_STIG_PROFILE
 users_allowed_access_to_public:
   - SYS
   - SYSTEM

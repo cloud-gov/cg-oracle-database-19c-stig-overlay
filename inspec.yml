@@ -184,11 +184,9 @@ inputs:
   # resource_name = 'PASSWORD_VERIFY_FUNCTION'. A PROFILE name (e.g.
   # ORA_STIG_PROFILE) is NOT a valid member: assigning that profile works because
   # the profile BINDS a verify function, and it is that function's name that has to
-  # be allowlisted here. What ORA_STIG_PROFILE binds on RDS is still unconfirmed
-  # (see cg-overlay#77); resolve with
-  #   SELECT limit FROM dba_profiles
-  #    WHERE profile = 'ORA_STIG_PROFILE' AND resource_name = 'PASSWORD_VERIFY_FUNCTION';
-  # and add the returned function name here.
+  # be allowlisted here. Confirmed on a brokered RDS instance (2026-09-18):
+  # ORA_STIG_PROFILE binds ORA12C_STIG_VERIFY_FUNCTION, which is the default below,
+  # so assigning ORA_STIG_PROFILE satisfies the control as shipped.
   - name: approved_password_verify_functions
     description: >-
       Password verification FUNCTION names accepted for Oracle-managed password

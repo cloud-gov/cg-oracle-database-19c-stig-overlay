@@ -59,6 +59,8 @@ LOCAL_DB_ENV := \
   -e DB_PORT=$(LOCAL_DB_PORT)
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
+# Bats image for the pure-shell db-connect helper tests (no Ruby/jq/DB needed).
+BATS_IMAGE    ?= bats/bats:1.11.0
 # Mount the repo root into the auditor container as /share.
 DOCKER_RUN    := docker run --rm -v "$(CURDIR)":/share -w /share \
                  --entrypoint cinc-auditor $(AUDITOR_IMAGE)
@@ -217,8 +219,14 @@ test-ruby: deps ## Unit-test the oracledb_session CSV stopgap (rspec, in the CIN
 	docker run --rm -v "$(CURDIR)":/share -w /share \
 	  --entrypoint rspec $(AUDITOR_IMAGE) spec/ --format doc
 
+.PHONY: test-bats
+test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no Ruby/jq/DB)
+	@# Exercises the JSON escaper that guards the .meta.json sidecar and the report
+	@# label/host helpers. Bash + sed only, so it runs in the stock bats image.
+	docker run --rm -v "$(CURDIR)/runner/lib":/code -w /code $(BATS_IMAGE) db-connect.bats
+
 .PHONY: tests
-tests: check test-go test-ruby ## Run all no-DB checks: profile validity + oraquery + parser unit tests
+tests: check test-go test-ruby test-bats ## Run all no-DB checks: profile validity + oraquery + parser unit tests
 
 .PHONY: verify
 verify: tests build ## One-command verify: profile loads + unit tests pass + runner image builds (no DB)

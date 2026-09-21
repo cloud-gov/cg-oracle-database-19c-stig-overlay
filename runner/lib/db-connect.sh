@@ -233,6 +233,17 @@ db_host_label() {
     _dbc_sanitize_label "$label"
 }
 
+# JSON-escape a single string value for safe interpolation into a JSON string
+# literal. Escapes backslash and double-quote (the two chars that break a "..."
+# literal), plus tab and newline. Prints the escaped value on stdout WITHOUT
+# surrounding quotes — the caller adds them. Pure shell (sed) so it works on the
+# cflinuxfs4 fallback path too, where neither Ruby nor jq is guaranteed for output
+# formatting. Order matters: escape backslash FIRST so it does not double-escape
+# the backslashes introduced for the other characters.
+_dbc_json_escape() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
+}
+
 # Single entry point: fill DB_* from VCAP, require the coordinates, then choose TLS
 # mode and port (order matters — the port default reads the TLS mode).
 resolve_db_connection() {

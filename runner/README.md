@@ -25,6 +25,7 @@ make verify   # profile loads + oraquery unit tests + runner image builds — no
 make run      # full end-to-end: start Oracle 23ai Free and exec the profile
 make test-go  # oraquery unit tests only (go test in a Go container)
 make test-ruby # oracledb_session CSV parser stopgap specs only (rspec in the CINC image)
+make test-bats # db-connect.sh shell-helper unit tests (bats — no Ruby/jq/DB)
 make clean    # tear down and remove local results/image
 make help     # list all targets
 ```

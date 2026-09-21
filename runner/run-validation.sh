@@ -252,19 +252,23 @@ if [ -n "$JSON_OUTPUT" ]; then
     # coordinates so a saved report is self-describing and two ORCL reports are
     # unambiguously distinguishable. The PASSWORD is deliberately OMITTED (never
     # written to disk). This is a sidecar, not a mutation of CINC's own output.
+    # Every string field is JSON-escaped (_dbc_json_escape) so a value containing a
+    # double-quote or backslash — e.g. an operator-set DB_INSTANCE_NAME, or an
+    # unusual db_user — cannot produce invalid JSON. skip_customer_responsibility_
+    # controls is a bare boolean (true/false), so it is emitted unquoted, not escaped.
     META_PATH="${JSON_PATH%.json}.meta.json"
     cat >"$META_PATH" <<EOF
 {
-  "report": "$(basename "$JSON_PATH")",
-  "timestamp_utc": "${timestamp}",
-  "instance_name": "${DB_INSTANCE_NAME:-}",
-  "db_host": "${DB_HOST}",
-  "db_port": "${DB_PORT}",
-  "db_service": "${DB_SERVICE}",
-  "db_user": "${DB_USER}",
-  "instance_label": "$(db_instance_label)",
-  "host_label": "$(db_host_label "$DB_HOST")",
-  "tls_mode": "${ORAQUERY_TLS:-verify-ca}",
+  "report": "$(_dbc_json_escape "$(basename "$JSON_PATH")")",
+  "timestamp_utc": "$(_dbc_json_escape "${timestamp}")",
+  "instance_name": "$(_dbc_json_escape "${DB_INSTANCE_NAME:-}")",
+  "db_host": "$(_dbc_json_escape "${DB_HOST}")",
+  "db_port": "$(_dbc_json_escape "${DB_PORT}")",
+  "db_service": "$(_dbc_json_escape "${DB_SERVICE}")",
+  "db_user": "$(_dbc_json_escape "${DB_USER}")",
+  "instance_label": "$(_dbc_json_escape "$(db_instance_label)")",
+  "host_label": "$(_dbc_json_escape "$(db_host_label "$DB_HOST")")",
+  "tls_mode": "$(_dbc_json_escape "${ORAQUERY_TLS:-verify-ca}")",
   "skip_customer_responsibility_controls": ${SKIP_CUSTOMER_CONTROLS}
 }
 EOF

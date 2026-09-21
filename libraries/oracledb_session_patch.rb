@@ -16,7 +16,8 @@
 #
 # This override is intentionally byte-for-byte equivalent to the upstream PR's
 # parse_csv_result. Remove it once the runner image ships a CINC Auditor that
-# includes inspec/inspec#7997 (see #35).
+# includes inspec/inspec#7997 (see #35). That PR merged upstream to main on
+# 2026-09-17, so a CINC Auditor release carrying it is expected later in 2026.
 
 require "inspec/resources/oracledb_session"
 require "csv"

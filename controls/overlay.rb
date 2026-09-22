@@ -334,7 +334,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'satisfies the requirement as written. See ' \
          'docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md (D-5) and ' \
          'control-layers.yml.'
-    tag responsibility: 'platform'
+    tag responsibility: 'customer'
     describe 'SV-276000 (three+ redo log groups, two+ members each) is an ' \
              'accepted deviation with a compensating control on managed AWS RDS' do
       skip 'Accepted deviation D-5 (PENDING ISSO ACCEPTANCE): redo log member ' \

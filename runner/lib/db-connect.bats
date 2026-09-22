@@ -50,6 +50,31 @@ setup() {
   [ "$output" = 'a\\\"b' ]
 }
 
+@test "json-escape: escapes a tab" {
+  run _dbc_json_escape $'a\tb'
+  [ "$output" = 'a\tb' ]
+}
+
+@test "json-escape: escapes a carriage-return" {
+  run _dbc_json_escape $'a\rb'
+  [ "$output" = 'a\rb' ]
+}
+
+@test "json-escape: escapes a form-feed" {
+  run _dbc_json_escape $'a\fb'
+  [ "$output" = 'a\fb' ]
+}
+
+@test "json-escape: escapes a backspace" {
+  run _dbc_json_escape $'a\bb'
+  [ "$output" = 'a\bb' ]
+}
+
+@test "json-escape: escapes a vertical-tab as \\u000b (no named JSON escape)" {
+  run _dbc_json_escape $'a\vb'
+  [ "$output" = 'a\u000bb' ]
+}
+
 @test "json-escape: empty string yields empty string" {
   run _dbc_json_escape ""
   [ "$status" -eq 0 ]
@@ -59,16 +84,24 @@ setup() {
 @test "json-escape: round-trips a hostile value back through a JSON parser" {
   # The property that actually matters: whatever we escape must produce a VALID
   # JSON string literal that decodes back to the ORIGINAL value. Prove it with a
-  # tiny pure-bash decoder of the escapes this function emits (\\ \" \t \n) — no
-  # jq dependency in the test image. Covers quote+backslash together.
-  local original='a"b\c'
+  # tiny pure-bash decoder of the escapes this function emits (\\ \" \t \n \r \f
+  # \b and \u000b) — no jq/python dependency in the bats image. Covers quote,
+  # backslash, and every control char together.
+  local original
+  original="$(printf 'a"b\\c\td\re\ff\bg\vh')"
   local escaped
   escaped="$(_dbc_json_escape "$original")"
-  # Decode: \\ -> \, \" -> " (apply in the reverse-safe order via a marker).
+  # Decode in a reverse-safe order: protect real backslashes with a marker so the
+  # named/unicode escapes are not re-interpreted, then restore.
   local decoded="$escaped"
-  decoded="${decoded//\\\\/$'\x01'}"   # protect real backslashes
-  decoded="${decoded//\\\"/\"}"        # \" -> "
-  decoded="${decoded//$'\x01'/\\}"     # restore backslashes
+  decoded="${decoded//\\\\/$'\x01'}"      # protect real backslashes
+  decoded="${decoded//\\\"/\"}"           # \" -> "
+  decoded="${decoded//\\t/$'\t'}"         # \t -> TAB
+  decoded="${decoded//\\r/$'\r'}"         # \r -> CR
+  decoded="${decoded//\\f/$'\f'}"         # \f -> FF
+  decoded="${decoded//\\b/$'\b'}"         # \b -> BS
+  decoded="${decoded//\\u000b/$'\v'}"     # \u000b -> VT
+  decoded="${decoded//$'\x01'/\\}"        # restore backslashes
   [ "$decoded" = "$original" ]
 }
 

@@ -234,14 +234,32 @@ db_host_label() {
 }
 
 # JSON-escape a single string value for safe interpolation into a JSON string
-# literal. Escapes backslash and double-quote (the two chars that break a "..."
-# literal), plus tab and newline. Prints the escaped value on stdout WITHOUT
-# surrounding quotes — the caller adds them. Pure shell (sed) so it works on the
-# cflinuxfs4 fallback path too, where neither Ruby nor jq is guaranteed for output
-# formatting. Order matters: escape backslash FIRST so it does not double-escape
-# the backslashes introduced for the other characters.
+# literal. RFC 8259 defines named escapes only for backslash, double-quote,
+# backspace (\b), form-feed (\f), newline (\n), carriage-return (\r), and tab
+# (\t); every OTHER control character in U+0000–U+001F — notably vertical-tab
+# (U+000B), which has NO named JSON escape — MUST be emitted as a \uXXXX escape.
+# This covers the chars reachable via operator-set DB_INSTANCE_NAME or
+# VCAP-sourced db_user. SCOPE: the remaining U+0000–U+001F control chars (and the
+# whole >U+001F range, which is legal RAW inside a JSON string) are intentionally
+# NOT folded — they are not reachable through those two fields, and a general C0
+# catch-all is fiddly in pure sed. If a new caller ever feeds arbitrary bytes
+# here, extend this to a full \u00XX fold rather than relying on the current set.
+# Prints the escaped value on stdout WITHOUT surrounding
+# quotes — the caller adds them. Uses GNU sed (both the CINC runner image and the
+# cflinuxfs4 fallback path are Linux/GNU; the :a;N;$!ba newline-fold idiom is a
+# GNU-ism and returns empty on BSD/macOS sed). Control-char patterns are written
+# as LITERAL bytes via bash $'…' ANSI-C quoting rather than C-style escapes,
+# because a minimal sed (e.g. busybox in the bats image) does not expand those in
+# the pattern — only the literal byte matches portably. Order matters: escape
+# backslash FIRST so it does not double-escape the backslashes introduced for the
+# others; fold vertical-tab to \u000b before the named escapes run.
 _dbc_json_escape() {
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
+    printf '%s' "$1" \
+      | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+            -e $'s/\v/\\\\u000b/g' \
+            -e $'s/\t/\\\\t/g' -e $'s/\r/\\\\r/g' -e $'s/\f/\\\\f/g' \
+            -e $'s/\b/\\\\b/g' \
+      | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
 }
 
 # Single entry point: fill DB_* from VCAP, require the coordinates, then choose TLS

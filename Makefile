@@ -59,6 +59,8 @@ LOCAL_DB_ENV := \
   -e DB_PORT=$(LOCAL_DB_PORT)
 # Go toolchain image for oraquery unit tests (matches runner/Dockerfile builder).
 GO_IMAGE      ?= golang:1.22-bookworm
+# Bats image for the pure-shell db-connect helper tests (no Ruby/jq/DB needed).
+BATS_IMAGE    ?= bats/bats:1.11.0
 # Mount the repo root into the auditor container as /share.
 DOCKER_RUN    := docker run --rm -v "$(CURDIR)":/share -w /share \
                  --entrypoint cinc-auditor $(AUDITOR_IMAGE)
@@ -193,7 +195,16 @@ report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSO
 	  local="$(RESULTS_DIR)/$$(basename "$$remote")"; \
 	  echo "report-cloudgov: fetching $$remote → $$local"; \
 	  cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) -c "cat '$$remote'" > "$$local"; \
-	  echo "report-cloudgov: saved $$local"
+	  echo "report-cloudgov: saved $$local"; \
+	  remote_meta="$${remote%.json}.meta.json"; \
+	  local_meta="$${local%.json}.meta.json"; \
+	  echo "report-cloudgov: fetching $$remote_meta → $$local_meta"; \
+	  if cf ssh $(CLOUDGOV_APP) -i $(CF_APP_INSTANCE) -c "cat '$$remote_meta'" > "$$local_meta" 2>/dev/null && [ -s "$$local_meta" ]; then \
+	    echo "report-cloudgov: saved $$local_meta"; \
+	  else \
+	    rm -f "$$local_meta"; \
+	    echo "report-cloudgov: WARNING: no metadata sidecar found at $$remote_meta" >&2; \
+	  fi
 
 .PHONY: test-go
 test-go: deps ## Unit-test the oraquery client (go test, in a Go container — no host Go)
@@ -208,8 +219,14 @@ test-ruby: deps ## Unit-test the oracledb_session CSV stopgap (rspec, in the CIN
 	docker run --rm -v "$(CURDIR)":/share -w /share \
 	  --entrypoint rspec $(AUDITOR_IMAGE) spec/ --format doc
 
+.PHONY: test-bats
+test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no Ruby/jq/DB)
+	@# Exercises the JSON escaper that guards the .meta.json sidecar and the report
+	@# label/host helpers. Bash + sed only, so it runs in the stock bats image.
+	docker run --rm -v "$(CURDIR)/runner/lib":/code -w /code $(BATS_IMAGE) db-connect.bats
+
 .PHONY: tests
-tests: check test-go test-ruby ## Run all no-DB checks: profile validity + oraquery + parser unit tests
+tests: check test-go test-ruby test-bats ## Run all no-DB checks: profile validity + oraquery + parser unit tests
 
 .PHONY: verify
 verify: tests build ## One-command verify: profile loads + unit tests pass + runner image builds (no DB)

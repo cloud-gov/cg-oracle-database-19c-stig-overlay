@@ -1445,6 +1445,10 @@ controls:
   # verified_by is `compensating_control`, NOT `sql`: SQL cannot confirm the
   # member-multiplexing requirement or its compensating mechanism (see above); the
   # >=3-groups portion stays SQL-enforced by the strict baseline check regardless.
+  # set_by is `aws_inherited`: AWS applies the compensation (EBS intra-AZ
+  # replication + customer-elected Multi-AZ) below the DB layer, not the tenant.
+  # (`compensating_control` is a verified_by value in the enum above, not a
+  # set_by value — a single-entry misuse corrected here.)
   #
   # DRAFT: this is the first entry keyed by `id_pattern` (all others use
   # text_pattern). Per #1's bar, treat the resolution as unproven until a consumer/
@@ -1453,7 +1457,7 @@ controls:
   # Refs: terraform-provision#2351 (SG), aws-broker#567 (redundant plan), aws-broker#558
   # (live proof); cloud-gov/oracle-database-19c-stig-baseline PR #3 (strict check).
   - id_pattern: "SV-276000"
-    set_by: compensating_control
+    set_by: aws_inherited
     verified_by: compensating_control
     rationale: >-
       Member multiplexing is unsupported on managed RDS (no OS access; redo on

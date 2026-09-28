@@ -11,18 +11,22 @@ summary: >-
 version: 0.1.0
 inspec_version: ">= 4.0"
 
-# Consume the cloud-gov fork's `cloudgov` branch (the upstream MITRE profile does
+# Consume the cloud-gov fork at an immutable tag (the upstream MITRE profile does
 # not load: a mismatched-quote syntax error blocks it before any control runs --
 # mitre/oracle-database-19c-stig-baseline#1). We do NOT vendor the baseline.
+# Pinned to a tag (not the moving `cloudgov` branch) so the dependency source is
+# fail-closed and reviewable: advancing the baseline requires an intentional tag
+# bump here, preventing silent lockfile drift on re-vendor (#15). The tag
+# cloud-gov-v0.1 resolves to the same commit previously pinned in inspec.lock.
 depends:
   - name: oracle-database-19c-stig-baseline
     git: https://github.com/cloud-gov/oracle-database-19c-stig-baseline.git
-    branch: cloudgov
+    tag: cloud-gov-v0.1
 
 # The overlay pulls in ALL baseline controls as they are defined there, via
 # `include_controls` in controls/overlay.rb (no per-control filter). The baseline
-# `cloudgov` branch forwards `port: input('port')` into every connect string, so
-# this overlay's `port` input flows straight through.
+# at tag cloud-gov-v0.1 forwards `port: input('port')` into every connect string,
+# so this overlay's `port` input flows straight through.
 
 # Inputs consumed by the inherited controls via oracledb_session. Values are
 # supplied at scan time (CLI/attributes/env), never committed. Defaults are empty

@@ -225,8 +225,28 @@ test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no R
 	@# label/host helpers. Bash + sed only, so it runs in the stock bats image.
 	docker run --rm -v "$(CURDIR)/runner/lib":/code -w /code $(BATS_IMAGE) db-connect.bats
 
+.PHONY: test-vcap
+test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; bats + embedded Ruby)
+	@# The selection contract in _dbc_parse_vcap needs a real interpreter (Ruby),
+	@# so it runs in the AUDITOR_IMAGE (embedded Ruby) — NOT the stock bats image,
+	@# which ships no Ruby/jq. bats itself is not in the auditor image, so we copy
+	@# it out of BATS_IMAGE into a temp dir and mount it read-only (no network).
+	@tmp="$$(mktemp -d)"; \
+	cid="$$(docker create $(BATS_IMAGE))"; \
+	docker cp "$$cid":/opt/bats "$$tmp/bats" >/dev/null; \
+	docker rm "$$cid" >/dev/null; \
+	status=0; \
+	docker run --rm \
+	  -v "$$tmp/bats":/opt/bats:ro \
+	  -v "$(CURDIR)/runner/lib":/code:ro \
+	  -w /code --entrypoint bash $(AUDITOR_IMAGE) \
+	  -c 'export PATH="/opt/cinc-auditor/embedded/bin:$$PATH"; /opt/bats/bin/bats vcap-select.bats' \
+	  || status=$$?; \
+	rm -rf "$$tmp"; \
+	exit $$status
+
 .PHONY: tests
-tests: check test-go test-ruby test-bats ## Run all no-DB checks: profile validity + oraquery + parser unit tests
+tests: check test-go test-ruby test-bats test-vcap ## Run all no-DB checks: profile validity + oraquery + parser unit tests
 
 .PHONY: verify
 verify: tests build ## One-command verify: profile loads + unit tests pass + runner image builds (no DB)

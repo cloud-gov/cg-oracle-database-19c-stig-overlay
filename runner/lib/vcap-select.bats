@@ -19,6 +19,11 @@ setup() {
   bats_require_minimum_version 1.5.0  # `run --separate-stderr` needs 1.5.0+
   # shellcheck disable=SC1091
   source "${BATS_TEST_DIRNAME}/db-connect.sh"
+  if [ "${VCAP_SELECT_FORCE_JQ:-}" = "1" ]; then
+    command -v jq >/dev/null 2>&1 || skip "jq not available for forced jq fallback coverage"
+    _dbc_ruby_bin() { return 1; }
+    return
+  fi
   if [ -z "$(_dbc_ruby_bin 2>/dev/null)" ] && ! command -v jq >/dev/null 2>&1; then
     skip "no Ruby or jq interpreter available to parse VCAP_SERVICES"
   fi
@@ -49,10 +54,13 @@ _vcap() {
   # --separate-stderr keeps the resolver's _dbc_log lines (stderr) out of $output
   # so we assert only the coordinate row the inner shell prints on stdout.
   run --separate-stderr bash -c '
-    source "'"${BATS_TEST_DIRNAME}"'/db-connect.sh"
+    source "$1"
+    if [ "${VCAP_SELECT_FORCE_JQ:-}" = "1" ]; then
+      _dbc_ruby_bin() { return 1; }
+    fi
     _dbc_parse_vcap || exit $?
     printf "%s|%s|%s|%s\n" "$DB_USER" "$DB_HOST" "$DB_SERVICE" "$DB_INSTANCE_NAME"
-  '
+  ' bash "${BATS_TEST_DIRNAME}/db-connect.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "u_only-orcl|h_only-orcl.example.com|ORCL|only-orcl" ]
 }

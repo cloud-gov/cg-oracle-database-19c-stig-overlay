@@ -226,11 +226,10 @@ test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no R
 	docker run --rm -v "$(CURDIR)/runner/lib":/code -w /code $(BATS_IMAGE) db-connect.bats
 
 .PHONY: test-vcap
-test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; bats + embedded Ruby)
-	@# The selection contract in _dbc_parse_vcap needs a real interpreter (Ruby),
-	@# so it runs in the AUDITOR_IMAGE (embedded Ruby) — NOT the stock bats image,
-	@# which ships no Ruby/jq. bats itself is not in the auditor image, so we copy
-	@# it out of BATS_IMAGE into a temp dir and mount it read-only (no network).
+test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; Ruby + jq fallback)
+	@# The selection contract in _dbc_parse_vcap needs a real interpreter. Run the
+	@# suite in the AUDITOR_IMAGE for the Ruby path, then force the jq fallback when
+	@# host jq is available (the Java-buildpack Cloud.gov path has jq but no Ruby).
 	@tmp="$$(mktemp -d)"; \
 	cid="$$(docker create $(BATS_IMAGE))"; \
 	docker cp "$$cid":/opt/bats "$$tmp/bats" >/dev/null; \
@@ -242,6 +241,13 @@ test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; b
 	  -w /code --entrypoint bash $(AUDITOR_IMAGE) \
 	  -c 'export PATH="/opt/cinc-auditor/embedded/bin:$$PATH"; /opt/bats/bin/bats vcap-select.bats' \
 	  || status=$$?; \
+	if [ "$$status" -eq 0 ]; then \
+	  if command -v jq >/dev/null 2>&1; then \
+	    PATH="$$tmp/bats/bin:$$PATH" VCAP_SELECT_FORCE_JQ=1 bats runner/lib/vcap-select.bats || status=$$?; \
+	  else \
+	    echo "test-vcap: WARNING: jq not found on host; skipping forced jq fallback coverage" >&2; \
+	  fi; \
+	fi; \
 	rm -rf "$$tmp"; \
 	exit $$status
 

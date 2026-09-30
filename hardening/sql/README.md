@@ -32,7 +32,7 @@ here (see `../control-layers.yml`).
   (DVSYS/Database Vault, LBACSYS, AUDSYS): locking those can break a live RDS
   option.
 - **RDS layering.** Controls satisfied by an RDS **parameter group** (e.g.
-  `audit_trail`, `sec_case_sensitive_logon`) are *set* by the broker
+  `audit_trail`) are *set* by the broker
   ([aws-broker#525](https://github.com/cloud-gov/aws-broker/issues/525)) but remain
   **SQL-verifiable** — see `control-layers.yml` (`set_by` ≠ `verified_by`).
 

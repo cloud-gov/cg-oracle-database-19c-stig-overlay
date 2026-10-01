@@ -33,7 +33,10 @@
 #   aws_inherited           satisfied by the AWS/RDS platform (host/OS/patching)
 #   not_applicable_rds      cannot apply/verify on managed RDS (no OS/listener access)
 #   manual_review           requires human/organizational review
-#   compensating_control    met by a documented compensating control
+#   compensating_control    met by a documented compensating control — every such
+#                           control MUST have a numbered deviation entry in
+#                           docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md §2a and
+#                           requires explicit ISSO acceptance before production
 #   blocked                 cannot be met on RDS; POA&M candidate
 #
 # PLATFORM vs. CUSTOMER RESPONSIBILITY: this map is the PLATFORM-side disposition

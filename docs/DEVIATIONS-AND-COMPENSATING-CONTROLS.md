@@ -27,7 +27,7 @@ a machine-readable index over those dispositions, and this document is a narrati
 rollup of them. Where any of the three disagree, the order of precedence is
 `controls/overlay.rb` → `control-layers.yml` → this document.
 
-> **Two kinds of deviation in this package.** §2 (**D-1…D-4**) are *feature-absence*
+> **Two kinds of deviation in this package.** §2 (**D-1…D-3**) are *feature-absence*
 > deviations — capabilities SE2 does not have. §2a (**D-5…D-10**) are
 > *compensating-control* dispositions — controls the platform cannot satisfy as the
 > STIG literally specifies, met instead by a different documented mechanism. Both
@@ -79,11 +79,18 @@ the root cause of the "not applicable / AWS-inherited" control set in §3.
 > applied. Some of this could not be applied at provision in any case: SQL requires a
 > started instance, and some parameter-group values take effect only after a reboot.
 >
-> **This model has security approval.** The AO/ISSO-accepted meaning of
-> "STIG-hardened" for this offering is control-plane hardening by the platform plus
-> documented, overlay-validated customer responsibility for in-database hardening —
-> not automatic in-database configuration at provision. `aws-broker#557` remains open
-> as the record of that boundary decision, not as a gap to close before
+> **Recorded as an accepted decision in
+> [`aws-broker` ADR-0003](https://github.com/cloud-gov/aws-broker/blob/main/docs/decisions/ADR-0003-sql-hardening-platform-vs-customer-responsibility.md)**
+> ("SQL-statement hardening: platform (broker) vs. customer responsibility"). That ADR
+> is the citable record of this boundary — it names the deciders, states that the
+> platform maintains and tests the hardening SQL while the customer applies and
+> maintains it, and says plainly that **ISSO acceptance is still required before the
+> ATO relies on the split**. Cloud.gov security has accepted the boundary; formal
+> ISSO/AO acceptance is outstanding.
+>
+> The resolved design question is tracked at
+> [`aws-broker#557`](https://github.com/cloud-gov/aws-broker/issues/557), which remains
+> open as the record of the decision rather than as a gap to close before
 > authorization.
 
 ---
@@ -145,10 +152,17 @@ Four deviations require an explicit risk-acceptance decision. Each is stated as:
   A workload that specifically requires Database Vault-style separation of duty is
   **out of scope** for this plan and should not be placed on it.
 
-### D-4 — Binding returns the instance master credential (DBA-class)
+### D-4 — Binding returns the instance master credential (DBA-class) — *scope, not a deviation*
+
+> **Reclassified 2026-09-21.** D-4 was previously recorded as a deviation and a
+> pre-release blocker. It is neither: master-credential-per-binding is the **intended
+> Cloud.gov RDS boundary**, the same on Oracle as on Postgres/MySQL. Retained with its
+> original identifier (rather than renumbered) because external records may cite it, and
+> kept in this package because the Oracle-specific DBA-class privilege difference is
+> still worth an assessor's attention.
 
 - **STIG expectation:** least-privilege database accounts (AC-6).
-- **Deviation:** the OSB binding returns the **instance master credential**, the
+- **Platform boundary:** the OSB binding returns the **instance master credential**, the
   same model as the Postgres/MySQL RDS plans. On Oracle this credential is
   **DBA-class** (RDS grants the master a DBA-style role), i.e. more privileged than
   a Postgres/MySQL master.
@@ -160,11 +174,17 @@ Four deviations require an explicit risk-acceptance decision. Each is stated as:
   bound credentials encrypted at rest per its existing model (see the crypto note
   in §5 re: **cloud-gov/aws-broker#554** — the at-rest cipher is being migrated to an authenticated/
   FIPS-validated mode).
-- **Residual risk:** this is a **known pre-release blocker for any non-dev /
-  production plan** — tracked as **cloud-gov/aws-broker#534** (broker-managed per-binding
-  least-privilege users). Until cloud-gov/aws-broker#534 lands, the offering stays **dev/test only**.
-  **This deviation is acceptable for the dev/test plan; it is NOT yet acceptable for
-  staging/production** — see §6.
+- **Scope, not a blocker.** Master-credential-per-binding is the **intended
+  shared-responsibility boundary**, identical to the Postgres/MySQL RDS plans: the
+  platform does not reach into a customer's data plane to mint database principals,
+  and the customer creates their own least-privilege in-database users.
+  [`aws-broker#534`](https://github.com/cloud-gov/aws-broker/issues/534) (broker-managed
+  per-binding least-privilege users) is **optional future hardening, not a release
+  gate** — see that issue's own title and 2026-07-20 determination.
+- **Residual risk:** the Oracle master is **DBA-class** where the Postgres/MySQL
+  master is not, so a customer that binds an application directly to the master
+  grants it more privilege than on the other engines. Mitigated by the customer
+  guidance above, not by a platform control.
 
 ---
 
@@ -177,7 +197,7 @@ controls classified `verified_by: compensating_control` in `control-layers.yml`;
 detects grant drift — but it carries an accepted deviation in its rationale, so it
 belongs in this section for acceptance purposes.
 
-They are listed separately from D-1…D-4 because the assessor's question is not "is a
+They are listed separately from D-1…D-3 because the assessor's question is not "is a
 missing feature acceptable?" but "is the substitute mechanism equivalent?".
 
 **None of these is a silent pass.** Each is a recorded disposition with a rationale
@@ -235,8 +255,9 @@ in `control-layers.yml`. Each requires ISSO acceptance before production.
 - **Compensating control:** the reviewed provision-time role/profile set, plus
   documented customer guidance to create least-privilege application users.
 - **Residual risk:** **customer-created** users and roles are outside this
-  disposition and are the customer's responsibility. Compounded by **D-4** while the
-  binding returns a DBA-class master.
+  disposition and are the customer's responsibility. Amplified by the **D-4** boundary:
+  the binding returns a DBA-class master, so a customer that uses it directly for an
+  application grants broader privilege than the reviewed provision-time set.
 - **Status:** **pending ISSO acceptance.**
 
 ### D-8 — Nonrepudiation via single-account provisioning (SV-270501)
@@ -435,12 +456,12 @@ issue:
 | # | Precondition | Why it gates production |
 |---|---|---|
 | ~~**cloud-gov/aws-broker#541**~~ | ~~Platform security group must **allow TCPS 2484 and deny plaintext 1521**~~ | **SATISFIED.** [terraform-provision#2351](https://github.com/cloud-gov/terraform-provision/pull/2351) removed the plaintext 1521 ingress rule (merged 2026-08-13; `#2359` fixed the resulting apply oscillation), and cloud-gov/aws-broker#541 closed 2026-08-31. TLS-only (SC-8) is now enforced at the security group. Retained here so the ISSO can see the gate was closed rather than dropped. |
-| **cloud-gov/aws-broker#534** | Broker-managed **per-binding least-privilege users** | Resolves deviation **D-4**; returning a DBA-class master per binding is not acceptable for production. |
+| ~~**cloud-gov/aws-broker#534**~~ | ~~Broker-managed **per-binding least-privilege users**~~ | **NOT A GATE.** Master-credential-per-binding is the intended shared-responsibility boundary, identical to the Postgres/MySQL plans (D-4, reclassified from deviation to scope 2026-09-21). #534 is optional future hardening. Retained here so the ISSO can see the gate was reclassified rather than dropped. |
 | **cloud-gov/aws-broker#539** | Apply static (pending-reboot) hardened params on **modify** + reboot | New instances get the full baseline; the modify path must not leave pending-reboot params unapplied. |
 | **cloud-gov/aws-broker#540** | Enable RDS **storage autoscaling** (`MaxAllocatedStorage`) | Operational availability (A-family) before customers land. Implemented in **cloud-gov/aws-broker#562** (merged to the Oracle integration branch; autoscaling is **opt-in** per instance via `max_storage`, no plan default). |
 | **WS15** (live proof) | **Validate the overlay against a real GovCloud RDS Oracle instance** | All hardening/parameter/option/log support is verified offline + via moto/local only. Compliance **evidence** requires a live run — see `docs/oracle19c/limitations.md`. The overlay profile is committed and runnable (`controls/overlay.rb` + `control-layers.yml`); what is missing is a run against a live brokered instance — `aws-broker` **cloud-gov/aws-broker#558**. |
-| ~~**cloud-gov/aws-broker#557**~~ | ~~Decide how in-database SQL hardening is applied~~ | **RESOLVED — not a production gate.** The boundary is decided and security-approved: the platform hardens the control plane, the customer hardens inside the database, validated by this overlay (§1). Matches the Cloud.gov PaaS responsibility model. #557 stays open as the record of the decision. What production *does* require is that the customer-responsibility set is documented and the `hardening/sql/` scripts are delivered — both satisfied by this repo and `docs/RESPONSIBILITY.md`. |
-| this doc | **ISSO acceptance of deviations D-1…D-4 (feature-absence) and D-5…D-10 (compensating-control)** — and the §1 in-DB-hardening model | The formal risk-acceptance decision this package supports. **D-9 (this overlay substituting for Oracle DBSAT) is the weakest equivalence claim and should be raised explicitly.** |
+| ~~[**cloud-gov/aws-broker#557**](https://github.com/cloud-gov/aws-broker/issues/557)~~ | ~~Decide how in-database SQL hardening is applied~~ | **RESOLVED — not a production gate.** Recorded as an accepted decision in [`aws-broker` ADR-0003](https://github.com/cloud-gov/aws-broker/blob/main/docs/decisions/ADR-0003-sql-hardening-platform-vs-customer-responsibility.md): the platform maintains and tests the hardening SQL, the customer applies and maintains it, validated by this overlay (§1). Matches the Cloud.gov PaaS responsibility model. #557 stays open as the record of the decision. ADR-0003 states that **ISSO acceptance of the split is still required**; what production additionally requires is that the customer-responsibility set is documented and the `hardening/sql/` scripts are delivered — both satisfied by this repo and `docs/RESPONSIBILITY.md`. |
+| this doc | **ISSO acceptance of deviations D-1…D-3 (feature-absence) and D-5…D-10 (compensating-control)** — and the §1 in-DB-hardening model | The formal risk-acceptance decision this package supports. **D-9 (this overlay substituting for Oracle DBSAT) is the weakest equivalence claim and should be raised explicitly.** |
 
 Related hardening items (not strictly production gates for the Oracle plan, but on
 the broker-wide backlog and disclosed in §5a): **cloud-gov/aws-broker#554** (at-rest cipher → AEAD/FIPS),

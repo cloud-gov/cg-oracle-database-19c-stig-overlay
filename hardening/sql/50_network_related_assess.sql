@@ -10,8 +10,8 @@ WHENEVER SQLERROR CONTINUE
 PROMPT === parameters relevant to network security (read-only view) ===
 SELECT NAME, VALUE
 FROM   V$PARAMETER
-WHERE  NAME IN ('sec_case_sensitive_logon','remote_login_passwordfile',
-                'sec_protocol_error_further_action','sec_max_failed_login_attempts')
+WHERE  NAME IN ('remote_login_passwordfile', 'sec_protocol_error_further_action',
+                 'sec_max_failed_login_attempts')
 ORDER  BY NAME;
 
 PROMPT NOTE: sqlnet.ora settings (e.g. sqlnet.allowed_logon_version_server), the

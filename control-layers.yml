@@ -90,10 +90,11 @@ controls:
     rationale: >-
       audit_trail is applied by the broker parameter group but is readable via
       SELECT value FROM v$parameter — keep verifying it in SQL to detect drift.
-  - text_pattern: "sec_case_sensitive_logon"
-    set_by: aws_rds_parameter_group
-    verified_by: sql
-    rationale: Set by parameter group; verifiable in V$PARAMETER.
+  # NOTE: sec_case_sensitive_logon intentionally has NO rule here. It is
+  # deprecated in Oracle 19c (default TRUE) and no DISA V1R5 rule's check text
+  # references it, so the broker no longer sets or verifies it. The previous
+  # text_pattern rule matched zero controls (dead classification); removed per
+  # cloud-gov/cg-oracle-database-19c-stig-overlay#39.
   - text_pattern: "remote_login_passwordfile"
     set_by: aws_rds_parameter_group
     verified_by: sql

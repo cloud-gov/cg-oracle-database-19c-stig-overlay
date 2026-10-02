@@ -1,7 +1,11 @@
-# CINC Auditor runner for the Cloud.gov Oracle 19c STIG overlay (#7).
-# Builds oraquery from source (no committed binary, #11), vendors the pinned
+# CINC Auditor runner for the Cloud.gov Oracle 19c STIG overlay
+# Builds oraquery from source (no committed binary), vendors the pinned
 # InSpec dependency at build time (ADR-0001), and runs non-root.
 # Local runs prove check logic only; live RDS proof remains aws-broker#558.
+
+# -- Maintenance:
+#    For certs, see runner/certs/README.md.
+#    For CincAuditor, see VERSION/CHANNEL in this Dockerfile.
 
 # Build context is the repo root (see runner/docker-compose.yml).
 FROM golang:1.22-bookworm AS oraquery-build
@@ -11,7 +15,47 @@ RUN go mod download
 COPY runner/oraquery/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /oraquery .
 
-FROM cincproject/auditor:7
+# --- Build CincAuditor runner image based on the official CincAuditor image ---
+# from Dockerfile
+FROM ubuntu:22.04
+LABEL maintainer="Cinc Project <docker@cinc.sh>"
+
+# --- CINC Auditor source pin (bump VERSION/CHANNEL/checksum to upgrade) ------------
+ARG VERSION=7.2.1
+ARG CHANNEL=stable
+ARG TARGETARCH
+
+ENV PATH=/opt/cinc-auditor/bin:/opt/cinc-auditor/embedded/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Run the entire container with the default locale to be en_US.UTF-8
+RUN apt-get update && \
+    apt-get install -y locales && \
+    locale-gen en_US.UTF-8 && \
+    update-locale LANG=en_US.UTF-8 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+RUN mkdir -p /share
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y wget git; \
+    # Pinned per-arch checksums for ${VERSION} (single place to update on bump).
+    case "$TARGETARCH" in \
+        amd64) sum=79c44bdd9350fd32300585fbff7a47ebba733cd69233e559f4b71958ef392b31 ;; \
+        arm64) sum=8daa5b9259cfc5488ad6450d351a816213b363cd0a85bac16c436d2546de984c ;; \
+        *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    # HTTPS breaks under packet inspection, and is redundant when using a checksum.
+    wget "http://ftp-osl.osuosl.org/pub/cinc/files/${CHANNEL}/cinc-auditor/${VERSION}/ubuntu/22.04/cinc-auditor_${VERSION}-1_${TARGETARCH}.deb" -O /tmp/cinc-auditor.deb; \
+    echo "${sum}  /tmp/cinc-auditor.deb" | sha256sum -c -; \
+    dpkg -i /tmp/cinc-auditor.deb || apt-get install -y -f; \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/cinc-auditor.deb
+
+WORKDIR /share
 
 USER root
 

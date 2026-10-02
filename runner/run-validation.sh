@@ -9,10 +9,12 @@
 #     (plaintext) for a local dev target, 2484 (TCPS) for a remote target unless
 #     ORAQUERY_TLS=disable was explicitly requested. An explicit DB_PORT wins.
 #
-# When VCAP_SERVICES is present, the first aws-rds binding whose credentials
-# db_name (or name) is "ORCL" is used to fill any unset DB_* values; explicit
-# DB_* env vars still take precedence. If no ORCL binding exists, the script
-# fails closed rather than guessing another database.
+# When VCAP_SERVICES is present, the single aws-rds binding (whose credentials
+# db_name (or name) is "ORCL") is used to fill any unset DB_* values; explicit
+# DB_* env vars still take precedence. If no such binding exists, the script
+# fails closed rather than guessing another database. If MORE THAN ONE aws-rds
+# binding exists, the script fails closed too — the runner supports exactly one
+# (see db-connect.sh; a future multi-binding use case adds selection then).
 #
 # TLS (see oraquery; #16 / #20): oraquery drives TLS from ORAQUERY_TLS, NOT from
 # the port, and defaults to verified TLS (verify-ca), failing closed without a
@@ -105,6 +107,7 @@ resolve_db_connection
 
 echo "run-validation: CINC Auditor $(cinc-auditor version 2>/dev/null || inspec version 2>/dev/null || echo '?')"
 echo "run-validation: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (TLS mode: ${ORAQUERY_TLS:-verify-ca})"
+echo "run-validation: instance ${DB_INSTANCE_NAME:-<none>} (CF service-instance from VCAP)"
 if [ "$SKIP_CUSTOMER_CONTROLS" = true ]; then
     echo "run-validation: posture: PLATFORM-only (skipping customer-responsibility controls)" >&2
 else

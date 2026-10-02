@@ -14,7 +14,7 @@
 #   DB_USER, DB_PASSWORD, DB_HOST, DB_SERVICE   (required unless VCAP supplies them)
 #   DB_PORT                                     (optional; see port defaulting below)
 #   DB_INSTANCE_NAME                            (optional; report label; from VCAP instance_name)
-#   VCAP_SERVICES                               (Cloud.gov; aws-rds binding, db_name ORCL)
+#   VCAP_SERVICES                               (Cloud.gov; exactly one aws-rds binding, db_name ORCL)
 #   ORAQUERY_TLS                                (optional; honored if already set)
 #   LOG_PREFIX                                  (optional; log tag, default "db-connect")
 
@@ -35,120 +35,147 @@ _dbc_ruby_bin() {
     return 1
 }
 
-# Emit the selected ORCL binding's coordinates as a single tab-separated line:
+# Emit the ORCL binding's coordinates as a single tab-separated line:
 #   username <TAB> password <TAB> host <TAB> service <TAB> port <TAB> instance_name
-# The instance_name is the CF service-instance name (a top-level field on the
-# binding, e.g. "test-oracle-tls"); it is the human-facing per-instance
-# discriminator used to label reports. TWO interpreters implement the SAME
-# contract so the shared resolver works in every runner without drift: the CINC
-# image ships Ruby; the Java-buildpack app on cflinuxfs4 ships no Ruby but has jq.
-# Preference order (richest first): Ruby → jq.
+# instance_name is the top-level CF service-instance field (e.g. "test-oracle-tls"),
+# the human-facing per-instance report discriminator — NOT credentials.name.
+#
+# Two interpreters implement the SAME contract so the shared resolver works in
+# every runner without drift: the CINC image ships Ruby; the cflinuxfs4
+# Java-buildpack app ships no Ruby but has jq. Preference: Ruby → jq.
+#
+# Selection contract (issue #21): the runner supports exactly ONE aws-rds binding.
+#   - MORE THAN ONE aws-rds binding → fail closed. We do NOT guess which database
+#     to scan; on brokered Cloud.gov RDS every Oracle service is named "ORCL", so
+#     the label cannot disambiguate them. A future multi-binding use case is out of
+#     scope — that user adds selection then.
+#   - Exactly ONE binding, and it is ORCL (credentials db_name/name == "ORCL")
+#     → emit its coordinate row.
+#   - Zero bindings, or the single binding is not ORCL → fail closed.
+# The Ruby path signals ">1" with exit 3; the jq path emits one row per aws-rds
+# binding and the caller counts. Either way the count DECISION and its messages
+# live ONLY in the bash caller (_dbc_parse_vcap), so the interpreters cannot drift.
 
 _dbc_vcap_ruby() {
     "$1" <<'RUBY'
 require 'json'
 
 services = JSON.parse(ENV.fetch('VCAP_SERVICES'))
-bindings = services.fetch('aws-rds')
+bindings = services['aws-rds'] || []
 
-binding = bindings.find do |b|
-  creds = b.fetch('credentials')
-  (creds['db_name'] || creds['name']) == 'ORCL'
-end
+# Support exactly one aws-rds binding; refuse to guess among several (issue #21).
+exit 3 if bindings.length > 1
 
-if binding.nil?
-  STDERR.puts 'db-connect: no aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
-  exit 1
-end
+binding = bindings.first
+exit 1 if binding.nil?  # no aws-rds binding at all
 
-credentials = binding.fetch('credentials')
+credentials = binding['credentials'] || {}
+# The single binding must be the Oracle (ORCL) database, else fail closed.
+exit 1 unless (credentials['db_name'] || credentials['name']) == 'ORCL'
 
-# instance_name / name are TOP-LEVEL binding fields (the CF service-instance
-# name), not credentials fields — that is what an operator recognizes.
 puts [
   credentials.fetch('username', ''),
   credentials.fetch('password', ''),
   credentials.fetch('host', ''),
   credentials['db_name'] || credentials.fetch('name', ''),
   credentials.fetch('port', ''),
-  binding['instance_name'] || binding['name'] || '',
+  binding['instance_name'] || binding['name'] || '',  # CF service-instance name
 ].join("\t")
 RUBY
 }
 
-# jq fallback for platforms with NO Ruby (cflinuxfs4 + Java
-# buildpack ships jq). Same contract/output as the Ruby parser, with the SAME
-# selection semantics: of all aws-rds bindings whose credentials db_name (or name)
-# is "ORCL", it emits the FIRST in array order — matching Ruby's `bindings.find`.
-# jq handles JSON escaping correctly (passwords with quotes/backslashes), so no
-# hand-rolled decoding. Fails closed (non-zero) if no ORCL binding is found,
-# matching the Ruby behavior.
+# jq fallback for the no-Ruby platform. Same contract; jq decodes JSON escapes
+# (passwords with quotes/backslashes) natively. Deliberately avoids error("msg")
+# (jq 1.6+) and -e: it emits one row per aws-rds binding and the caller counts,
+# then the caller verifies the single row is ORCL.
 _dbc_vcap_jq() {
-    # -e: exit non-zero if the final result is null/false (no ORCL match) → fail
-    #     closed. -r: raw output (no JSON quoting). join("\t") emits the six decoded
-    #     fields tab-separated — NOT @tsv, which TSV-escapes backslashes (doubling a
-    #     `\` in a password). Credentials never contain a literal tab, and the caller
-    #     reads back with IFS=$'\t', so join("\t") is the faithful, correct form.
-    # `[.["aws-rds"][]?]` collects ALL aws-rds BINDING objects (the `[]?` tolerates a
-    #     missing/empty aws-rds key → empty array → no match → -e fails, fail-closed),
-    #     then `first(select(...))` picks the FIRST whose credentials db_name/name is
-    #     ORCL — the direct jq analogue of Ruby's `bindings.find`. We keep the whole
-    #     binding object (NOT just .credentials) so instance_name — a TOP-LEVEL
-    #     binding field — survives to the output row. This is done INSIDE jq (not a
-    #     shell `head -n1`) so the single result flows out without a truncated pipe,
-    #     keeping jq's own exit status authoritative under the caller's pipefail.
-    # Ruby emits credentials.db_name || name for the service field; the select filter
-    #     already fixed that to "ORCL", so a literal "ORCL" is byte-identical here.
-    # instance_name || name mirrors the Ruby fallback for the CF instance name.
-    # Portability: every construct here works on jq 1.6 (the platform's version) and
-    #     older. We deliberately AVOID `error("msg")` (the string-argument form, new in
-    #     1.6); an unmatched query yields no output, and `-e` turns that into a non-zero
-    #     exit. The human-readable "no ORCL binding" message is emitted by the bash
-    #     caller (_dbc_parse_vcap) on a non-zero return, so no jq-version-sensitive
-    #     error() call is needed.
-    printf '%s' "${VCAP_SERVICES}" | "$1" -er '
+    # -r + join("\t"): raw, tab-separated fields. NOT @tsv, which would escape a `\`
+    #   in a password. Credentials hold no literal tab; the caller reads with IFS=\t.
+    # [.["aws-rds"][]?]: all aws-rds bindings; the `[]?` tolerates a missing key
+    #   (→ no rows → caller's fail-closed "no binding"). The WHOLE binding is kept
+    #   so the top-level instance_name survives. NO ORCL filter here: the caller
+    #   counts the rows first (>1 → fail) and checks the single row's service.
+    printf '%s' "${VCAP_SERVICES}" | "$1" -r '
         [ .["aws-rds"][]? ]
-        | first(.[] | select((.credentials.db_name // .credentials.name) == "ORCL"))
+        | .[]
         | [ (.credentials.username // ""),
             (.credentials.password // ""),
             (.credentials.host // ""),
-            "ORCL",
+            (.credentials.db_name // .credentials.name // ""),
             (.credentials.port // "" | tostring),
             (.instance_name // .name // "") ]
         | join("\t")
     '
 }
-# Fills any UNSET DB_* from the first aws-rds binding whose db_name (or name) is
-# "ORCL" (and DB_INSTANCE_NAME from the binding's instance_name/name); explicit
-# DB_* / DB_INSTANCE_NAME env vars win. Fails closed if VCAP_SERVICES is present
-# but has no ORCL binding — never guesses another database. No-op without VCAP.
+
+# Fills any UNSET DB_* (and DB_INSTANCE_NAME) from the single ORCL aws-rds
+# binding; explicit env vars win. Applies the selection contract described above
+# for BOTH interpreters — the sole place the count/ORCL decision and its messages
+# live. Fails closed on zero bindings, >1 bindings, or a single non-ORCL binding.
+# No-op without VCAP.
 _dbc_parse_vcap() {
     [ -n "${VCAP_SERVICES:-}" ] || return 0
 
-    local vcap_values ruby_bin jq_bin
+    local vcap_values ruby_bin jq_bin rc
     if ruby_bin="$(_dbc_ruby_bin)"; then
         _dbc_log "parsing VCAP_SERVICES with ${ruby_bin}"
-        vcap_values="$(_dbc_vcap_ruby "$ruby_bin")" || return 1
+        vcap_values="$(_dbc_vcap_ruby "$ruby_bin")" || rc=$?
+        if [ -n "${rc:-}" ]; then
+            # exit 3 → more than one aws-rds binding; anything else → no ORCL binding.
+            if [ "$rc" -eq 3 ]; then
+                _dbc_multiple_bindings
+            else
+                _dbc_log 'no single aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
+            fi
+            return 1
+        fi
     elif jq_bin="$(command -v jq)"; then
-        # cflinuxfs4 + Java buildpack: no Ruby, but jq is present.
         _dbc_log "parsing VCAP_SERVICES with ${jq_bin}"
-        vcap_values="$(_dbc_vcap_jq "$jq_bin")" || return 1
+        vcap_values="$(_dbc_vcap_jq "$jq_bin")" || {
+            _dbc_log "failed to parse VCAP_SERVICES with jq"
+            return 1
+        }
     else
         _dbc_log "VCAP_SERVICES provided, but no Ruby or jq interpreter is available to parse it"
+        return 1
+    fi
+
+    # jq emits one row per aws-rds binding (the Ruby path already enforced the
+    # count and ORCL check itself). Apply the same policy to the jq path: >1 row
+    # → fail, 0 rows → fail, exactly 1 row whose service field is not ORCL → fail.
+    local row_count=0
+    [ -n "$vcap_values" ] && row_count="$(printf '%s\n' "$vcap_values" | grep -c '')"
+    if [ "$row_count" -gt 1 ]; then
+        _dbc_multiple_bindings
+        return 1
+    elif [ "$row_count" -eq 0 ]; then
+        _dbc_log 'no single aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
         return 1
     fi
 
     local vcap_user vcap_password vcap_host vcap_service vcap_port vcap_instance
     IFS=$'\t' read -r vcap_user vcap_password vcap_host vcap_service vcap_port vcap_instance <<<"$vcap_values"
 
+    # Ruby returns only when the single binding is ORCL; the jq path is unfiltered,
+    # so enforce it here so both interpreters reject a single non-Oracle binding.
+    if [ "$vcap_service" != "ORCL" ]; then
+        _dbc_log 'no single aws-rds binding with db_name "ORCL" found in VCAP_SERVICES'
+        return 1
+    fi
+
     DB_USER="${DB_USER:-$vcap_user}"
     DB_PASSWORD="${DB_PASSWORD:-$vcap_password}"
     DB_HOST="${DB_HOST:-$vcap_host}"
     DB_SERVICE="${DB_SERVICE:-$vcap_service}"
     DB_PORT="${DB_PORT:-$vcap_port}"
-    # CF service-instance name (e.g. "test-oracle-tls"), the human-facing report
-    # discriminator. An explicit DB_INSTANCE_NAME env var still wins.
     DB_INSTANCE_NAME="${DB_INSTANCE_NAME:-$vcap_instance}"
+}
+
+# The runner supports exactly one aws-rds binding; more than one is refused rather
+# than guessed at (issue #21). A future multi-binding use case adds selection then.
+_dbc_multiple_bindings() {
+    _dbc_log 'more than one aws-rds binding found in VCAP_SERVICES; refusing to guess which database to scan.'
+    _dbc_log 'bind the runner app to exactly one aws-rds (Oracle) service instance.'
 }
 
 # Unmistakably-local dev targets. Mirrors oraquery's isLocalHost allowlist

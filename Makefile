@@ -101,10 +101,18 @@ build-local: deps ## Build the runner image for local testing
 # queries + running the hardening/sql/*.sql scripts against the compose dev DB. Thin
 # overlay on Oracle's official OTN SQLcl image, BUILT LOCALLY and NEVER pushed. For
 # Cloud.gov use the Java-buildpack app instead (make push-sqlcl-cf).
+# SQL_CONTENT_HASH digests every file under hardening/sql so the Dockerfile's
+# `COPY hardening/sql` layer is invalidated whenever any script changes — passed as
+# a --build-arg below. This prevents Docker from silently reusing a stale COPY layer
+# and baking old SQL into the image (a false-PASS hazard — see issue #98). Portable
+# across macOS/Linux: prefer sha256sum, fall back to shasum.
+SQL_CONTENT_HASH = $(shell { find hardening/sql -type f -exec cat {} + ; } | { sha256sum 2>/dev/null || shasum -a 256 ; } | cut -d' ' -f1)
+
 .PHONY: build-sqlcl
 build-sqlcl: deps ## Build the SQLcl image for LOCAL 23ai testing (thin overlay on the official OTN image)
 	docker build -f runner/sqlcl/Dockerfile \
 	  --build-arg BASE_IMAGE=$(SQLCL_BASE_IMAGE) \
+	  --build-arg SQL_CONTENT_HASH=$(SQL_CONTENT_HASH) \
 	  -t $(SQLCL_IMAGE) .
 
 .PHONY: sqlcl-repl

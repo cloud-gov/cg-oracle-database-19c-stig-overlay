@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 go build -trimpath -o /oraquery .
 
 # --- Build CincAuditor runner image based on the official CincAuditor image ---
 # from Dockerfile
-FROM  {base_image}
+FROM  ${base_image}
 LABEL maintainer="Cinc Project <docker@cinc.sh>"
 
 # --- CINC Auditor source pin (bump VERSION/CHANNEL/checksum to upgrade) ------------

@@ -7,6 +7,9 @@
 #    For certs, see runner/certs/README.md.
 #    For CincAuditor, see VERSION/CHANNEL in this Dockerfile.
 
+# default to ubuntu:22.04 so local/compose builds work with no flags
+ARG base_image=ubuntu:22.04
+
 # Build context is the repo root (see runner/docker-compose.yml).
 FROM golang:1.22-bookworm AS oraquery-build
 WORKDIR /src
@@ -16,8 +19,7 @@ COPY runner/oraquery/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /oraquery .
 
 # --- Build CincAuditor runner image based on the official CincAuditor image ---
-# from Dockerfile
-FROM ubuntu:22.04
+FROM ${base_image}
 LABEL maintainer="Cinc Project <docker@cinc.sh>"
 
 # --- CINC Auditor source pin (bump VERSION/CHANNEL/checksum to upgrade) ------------

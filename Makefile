@@ -36,7 +36,7 @@ CLOUDGOV_APP ?= cg-cinc-auditor
 # here: it is sourced from the environment (e.g. `source .env`) and the
 # push-cloudgov recipe fails closed if it is unset.
 AWS_REGION ?= us-gov-west-1
-ECR_IMAGE ?= $(AWS_ACCT).dkr.ecr.$(AWS_REGION).amazonaws.com/cinc-auditor:latest
+ECR_IMAGE ?= $(AWS_ACCT).dkr.ecr.$(AWS_REGION).amazonaws.com/cg-cinc-auditor:latest
 # CF service instance (brokered aws-rds Oracle) the runner app binds to so its
 # VCAP_SERVICES carries the ORCL coordinates db-connect.sh reads at runtime.
 DB_SERVICE_INSTANCE ?= test-oracle-9-23

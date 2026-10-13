@@ -79,9 +79,9 @@ For a real brokered RDS instance on Cloud.gov, push the idle validation app, bin
 
 ```bash
 make push-cloudgov
-cf bind-service cg-cinc-audit-oracle-runner <oracle-db>
-cf restage cg-cinc-audit-oracle-runner
-cf ssh cg-cinc-audit-oracle-runner -c /usr/local/bin/run-validation.sh
+cf bind-service cg-cinc-auditor <oracle-db>
+cf restage cg-cinc-auditor
+cf ssh cg-cinc-auditor -c /usr/local/bin/run-validation.sh
 ```
 
 ## What's here
@@ -131,20 +131,20 @@ ENTRYPOINT is `run-validation.sh`, override the entrypoint for local Docker runs
 
 ```bash
 # Local dev DB (compose network "oracle" host → plaintext 1521):
-docker run --rm --network cg-cinc-audit-oracle_default \
+docker run --rm --network cg-cinc-auditor_default \
   --entrypoint /usr/local/bin/db-query.sh \
   -e DB_USER=system -e DB_PASSWORD=devpw_ChangeMe1 \
   -e DB_HOST=oracle -e DB_SERVICE=FREEPDB1 \
-  cg-cinc-audit-oracle-runner:local \
+  cg-cinc-auditor:local \
   -c "SELECT 1 FROM dual"
 
 # From a .sql file (mount it in):
-docker run --rm --network cg-cinc-audit-oracle_default \
+docker run --rm --network cg-cinc-auditor_default \
   --entrypoint /usr/local/bin/db-query.sh \
   -v "$PWD/query.sql":/tmp/query.sql:ro \
   -e DB_USER=system -e DB_PASSWORD=devpw_ChangeMe1 \
   -e DB_HOST=oracle -e DB_SERVICE=FREEPDB1 \
-  cg-cinc-audit-oracle-runner:local \
+  cg-cinc-auditor:local \
   -f /tmp/query.sql
 ```
 
@@ -152,7 +152,7 @@ On Cloud.gov, run it over `cf ssh` against the bound runner app (mind shell
 quoting — single-quote the SQL and escape `$`):
 
 ```bash
-cf ssh cg-cinc-audit-oracle-runner \
+cf ssh cg-cinc-auditor \
   -c "/usr/local/bin/db-query.sh -c 'SELECT banner FROM v\$version'"
 ```
 

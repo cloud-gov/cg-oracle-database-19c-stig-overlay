@@ -76,7 +76,7 @@ Equivalent raw `docker run` (what the Makefile does):
 
 ```bash
 docker run --rm -it \
-  --network cg-cinc-audit-oracle_default \
+  --network cg-cinc-auditor_default \
   -e DB_USER=system -e DB_PASSWORD=devpw_ChangeMe1 \
   -e DB_HOST=oracle -e DB_SERVICE=FREEPDB1 -e DB_PORT=1521 \
   -e ORAQUERY_TLS=disable \

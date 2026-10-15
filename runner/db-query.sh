@@ -22,7 +22,7 @@
 # shipped here — OTN EULA); pass their individual SELECTs via -c for ad hoc checks.
 #
 # On Cloud.gov, run it over cf ssh against the bound runner app, e.g.:
-#   cf ssh cg-cinc-audit-oracle-runner \
+#   cf ssh cg-cinc-auditor \
 #     -c "/usr/local/bin/db-query.sh -c 'SELECT banner FROM v\$version'"
 # (mind shell quoting of $ and the connect string; single-quote the SQL).
 #

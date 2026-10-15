@@ -13,7 +13,7 @@
 # (runner/Dockerfile uses cincproject/auditor:7). Override on the CLI, e.g.
 #   make check AUDITOR_IMAGE=cincproject/auditor:6
 AUDITOR_IMAGE ?= cincproject/auditor:7
-RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
+RUNNER_IMAGE  ?= cg-cinc-auditor:local
 # SQLcl image — LOCAL 23ai testing ONLY (one-off queries + running hardening/sql
 # scripts against the compose dev DB). Thin overlay on Oracle's official OTN image;
 # SQLCL_BASE_IMAGE is pinned by digest (dependency policy forbids floating tags) —
@@ -26,10 +26,20 @@ RUNNER_IMAGE  ?= cg-cinc-audit-oracle-runner:local
 # in-boundary container-scanning/hardening pipeline (internal ADR-0007).
 SQLCL_IMAGE       ?= cg-sqlcl-oracle:local
 SQLCL_BASE_IMAGE  ?= container-registry.oracle.com/database/sqlcl@sha256:c039d51466cea7c76f1e3b3ae4b125e2a73381a884a548737cb65b26e6dd7db1
-CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-audit-oracle-runner:amd64
+CLOUDGOV_IMAGE ?= cloudgov/cg-cinc-auditor:amd64
 CLOUDGOV_PLATFORM ?= linux/amd64
 DOCKERHUB_IMAGE ?= $(CLOUDGOV_IMAGE)
-CLOUDGOV_APP ?= cg-cinc-audit-oracle-runner
+CLOUDGOV_APP ?= cg-cinc-auditor
+# ECR image for the in-boundary Cloud.gov push (pulled directly from AWS ECR, no
+# local build). To (re)build + publish the image to ECR, that happens out of band
+# in the AWS pipeline — push-cloudgov only PULLS it. AWS_ACCT is NOT defaulted
+# here: it is sourced from the environment (e.g. `source .env`) and the
+# push-cloudgov recipe fails closed if it is unset.
+AWS_REGION ?= us-gov-west-1
+ECR_IMAGE ?= $(AWS_ACCT).dkr.ecr.$(AWS_REGION).amazonaws.com/cg-cinc-auditor:latest
+# CF service instance (brokered aws-rds Oracle) the runner app binds to so its
+# VCAP_SERVICES carries the ORCL coordinates db-connect.sh reads at runtime.
+DB_SERVICE_INSTANCE ?= test-oracle-9-23
 CF_IDLE_COMMAND ?= sleep infinity
 CF_PUSH_FLAGS ?= --no-route -u process -k 2GB -c '$(CF_IDLE_COMMAND)'
 # App instance targeted for cf ssh; both the run and the fetch must hit the same
@@ -40,7 +50,7 @@ COMPOSE_FILE  ?= runner/docker-compose.yml
 RESULTS_DIR ?= out
 # Compose project name (see `name:` in the compose file); used to derive the
 # network name the `retest` container joins to reach the running DB.
-COMPOSE_PROJECT ?= cg-cinc-audit-oracle
+COMPOSE_PROJECT ?= cg-cinc-auditor
 COMPOSE_NETWORK ?= $(COMPOSE_PROJECT)_default
 # --- Local dev DB connection (matches runner/docker-compose.yml) ------------
 # NOT a secret: a well-known password for a loopback-only (127.0.0.1) throwaway
@@ -171,9 +181,18 @@ push-dockerhub: build-cloudgov ## Build and push the Cloud.gov linux/amd64 image
 	docker push $(DOCKERHUB_IMAGE)
 
 .PHONY: push-cloudgov
-push-cloudgov: push-dockerhub ## Push an idle Docker image app to Cloud.gov for cf ssh validation runs
+push-cloudgov: ## Pull the ECR image to Cloud.gov, bind the Oracle service, and start the runner app
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
-	cf push $(CLOUDGOV_APP) --docker-image $(DOCKERHUB_IMAGE) $(CF_PUSH_FLAGS)
+	@[ -n "$(AWS_ACCT)" ] || { echo "ERROR: AWS_ACCT not set (ECR account id). Export it or 'source .env'." >&2; exit 1; }
+	@# Secrets stay OUT of this Makefile (and out of git). Supply them in the
+	@# environment — e.g. `source .env` first (.env is git-ignored). cf reads
+	@# CF_DOCKER_PASSWORD from the env, so the ECR pull secret never lands on the
+	@# command line or in `ps` output. Fail closed if either is missing.
+	@[ -n "$$DOCKER_USER" ] || { echo "ERROR: DOCKER_USER not set (ECR access key id). Export it or 'source .env'." >&2; exit 1; }
+	@[ -n "$$CF_DOCKER_PASSWORD" ] || { echo "ERROR: CF_DOCKER_PASSWORD not set (ECR pull secret). Export it or 'source .env'." >&2; exit 1; }
+	cf push $(CLOUDGOV_APP) --docker-image $(ECR_IMAGE) --docker-username "$$DOCKER_USER" $(CF_PUSH_FLAGS)
+	cf bind-service $(CLOUDGOV_APP) $(DB_SERVICE_INSTANCE)
+	cf start $(CLOUDGOV_APP)
 
 .PHONY: report-cloudgov
 report-cloudgov: ## Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/

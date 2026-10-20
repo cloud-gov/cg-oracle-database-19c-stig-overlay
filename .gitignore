@@ -151,6 +151,7 @@ Gopkg.toml
 .byebug_history
 
 # Cloud Foundry specific
+/.tools/
 manifest.yml
 manifest-*.yml
 # The SQLcl buildpack app's manifest IS a committed source artifact (see

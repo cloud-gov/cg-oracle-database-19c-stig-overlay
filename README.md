@@ -20,7 +20,6 @@ The [`docs/RESPONSIBILITY.md`](docs/RESPONSIBILITY.md) document defines the **pl
 - `controls/overlay.rb` — the InSpec/CINC overlay: `include_controls` all baseline controls, plus about 57 in-place overrides -- the exact number may change during development.
 - `hardening/sql/` — assessment-first, mostly-idempotent SQL for the database layer, plus rollback scripts.
 - `runner/` — a containerized CINC Auditor runner (`run-validation.sh`, the pure-Go `oraquery` client, local 23ai compose harness, and a Cloud.gov SQLcl app).
-- `libraries/` + `spec/` — an `oracledb_session` CSV stopgap and its unit tests (temporary; removed once CINC ships the upstream fix — tracked in [#35](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/35)).
 
 **Not yet committed (planned / tracked):**
 
@@ -64,7 +63,6 @@ The runner supports two postures, gated by [`docs/RESPONSIBILITY.md`](docs/RESPO
 | `hardening/sql/rollback/` | Reversal for the reversible hardening scripts (`10`, `30`; `20` is only partially reversible). |
 | `runner/` | Containerized CINC Auditor runner: `run-validation.sh`, the pure-Go `oraquery` client, `db-query.sh`, the local 23ai `docker-compose.yml`, and the Cloud.gov SQLcl buildpack app (`sqlcl-cf/`). See [`runner/README.md`](runner/README.md). |
 | `rds-inputs.yml` | Scan-time input file for a brokered RDS run (allowlists, audit users, verify-function names). Non-secret metadata; connection credentials are supplied at scan time, never committed. |
-| `libraries/` + `spec/` | `oracledb_session_patch.rb` — a CSV-parsing stopgap for the `oracledb_session` resource — and its rspec unit tests. Temporary; reverted once CINC ships the upstream fix ([#35](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/35)). |
 | `docs/RESPONSIBILITY.md` | The platform-vs-customer responsibility model and how each run posture behaves. **Read this first.** |
 | `docs/adr/` | Architecture Decision Records (MADR). See [ADR-0001](docs/adr/0001-consume-mitre-baseline-via-fork-depends.md) for the baseline-dependency strategy. |
 | `profile/` | Placeholder for additional InSpec/CINC profile material. |

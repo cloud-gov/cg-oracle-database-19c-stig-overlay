@@ -22,8 +22,8 @@ RUN CGO_ENABLED=0 go build -trimpath -o /oraquery .
 FROM ${base_image}
 LABEL maintainer="Cinc Project <docker@cinc.sh>"
 
-# --- CINC Auditor source pin (bump VERSION/CHANNEL/checksum to upgrade) ------------
-ARG VERSION=7.2.1
+# --- CINC Auditor source pin (bump VERSION/checksum to upgrade) --------------------
+ARG VERSION=7.3.4
 ARG CHANNEL=stable
 ARG TARGETARCH
 
@@ -47,8 +47,8 @@ RUN set -eux; \
     apt-get install -y wget git; \
     # Pinned per-arch checksums for ${VERSION} (single place to update on bump).
     case "$TARGETARCH" in \
-        amd64) sum=79c44bdd9350fd32300585fbff7a47ebba733cd69233e559f4b71958ef392b31 ;; \
-        arm64) sum=8daa5b9259cfc5488ad6450d351a816213b363cd0a85bac16c436d2546de984c ;; \
+        amd64) sum=ca849fc264bb82d67643df5a6cfca259b4a42e33a4cbbded6a8d15de324dd3b3 ;; \
+        arm64) sum=7ac2f9c59384cf4bd72e7c522829bac9e689e6cc63f8d5dfd10897809b1eb245 ;; \
         *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
     # HTTPS breaks under packet inspection, and is redundant when using a checksum.
@@ -82,7 +82,6 @@ ENV ORAQUERY_CA_BUNDLE=/opt/certs/rds-govcloud-global-bundle.pem
 # Copy the overlay profile and vendor its pinned git dependency at build time.
 COPY inspec.yml inspec.lock rds-inputs.yml /profile/
 COPY controls /profile/controls
-COPY libraries /profile/libraries
 RUN cinc-auditor vendor /profile --overwrite
 
 COPY --from=oraquery-build /oraquery /usr/local/bin/oraquery

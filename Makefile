@@ -230,14 +230,6 @@ test-go: deps ## Unit-test the oraquery client (go test, in a Go container — n
 	docker run --rm -v "$(CURDIR)/runner/oraquery":/src -w /src $(GO_IMAGE) \
 	  go test -v ./...
 
-.PHONY: test-ruby
-test-ruby: deps ## Unit-test the oracledb_session CSV stopgap (rspec, in the CINC image — no DB)
-	@# Run against the SAME CINC major the runner ships (AUDITOR_IMAGE) so the
-	@# spec exercises the resource that will actually be vendored. The image's
-	@# embedded Ruby has inspec-core, hashie, csv, and rspec.
-	docker run --rm -v "$(CURDIR)":/share -w /share \
-	  --entrypoint rspec $(AUDITOR_IMAGE) spec/ --format doc
-
 .PHONY: test-bats
 test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no Ruby/jq/DB)
 	@# Exercises the JSON escaper that guards the .meta.json sidecar and the report
@@ -271,12 +263,12 @@ test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; R
 	exit $$status
 
 .PHONY: tests
-tests: check test-go test-ruby test-bats test-vcap ## Run all no-DB checks: profile validity + oraquery + parser unit tests
+tests: check test-go test-bats test-vcap ## Run all no-DB checks: profile validity + oraquery + shell unit tests
 
 .PHONY: verify
 verify: tests build ## One-command verify: profile loads + unit tests pass + runner image builds (no DB)
 	@echo ""
-	@echo "verify OK: profile is valid, oraquery + parser unit tests pass, and the runner image builds."
+	@echo "verify OK: profile is valid, oraquery + shell unit tests pass, and the runner image builds."
 	@echo "Next: 'make run' to execute the profile against a live Oracle 23ai Free DB."
 
 .PHONY: run

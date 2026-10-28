@@ -45,6 +45,28 @@ make push-cloudgov   # Push an idle Docker image app to Cloud.gov for cf ssh val
 make report-cloudgov # Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/
 ```
 
+Customer-style database hardening uses the SQLcl buildpack app (`make
+push-sqlcl-cf`). We chose a direct, checksum-verified Oracle SQLcl download because
+the SQLcl license permits this use, it will demonstrate that the hardening works as
+expected once those tests are included in CI, and it mirrors how customers will
+apply the hardening so they can rely on the same guidance.
+
+After deploying and binding `cg-sqlcl-oracle-cf` to the target Oracle service, apply
+the database-altering customer hardening scripts with a reviewed, non-secret input
+file. Start from `hardening/sql/customer-hardening-input.sql.example`; the customer
+must choose the profile-assignment mode, password verification function, and session
+headroom appropriate to its workload and policy.
+
+```sh
+make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.sql
+```
+
+The target runs on the configured `CF_APP_INSTANCE`, connects only through the
+bound service with verified TLS, and removes the temporary in-container input after
+the run. It applies `10`, `11`, `12`, `15`, `20`, `30`, and `60`; it does not run
+assessment-only or rollback scripts. Review `hardening/sql/README.md` before using
+this database-altering operation.
+
 ### Run postures
 
 The runner supports two postures, gated by [`docs/RESPONSIBILITY.md`](docs/RESPONSIBILITY.md):

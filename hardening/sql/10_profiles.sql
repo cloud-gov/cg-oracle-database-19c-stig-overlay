@@ -4,7 +4,7 @@
 -- password_life_time=35, account_inactivity_age=35).
 SET DEFINE OFF
 SET FEEDBACK OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
 -- ALTER PROFILE is idempotent: setting a limit to its target value is a no-op if
 -- already set. STIG: SRG-APP-000065 (lockout), SRG-APP-000174 (password lifetime).

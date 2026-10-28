@@ -40,10 +40,11 @@ SET SERVEROUTPUT ON
 SET DEFINE ON
 SET FEEDBACK OFF
 SET VERIFY OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
--- Set to N to only report candidate accounts (no ALTER USER ... PROFILE).
-DEFINE assign_users = Y
+-- The positional argument is Y to assign or N to only report candidates. The
+-- customer-hardening driver supplies it from its reviewed input file.
+DEFINE assign_users = &1
 
 DECLARE
   v_assign      VARCHAR2(1) := UPPER('&&assign_users');

@@ -52,6 +52,22 @@ the SQLcl license permits this use, it will demonstrate that the hardening works
 expected once those tests are included in CI, and it mirrors how customers will
 apply the hardening so they can rely on the same guidance.
 
+After deploying and binding `cg-sqlcl-oracle-cf` to the target Oracle service, apply
+the database-altering customer hardening scripts with a reviewed, non-secret input
+file. Start from `hardening/sql/customer-hardening-input.sql.example`; the customer
+must choose the profile-assignment mode, password verification function, and session
+headroom appropriate to its workload and policy.
+
+```sh
+make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.sql
+```
+
+The target runs on the configured `CF_APP_INSTANCE`, connects only through the
+bound service with verified TLS, and removes the temporary in-container input after
+the run. It applies `10`, `11`, `12`, `15`, `20`, `30`, and `60`; it does not run
+assessment-only or rollback scripts. Review `hardening/sql/README.md` before using
+this database-altering operation.
+
 ### Run postures
 
 The runner supports two postures, gated by [`docs/RESPONSIBILITY.md`](docs/RESPONSIBILITY.md):

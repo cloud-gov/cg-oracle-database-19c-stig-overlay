@@ -221,6 +221,29 @@ push-sqlcl-cf: vendor-sqlcl-cf stage-sqlcl-cf ## Download verified SQLcl and dep
 	    || { echo "ERROR: no Cloud Foundry space targeted; set CF_ORG and CF_SPACE in .env." >&2; exit 1; }; \
 	  cf push -f "$(SQLCL_CF_DIR)/manifest.yml" -p "$(SQLCL_CF_DIR)"
 
+# Apply every database-altering customer hardening script through the bound SQLcl
+# app. The values that require an organization decision live in a reviewed,
+# non-secret SQLcl input file; credentials remain only in VCAP_SERVICES.
+# Example: make harden-customer-cloudgov HARDENING_INPUT=customer-hardening-input.sql
+HARDENING_INPUT ?=
+.PHONY: harden-customer-cloudgov
+harden-customer-cloudgov: ## Apply all customer hardening scripts through cg-sqlcl-oracle-cf (HARDENING_INPUT=<reviewed SQLcl input>)
+	@[ -n "$(HARDENING_INPUT)" ] || { echo "ERROR: HARDENING_INPUT is required; start from hardening/sql/customer-hardening-input.sql.example." >&2; exit 1; }
+	@[ -f "$(HARDENING_INPUT)" ] || { echo "ERROR: HARDENING_INPUT is not a file: $(HARDENING_INPUT)" >&2; exit 1; }
+	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
+	@set -eu; \
+	  remote_input="/tmp/customer-hardening-input-$$(date +%s)-$$$$.sql"; \
+	  echo "harden-customer-cloudgov: uploading reviewed input to $(SQLCL_CF_APP) instance $(CF_APP_INSTANCE)"; \
+	  cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "umask 077; cat > '$$remote_input'" < "$(HARDENING_INPUT)"; \
+	  if cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "set -eu; driver=\$$(mktemp); trap 'rm -f \"$$remote_input\" \"\$$driver\"' EXIT HUP INT TERM; printf '@%s\\n@%s\\n' '$$remote_input' \"\$$HOME/app/hardening/customer-hardening.sql\" > \"\$$driver\"; \"\$$HOME/app/entrypoint.sh\" -f \"\$$driver\""; then \
+	    status=0; \
+	  else \
+	    status=$$?; \
+	  fi; \
+	  cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "rm -f '$$remote_input'" \
+	    || { echo "ERROR: could not remove temporary input $$remote_input from $(SQLCL_CF_APP) instance $(CF_APP_INSTANCE)." >&2; exit 1; }; \
+	  exit $$status
+
 .PHONY: build-cloudgov
 build-cloudgov: deps tests ## Build the runner image for Cloud.gov (linux/amd64) and load it locally
 	docker buildx build --platform $(CLOUDGOV_PLATFORM) \

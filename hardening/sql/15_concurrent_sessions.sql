@@ -46,7 +46,7 @@ WHENEVER SQLERROR EXIT FAILURE
 -- consume the entire pool — leaving free sessions for an RDS/operator account to
 -- log in and remediate. Org-defined; 64 is a conservative default (e.g. on an
 -- se2.medium with SESSIONS=614 this caps a user at 550, ~90% of the pool).
-DEFINE session_headroom = 64
+DEFINE session_headroom = &1
 
 DECLARE
   v_headroom  PLS_INTEGER := &&session_headroom;

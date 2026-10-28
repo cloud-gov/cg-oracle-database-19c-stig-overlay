@@ -38,6 +38,29 @@ here (see `../control-layers.yml`).
 
 ## Script groups
 
+### Apply all customer hardening scripts through Cloud.gov
+
+`customer-hardening.sql` is the ordered driver for every database-altering customer
+hardening script: `10`, `11`, `12`, `15`, `20`, `30`, and `60`. It intentionally
+excludes assessment-only and rollback scripts. Run it through the bound Cloud.gov
+SQLcl app with:
+
+```sh
+make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.sql
+```
+
+Start from `customer-hardening-input.sql.example`. The input is a reviewed,
+non-secret SQLcl file that requires the customer to make and record the
+organization-defined decisions for account-profile assignment, the approved password
+verification function, and session headroom. Do not add credentials: the runner
+reads them only from its bound service. The target uploads the input only to the
+selected app instance for the duration of the run, then removes it.
+
+When running `11_ora_stig_profile.sql`, `12_password_verify_function.sql`, or
+`15_concurrent_sessions.sql` outside this driver, pass their required positional
+argument respectively: `Y|N`, the approved verification-function identifier, or a
+positive integer session headroom.
+
 | Script | Kind | Purpose |
 |--------|------|---------|
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |

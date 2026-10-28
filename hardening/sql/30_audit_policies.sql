@@ -22,7 +22,7 @@
 SET SERVEROUTPUT ON
 SET DEFINE OFF
 SET FEEDBACK OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
 -- Create CG_AUDIT_POLICY if absent, then enable it for ALL USERS (success and
 -- failure). Idempotent: an existing policy is left in place (Oracle has no

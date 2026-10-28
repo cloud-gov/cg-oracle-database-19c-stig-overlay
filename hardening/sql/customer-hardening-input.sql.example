@@ -1,0 +1,22 @@
+-- customer-hardening-input.sql -- customer-owned, reviewed, non-secret input.
+--
+-- Copy this file to a customer-specific path, choose and review each value,
+-- then run:
+--   make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.sql
+--
+-- Do not place database credentials in this file. The target uses the bound
+-- service credentials available only through VCAP_SERVICES in cg-sqlcl-oracle-cf.
+
+-- Y assigns Oracle-supplied ORA_STIG_PROFILE to eligible non-Oracle accounts.
+-- Set N for a detect-only run; review candidates before choosing Y.
+DEFINE assign_users = Y
+
+-- Oracle identifier for the approved password verification function applied to
+-- DEFAULT. ORA12C_STIG_VERIFY_FUNCTION is Oracle-supplied; use a reviewed,
+-- existing site function only when the organization requires a custom policy.
+DEFINE verify_function = ORA12C_STIG_VERIFY_FUNCTION
+
+-- Positive whole-number reserve subtracted from the instance SESSIONS ceiling
+-- to set DEFAULT.SESSIONS_PER_USER. This is organization-defined: account for
+-- the connection-pool workload and retain enough capacity for RDS operations.
+DEFINE session_headroom = 64

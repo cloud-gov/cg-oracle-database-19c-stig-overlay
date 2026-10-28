@@ -33,23 +33,30 @@ These staged copies are git-ignored (see `.gitignore`) so the single sources sta
 authoritative. Only `manifest.yml`, `entrypoint.sh`, `build-truststore.sh`,
 `.profile.d/`, and this README are committed.
 
-## One-time: vendor the SQLcl distribution
+## Verified SQLcl distribution
 
-The OTN EULA governs **use**; you download SQLcl from Oracle and vendor it here (the
-same discipline as the Docker path's pinned digest, applied to a zip).
+`make push-sqlcl-cf` downloads SQLcl 26.3.0 directly from Oracle and verifies
+Oracle's published MD5 and SHA1 checksums before extracting it. A failed download,
+checksum, archive, or version check stops before `cf push` and does not replace an
+existing verified distribution.
 
 ```bash
-# Download SQLcl (e.g. 26.2.1.0) from Oracle, verify its published SHA256, then:
-unzip sqlcl-*.zip -d runner/sqlcl-cf/vendor/     # yields runner/sqlcl-cf/vendor/sqlcl/bin/sql
+# Download, verify, and extract without deploying:
+make vendor-sqlcl-cf
+
+# Offline development only (the normal path downloads directly from Oracle):
+make vendor-sqlcl-cf SQLCL_CF_ARCHIVE_PATH="$PWD/sqlcl-26.3.0.260.1620.zip"
 ```
 
-`vendor/sqlcl/` is git-ignored (large, license-restricted). Record the version +
-verified checksum in `vendor/README.md`.
+`vendor/sqlcl/` is git-ignored because the distribution is large and Oracle-licensed.
+The pinned source and checksums are recorded in `vendor/README.md` and the Makefile.
 
 ## Deploy + run (Cloud.gov)
 
 ```bash
-# Stage shared files + push via the Java buildpack (see Makefile target):
+# Loads .env, authenticates with CF_DEPLOYER_USERNAME/CF_DEPLOYER_PASSWORD,
+# stages shared files, downloads and verifies SQLcl, then pushes via the buildpack.
+# Set both CF_ORG and CF_SPACE to target explicitly, or pre-target both with cf.
 make push-sqlcl-cf
 
 cf bind-service cg-sqlcl-oracle-cf <oracle-db>

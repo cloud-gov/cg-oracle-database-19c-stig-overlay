@@ -46,6 +46,12 @@ make push-cloudgov   # Push an idle Docker image app to Cloud.gov for cf ssh val
 make report-cloudgov # Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/
 ```
 
+Customer-style database hardening uses the SQLcl buildpack app (`make
+push-sqlcl-cf`). We chose a direct, checksum-verified Oracle SQLcl download because
+the SQLcl license permits this use, it will demonstrate that the hardening works as
+expected once those tests are included in CI, and it mirrors how customers will
+apply the hardening so they can rely on the same guidance.
+
 ### Run postures
 
 The runner supports two postures, gated by [`docs/RESPONSIBILITY.md`](docs/RESPONSIBILITY.md):

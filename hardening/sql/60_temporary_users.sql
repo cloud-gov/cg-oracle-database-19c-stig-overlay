@@ -24,8 +24,9 @@
 --     job's own action against accounts already assigned to TEMPORARY_USERS.
 --   * The job locks (does not drop) accounts on TEMPORARY_USERS whose CREATED
 --     timestamp is older than 72 hours — reversible by an administrator.
---   * Uses ALTER SYSTEM SET RESOURCE_LIMIT and CREATE PROFILE / DBMS_SCHEDULER,
---     which the RDS master user pattern is permitted to run (non-SYS).
+--   * Uses CREATE PROFILE and DBMS_SCHEDULER, which the RDS master-user pattern
+--     permits (non-SYS). It does not require ALTER SYSTEM RESOURCE_LIMIT: this
+--     job locks accounts by age, not through a profile resource limit.
 --   * Assigning a temporary account to the profile is a per-account customer step
 --     (CREATE USER ... PROFILE TEMPORARY_USERS) and is intentionally NOT automated
 --     here.
@@ -33,9 +34,6 @@ SET SERVEROUTPUT ON
 SET DEFINE OFF
 SET FEEDBACK OFF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
-
--- Profiles only limit resources when RESOURCE_LIMIT is enabled. Idempotent.
-ALTER SYSTEM SET RESOURCE_LIMIT = TRUE;
 
 DECLARE
   v_failures  PLS_INTEGER := 0;

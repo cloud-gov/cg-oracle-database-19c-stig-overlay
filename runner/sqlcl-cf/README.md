@@ -54,8 +54,10 @@ The pinned source and checksums are recorded in `vendor/README.md` and the Makef
 ## Deploy + run (Cloud.gov)
 
 ```bash
-# Loads .env, authenticates with CF_DEPLOYER_USERNAME/CF_DEPLOYER_PASSWORD,
-# stages shared files, downloads and verifies SQLcl, then pushes via the buildpack.
+# Log in to Cloud Foundry beforehand (in CI, use the CI-managed CF session).
+# The target does not accept or pass CF credentials; it fails if the session is
+# not authenticated. It loads CF_API from .env (or the environment), stages
+# shared files, downloads and verifies SQLcl, then pushes via the buildpack.
 # Set both CF_ORG and CF_SPACE to target explicitly, or pre-target both with cf.
 make push-sqlcl-cf
 

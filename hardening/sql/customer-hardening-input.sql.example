@@ -14,7 +14,9 @@
 -- reviewed operational input; do not accept it from an untrusted source.
 
 -- Y assigns Oracle-supplied ORA_STIG_PROFILE to eligible non-Oracle accounts.
--- Set N for a detect-only run; review candidates before choosing Y.
+-- Set N to report profile-assignment candidates without assigning them; review
+-- candidates before choosing Y. The combined run still alters the database via
+-- scripts 10, 12, 15, 20, 30, and 60; N is not a dry-run mode.
 DEFINE assign_users = Y
 
 -- Oracle identifier for the approved password verification function applied to

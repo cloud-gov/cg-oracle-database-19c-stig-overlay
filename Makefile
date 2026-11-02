@@ -204,12 +204,11 @@ stage-sqlcl-cf: ## Copy the single-source files into runner/sqlcl-cf/ (no drift)
 .PHONY: push-sqlcl-cf
 push-sqlcl-cf: vendor-sqlcl-cf stage-sqlcl-cf ## Download verified SQLcl and deploy it via the Java buildpack
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
-	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+	@set -eu; set -a; [ ! -f .env ] || . ./.env; set +a; \
 	  : "$${CF_API:?ERROR: CF_API is not set. Add it to .env or export it.}"; \
-	  : "$${CF_DEPLOYER_USERNAME:?ERROR: CF_DEPLOYER_USERNAME is not set. Add it to .env or export it.}"; \
-	  : "$${CF_DEPLOYER_PASSWORD:?ERROR: CF_DEPLOYER_PASSWORD is not set. Add it to .env or export it.}"; \
 	  cf api "$$CF_API"; \
-	  cf auth "$$CF_DEPLOYER_USERNAME" "$$CF_DEPLOYER_PASSWORD"; \
+	  cf oauth-token >/dev/null 2>&1 \
+	    || { echo "ERROR: Cloud Foundry is not authenticated; log in to CF_API before running push-sqlcl-cf." >&2; exit 1; }; \
 	  if [ -n "$${CF_ORG:-}" ] || [ -n "$${CF_SPACE:-}" ]; then \
 	    [ -n "$${CF_ORG:-}" ] && [ -n "$${CF_SPACE:-}" ] \
 	      || { echo "ERROR: set both CF_ORG and CF_SPACE, or neither." >&2; exit 1; }; \

@@ -6,6 +6,12 @@
 --
 -- Do not place database credentials in this file. The target uses the bound
 -- service credentials available only through VCAP_SERVICES in cg-sqlcl-oracle-cf.
+--
+-- TRUST BOUNDARY: this input is not validated or sanitized before SQLcl processes
+-- it. The operator who controls this input also controls the Cloud Foundry account
+-- and bound-service access used to execute it, and therefore already has full
+-- authority to run SQL against the target instance. Treat this file as privileged,
+-- reviewed operational input; do not accept it from an untrusted source.
 
 -- Y assigns Oracle-supplied ORA_STIG_PROFILE to eligible non-Oracle accounts.
 -- Set N for a detect-only run; review candidates before choosing Y.

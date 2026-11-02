@@ -56,6 +56,13 @@ verification function, and session headroom. Do not add credentials: the runner
 reads them only from its bound service. The target uploads the input only to the
 selected app instance for the duration of the run, then removes it.
 
+The input is trusted, privileged operational input and is not validated or
+sanitized before SQLcl processes it. The operator who controls it also controls the
+Cloud Foundry account and bound-service access that execute it, so has full authority
+to run SQL against the target instance. Do not accept this file from an untrusted
+source; review it under the same change-control process as other database-altering
+operations.
+
 When running `11_ora_stig_profile.sql`, `12_password_verify_function.sql`, or
 `15_concurrent_sessions.sql` outside this driver, pass their required positional
 argument respectively: `Y|N`, the approved verification-function identifier, or a

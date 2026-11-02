@@ -48,9 +48,11 @@ make report-cloudgov # Run validation --json on Cloud.gov (cf ssh) and copy the 
 
 Customer-style database hardening uses the SQLcl buildpack app (`make
 push-sqlcl-cf`). We chose a direct, checksum-verified Oracle SQLcl download because
-the SQLcl license permits this use, it will demonstrate that the hardening works as
-expected once those tests are included in CI, and it mirrors how customers will
-apply the hardening so they can rely on the same guidance.
+it mirrors the customer deployment path for internal testing. GSA Tech Law confirmed
+by email on November 2, 2026 that this internal testing use conforms to the Oracle
+OTN license. That confirmation does not establish rights to redistribute SQLcl or
+cover other uses. These tests will demonstrate that the hardening works as expected
+once included in CI.
 
 After deploying and binding `cg-sqlcl-oracle-cf` to the target Oracle service, apply
 the database-altering customer hardening scripts with a reviewed, non-secret input

@@ -11,9 +11,13 @@ public-registry-derived, non-`ubuntu-hardened` image and so must first be re-bas
 `ubuntu-hardened` and onboarded to the mandatory container-scanning/hardening pipeline
 (ECR/Grype/ClamAV/`usg`), which also collides with the Oracle OTN redistribution
 restriction. The buildpack app avoids all of that: it pulls from no public registry
-and — as a `cflinuxfs` buildpack app — is outside that pipeline's scope. It is also the
-form a **customer** (who owns final DB hardening) can self-service `cf push` into their
-own space.
+and — as a `cflinuxfs` buildpack app — is outside that pipeline's scope. It also
+models the deployment path for a **customer** (who owns final DB hardening); customers
+must assess their own license rights before using SQLcl.
+
+GSA Tech Law confirmed by email on November 2, 2026 that our internal SQLcl testing
+use conforms to the OTN license. That confirmation does not authorize redistribution
+or establish rights for customer or other uses.
 
 > The Docker image in [`../sqlcl/`](../sqlcl/) is retained for **local 23ai dev testing
 > only** (`make sqlcl-repl` / `make sqlcl-run`) — built locally, never pushed. It runs

@@ -153,6 +153,7 @@ SQLCL_CF_ARCHIVE := sqlcl-$(SQLCL_CF_VERSION).zip
 SQLCL_CF_URL := https://download.oracle.com/otn_software/java/sqldeveloper/$(SQLCL_CF_ARCHIVE)
 SQLCL_CF_MD5 := 52fb8905e90a99caf23ac022b609e3f8
 SQLCL_CF_SHA1 := c858adea26aca18496a8b638b953285839fecbce
+SQLCL_CF_SHA256 := eb0dca2becc30e9aa1c700ae71e5df6efde8a33d098d7d23405b6558bbb81a81
 # Override only for offline verification, e.g. SQLCL_CF_ARCHIVE_PATH=$(CURDIR)/$(SQLCL_CF_ARCHIVE).
 SQLCL_CF_ARCHIVE_PATH ?=
 
@@ -161,6 +162,7 @@ vendor-sqlcl-cf: ## Download, verify, and extract the pinned SQLcl distribution
 	@command -v unzip >/dev/null 2>&1 || { echo "ERROR: unzip not found on PATH." >&2; exit 1; }
 	@command -v md5sum >/dev/null 2>&1 || { echo "ERROR: md5sum not found on PATH." >&2; exit 1; }
 	@command -v sha1sum >/dev/null 2>&1 || { echo "ERROR: sha1sum not found on PATH." >&2; exit 1; }
+	@command -v sha256sum >/dev/null 2>&1 || { echo "ERROR: sha256sum not found on PATH." >&2; exit 1; }
 	@set -eu; \
 	  tmp="$$(mktemp -d)"; \
 	  trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
@@ -178,6 +180,8 @@ vendor-sqlcl-cf: ## Download, verify, and extract the pinned SQLcl distribution
 	    || { echo "ERROR: SQLcl archive MD5 verification failed." >&2; exit 1; }; \
 	  printf '%s  %s\n' '$(SQLCL_CF_SHA1)' "$$archive" | sha1sum --check --status - \
 	    || { echo "ERROR: SQLcl archive SHA1 verification failed." >&2; exit 1; }; \
+	  printf '%s  %s\n' '$(SQLCL_CF_SHA256)' "$$archive" | sha256sum --check --status - \
+	    || { echo "ERROR: SQLcl archive SHA256 verification failed." >&2; exit 1; }; \
 	  unzip -q "$$archive" -d "$$tmp/extracted"; \
 	  [ -x "$$tmp/extracted/sqlcl/bin/sql" ] \
 	    || { echo "ERROR: verified SQLcl archive lacks executable sqlcl/bin/sql." >&2; exit 1; }; \

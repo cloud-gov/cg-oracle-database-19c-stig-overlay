@@ -10,7 +10,7 @@
 SET SERVEROUTPUT ON
 SET DEFINE OFF
 SET FEEDBACK OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
 -- Lock a curated set of Oracle SAMPLE/demo accounts when they exist and are OPEN.
 -- Idempotent: an already-locked (non-OPEN) account is skipped. A failure counter

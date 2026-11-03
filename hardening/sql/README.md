@@ -73,7 +73,7 @@ positive integer session headroom.
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout limits on the **DEFAULT** profile (incl. SV-270549/550/551) |
-| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Does not create/modify/verify the profile. |
+| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Preserves accounts on `TEMPORARY_USERS` so script `60`'s 72-hour lock job continues to cover them. Does not create/modify/verify the profile. |
 | `12_password_verify_function.sql` | harden | bind the Oracle-supplied **`ORA12C_STIG_VERIFY_FUNCTION`** to the **DEFAULT** profile for DOD password complexity (SV-270561), detect-first (`apply_fix=N` to report only). Preferred path is `11` (`ORA_STIG_PROFILE` already binds a compliant verify function); `12` covers accounts that stay on DEFAULT. |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
@@ -95,7 +95,8 @@ positive integer session headroom.
 > `FAILED_LOGIN_ATTEMPTS 3`, `INACTIVE_ACCOUNT_TIME 35`). Per the STIG the supplied
 > profile can be used as-is, so `11` does **not** create, modify, or verify it — it
 > only **assigns** it, **detect-first**, to org-defined non-Oracle accounts
-> (`DBA_USERS.ORACLE_MAINTAINED='N'`, excluding the operator/platform list). The
+> (`DBA_USERS.ORACLE_MAINTAINED='N'`, excluding the operator/platform list and
+> accounts on `TEMPORARY_USERS`, whose lifecycle profile must remain intact). The
 > baseline checks assert these limits on **every user-assigned profile**, so run
 > `11` if any account is on a profile other than a hardened DEFAULT. Run with
 > `DEFINE assign_users = N` to report candidate accounts without changing their

@@ -33,6 +33,7 @@
 -- reassigns accounts that are:
 --   * not Oracle-supplied (DBA_USERS.ORACLE_MAINTAINED = 'N'), and
 --   * not on the operator/platform exclusion list below, and
+--   * not on TEMPORARY_USERS (preserve script 60's 72-hour lifecycle), and
 --   * not already on ORA_STIG_PROFILE.
 -- It reports what it will do first, then acts. To assess WITHOUT changing
 -- assignments, run with:  DEFINE assign_users = N
@@ -87,6 +88,7 @@ BEGIN
       FROM DBA_USERS du
      WHERE du.ORACLE_MAINTAINED = 'N'
        AND du.PROFILE <> 'ORA_STIG_PROFILE'
+       AND du.PROFILE <> 'TEMPORARY_USERS'
        AND INSTR(c_exclusions, ','||du.USERNAME||',') = 0
      ORDER BY du.USERNAME
   ) LOOP

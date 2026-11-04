@@ -365,8 +365,14 @@ test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; R
 	rm -rf "$$tmp"; \
 	exit $$status
 
+.PHONY: test-rdsadmin
+test-rdsadmin: deps ## Test the RDSADMIN-only profile exceptions (fake SQL, no DB)
+	docker run --rm -v "$(CURDIR)":/share:ro -w /share \
+	  --entrypoint /opt/cinc-auditor/embedded/bin/ruby $(AUDITOR_IMAGE) \
+	  controls/rdsadmin_exceptions_test.rb
+
 .PHONY: tests
-tests: check test-go test-bats test-vcap ## Run all no-DB checks: profile validity + oraquery + shell unit tests
+tests: check test-go test-bats test-vcap test-rdsadmin ## Run all no-DB checks: profile validity + oraquery + shell unit tests
 
 .PHONY: verify
 verify: tests build ## One-command verify: profile loads + unit tests pass + runner image builds (no DB)

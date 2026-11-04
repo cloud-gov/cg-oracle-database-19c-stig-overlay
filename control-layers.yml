@@ -463,6 +463,17 @@ controls:
       (two-axis rule). Overlay inherits as-is (overlay_status: inherited).
 
   # --- CUSTOMER responsibility: org-defined SQL/tooling hardening (SV-270495 pattern) ---
+  - id_pattern: "SV-270495"
+    set_by: sql_hardening
+    verified_by: sql
+    rationale: >-
+      Customer-defined SESSIONS_PER_USER is assessed in SQL under --all and
+      skipped in platform-only posture. On AWS RDS the overlay accepts only
+      RDSADMIN's UNLIMITED or DEFAULT as an explicitly named deviation; every
+      other profile must have a positive numeric limit. The 2026-10-28 report
+      loses profile names; live DBA_PROFILES inventory and immutability evidence
+      are still required before calling the residual finding RDSADMIN-only.
+      See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270520"
     set_by: sql_hardening
     verified_by: compensating_control
@@ -501,7 +512,10 @@ controls:
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied,
       immutable ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
       the profile already carries PASSWORD_LOCK_TIME UNLIMITED). skip_control
-      under --skip-customer-controls; runs under --all.
+      under --skip-customer-controls; runs under --all. On AWS RDS the overlay
+      accepts only RDSADMIN PASSWORD_LOCK_TIME=1 as a named deviation; every
+      other assigned profile must still satisfy UNLIMITED. See
+      docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270550"
     set_by: sql_hardening
     verified_by: sql
@@ -517,7 +531,10 @@ controls:
       hardening/sql/10_profiles.sql (DEFAULT profile) and/or
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
       ORA_STIG_PROFILE, which already sets FAILED_LOGIN_ATTEMPTS 3). skip_control
-      under --skip-customer-controls; runs under --all.
+      under --skip-customer-controls; runs under --all. On AWS RDS the overlay
+      accepts only RDSADMIN FAILED_LOGIN_ATTEMPTS=10 as a named deviation;
+      customer profiles still must meet the org-defined bound. See
+      docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270561"
     set_by: sql_hardening
     verified_by: sql
@@ -582,7 +599,10 @@ controls:
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied
       ORA_STIG_PROFILE, which already sets INACTIVE_ACCOUNT_TIME 35 — the STIG's
       "ALTER USER ... PROFILE ORA_STIG_PROFILE" remediation). skip_control under
-      --skip-customer-controls; runs under --all.
+      --skip-customer-controls; runs under --all. On AWS RDS the overlay accepts
+      only RDSADMIN INACTIVE_ACCOUNT_TIME=UNLIMITED as a named deviation;
+      customer profiles still must meet the org-defined bound. See
+      docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270547"
     set_by: sql_hardening
     verified_by: manual_review
@@ -614,7 +634,11 @@ controls:
       responsibility on the SV-270495 pattern. Remediated via
       hardening/sql/10_profiles.sql. skip_control under
       --skip-customer-controls; runs under --all. See controls/overlay.rb
-      `SV-270563`.
+      `SV-270563`. On AWS RDS the overlay accepts only an assigned RDSADMIN
+      effective lifetime of 65 or UNLIMITED as a named deviation, not as
+      technical compliance. The 2026-10-28 report does not identify profiles
+      for those values; a live profile inventory is still required. See
+      docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---
   - id_pattern: "SV-270535"

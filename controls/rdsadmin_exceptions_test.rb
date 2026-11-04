@@ -1,0 +1,175 @@
+# Run with: ruby controls/rdsadmin_exceptions_test.rb (Ruby stdlib only).
+# Exercises the scoped overlay DSL with a fake SQL result, without a database.
+require 'minitest/autorun'
+
+class RdsadminExceptionsTest < Minitest::Test
+  class Result
+    def initialize(rows)
+      @rows = rows
+    end
+
+    def column(_name)
+      @rows
+    end
+  end
+
+  class Session
+    def initialize(rows)
+      @rows = rows
+    end
+
+    def query(sql)
+      resource = if sql.include?("'SESSIONS_PER_USER'")
+                   'SESSIONS_PER_USER'
+                 elsif sql.include?("'PASSWORD_LOCK_TIME'")
+                   'PASSWORD_LOCK_TIME'
+                 elsif sql.include?("'FAILED_LOGIN_ATTEMPTS'")
+                   'FAILED_LOGIN_ATTEMPTS'
+                 elsif sql.include?("'INACTIVE_ACCOUNT_TIME'")
+                   'INACTIVE_ACCOUNT_TIME'
+                 else
+                   'PASSWORD_LIFE_TIME'
+                 end
+      Result.new(@rows.fetch(resource, []))
+    end
+  end
+
+  class Context
+    attr_reader :failures, :descriptions, :tags
+
+    def initialize(rows)
+      @rows = rows
+      @failures = []
+      @descriptions = []
+      @tags = []
+    end
+
+    def input(name)
+      { 'skip_customer_responsibility_controls' => false,
+        'failed_logon_attempts' => 3, 'account_inactivity_age' => 35 }[name]
+    end
+
+    def include_controls(_name, &block)
+      instance_eval(&block)
+    end
+
+    def control(id, &block)
+      @id = id
+      instance_eval(&block)
+    end
+
+    def impact(*_args) ; end
+    def title(*_args) ; end
+    def desc(*_args) ; end
+    def tag(value) ; @tags << value ; end
+
+    def oracledb_session(**_options)
+      Session.new(@rows)
+    end
+
+    def describe(text, &block)
+      @descriptions << text
+      instance_eval(&block)
+    end
+
+    def subject
+      @subject = yield
+    end
+
+    def it(_text = nil, &block)
+      instance_eval(&block) if block
+    rescue Minitest::Assertion => e
+      @failures << "#{@id}: #{e.message}"
+    end
+
+    def should_not(matcher)
+      raise Minitest::Assertion, 'empty inventory' if matcher == :empty && @subject.empty?
+    end
+
+    def be_empty
+      :empty
+    end
+
+    def expect(actual)
+      Expectation.new(actual)
+    end
+
+    def eq(value)
+      [:eq, value]
+    end
+
+    def match(pattern)
+      [:match, pattern]
+    end
+
+    class Expectation
+      def initialize(actual)
+        @actual = actual
+      end
+
+      def to(matcher)
+        kind, value = matcher
+        good = kind == :eq ? @actual == value : !!(@actual =~ value)
+        raise Minitest::Assertion, "#{@actual.inspect} did not satisfy #{matcher.inspect}" unless good
+      end
+
+      def not_to(matcher)
+        raise Minitest::Assertion, 'empty value' if matcher == :empty && @actual.empty?
+      end
+    end
+  end
+
+  # Only evaluate the five new controls; other overlay controls require live SQL.
+  SOURCE = File.read(File.join(__dir__, 'overlay.rb')).split('  # --- PLATFORM disposition:').first + "\nend\n"
+
+  def evaluate(rows)
+    context = Context.new(rows)
+    context.instance_eval(SOURCE, 'controls/overlay.rb')
+    context
+  end
+
+  def compliant_rows
+    { 'SESSIONS_PER_USER' => %w[RDSADMIN|UNLIMITED DEFAULT|550],
+      'PASSWORD_LOCK_TIME' => %w[RDSADMIN|1 DEFAULT|UNLIMITED],
+      'FAILED_LOGIN_ATTEMPTS' => %w[RDSADMIN|10 DEFAULT|3],
+      'INACTIVE_ACCOUNT_TIME' => %w[RDSADMIN|UNLIMITED DEFAULT|35],
+      'PASSWORD_LIFE_TIME' => %w[RDSADMIN|65 DEFAULT|42] }
+  end
+
+  def test_only_named_aws_rds_exceptions_pass
+    result = evaluate(compliant_rows)
+    assert_empty result.failures
+    assert result.descriptions.any? { |text| text.include?('RDSADMIN') && text.include?('65') }
+    assert result.tags.any? { |tag| tag[:rds_exception].to_s.include?('accepted AWS RDS') }
+  end
+
+  def test_customer_deviations_fail
+    rows = compliant_rows
+    rows['SESSIONS_PER_USER'] << 'SITE|UNLIMITED'
+    rows['PASSWORD_LOCK_TIME'] << 'SITE|1'
+    rows['FAILED_LOGIN_ATTEMPTS'] << 'SITE|10'
+    rows['INACTIVE_ACCOUNT_TIME'] << 'SITE|UNLIMITED'
+    rows['PASSWORD_LIFE_TIME'] << 'SITE|65'
+    assert_equal 5, evaluate(rows).failures.length
+  end
+
+  def test_missing_values_and_unexpected_rdsadmin_values_fail
+    rows = compliant_rows
+    rows['PASSWORD_LOCK_TIME'] = ['RDSADMIN|2']
+    rows['INACTIVE_ACCOUNT_TIME'] = ['DEFAULT|']
+    rows['PASSWORD_LIFE_TIME'] = ['RDSADMIN|MISSING']
+    assert_equal 3, evaluate(rows).failures.length
+  end
+
+  def test_missing_profile_limit_fails
+    rows = compliant_rows
+    rows['SESSIONS_PER_USER'] = ['SITE|MISSING']
+    rows['FAILED_LOGIN_ATTEMPTS'] = ['SITE|MISSING']
+    assert_equal 2, evaluate(rows).failures.length
+  end
+
+  def test_empty_inventories_fail
+    rows = compliant_rows.transform_values { [] }
+    assert_equal 5, evaluate(rows).failures.length
+  end
+end

@@ -34,6 +34,153 @@ include_controls 'oracle-database-19c-stig-baseline' do
     skip_control 'SV-270587'  # PASSWORD_VERIFY_FUNCTION (IA-5(1)(b), compromised-password rejection) — SV-270561 sibling; same org-defined function; 12_password_verify_function.sql / ORA_STIG_PROFILE
   end
 
+  # AWS RDS exception: only the named RDSADMIN profile may carry the specific
+  # residual values below. These are accepted deviations, not STIG-compliant
+  # settings. Every other profile remains subject to the inherited predicate.
+  # Query profile AND value together; the inherited 495/563 checks lose the
+  # profile name, making it impossible to distinguish AWS from customer findings.
+  # A missing profile/limit or an unrecognized value is a finding, never a pass.
+  rds_profile_limits = lambda do |sql, resource, in_use|
+    source = if in_use
+               'FROM (SELECT DISTINCT profile FROM dba_users) u ' \
+                 'LEFT JOIN dba_profiles p ON p.profile = u.profile ' \
+                 "AND p.resource_name = '#{resource}'"
+             else
+               'FROM (SELECT DISTINCT profile FROM dba_profiles) u ' \
+                 'LEFT JOIN dba_profiles p ON p.profile = u.profile ' \
+                 "AND p.resource_name = '#{resource}'"
+             end
+    sql.query("SELECT u.profile || '|' || NVL(p.limit, 'MISSING') AS profile_limit #{source} " \
+              'ORDER BY 1;').column('profile_limit').map do |row|
+      row.to_s.strip.split('|', 2).map { |part| part.to_s.strip.upcase }
+    end
+  end
+
+  rds_profile_sql = lambda do
+    oracledb_session(user: input('user'), password: input('password'),
+                     host: input('host'), port: input('port'),
+                     service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+  end
+
+  # SESSIONS_PER_USER is site-defined for customer profiles. RDSADMIN's
+  # UNLIMITED/DEFAULT is accepted only if the profile is actually identified by
+  # DBA_PROFILES; this does not grant any exception to ORA_STIG_PROFILE or DEFAULT.
+  control 'SV-270495' do
+    impact 0.5
+    title 'Oracle Database must limit the number of concurrent sessions for each system account to an organization-defined number of sessions.'
+    desc 'AWS RDS accepted exception: only RDSADMIN may retain SESSIONS_PER_USER ' \
+         'UNLIMITED or DEFAULT. This is not STIG-compliant configuration; ' \
+         'customer profiles must have a positive numeric site-defined limit. ' \
+         'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
+    tag responsibility: 'customer'
+    tag rds_exception: 'RDSADMIN only; accepted AWS RDS deviation, not technical compliance'
+    limits = rds_profile_limits.call(rds_profile_sql.call, 'SESSIONS_PER_USER', false)
+    describe 'SESSIONS_PER_USER profile inventory (AWS RDS exception assessment)' do
+      subject { limits }
+      it { should_not be_empty }
+    end
+    limits.each do |profile, value|
+      describe "Profile #{profile}: SESSIONS_PER_USER=#{value} (AWS RDS exception only for RDSADMIN)" do
+        it 'has a numeric limit or the accepted RDSADMIN deviation' do
+          expect(profile).not_to be_empty
+          expect(value).to match(/\A(?:[1-9][0-9]*|DEFAULT|UNLIMITED)\z/)
+          expect((profile == 'RDSADMIN' && %w[DEFAULT UNLIMITED].include?(value)) ||
+                 value.match?(/\A[1-9][0-9]*\z/)).to eq(true)
+        end
+      end
+    end
+  end
+
+  # These three observed RDSADMIN values are accepted on AWS RDS only. The
+  # individual descriptions and JSON results retain the original, unmet values.
+  {
+    'SV-270549' => ['PASSWORD_LOCK_TIME', '1', 'UNLIMITED',
+                    'Oracle Database must verify account lockouts persist until reset by an administrator.'],
+    'SV-270550' => ['FAILED_LOGIN_ATTEMPTS', '10', '3',
+                    'Oracle Database must set the maximum number of consecutive invalid logon attempts to three.'],
+    'SV-270551' => ['INACTIVE_ACCOUNT_TIME', 'UNLIMITED', '35',
+                    'Oracle Database must disable user accounts after 35 days of inactivity.']
+  }.each do |id, (resource, accepted, required, control_title)|
+    control id do
+      impact 0.5
+      title control_title
+      desc "AWS RDS accepted exception: RDSADMIN #{resource}=#{accepted} " \
+           "does not meet the STIG target (#{required}). Only this exact AWS " \
+           'profile and value are accepted; customer profiles remain assessed. ' \
+           'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
+      tag responsibility: 'customer'
+      tag rds_exception: "RDSADMIN #{resource}=#{accepted}; accepted AWS RDS deviation"
+      limits = rds_profile_limits.call(rds_profile_sql.call, resource, true)
+      describe "#{resource} assigned-profile inventory (AWS RDS exception assessment)" do
+        subject { limits }
+        it { should_not be_empty }
+      end
+      limits.each do |profile, value|
+        describe "Profile #{profile}: #{resource}=#{value} (accepted AWS RDS exception only for RDSADMIN #{accepted})" do
+          it 'meets the STIG target or is the exact accepted AWS RDS deviation' do
+            expect(profile).not_to be_empty
+            expect(value).not_to be_empty
+            compliant = case resource
+                        when 'PASSWORD_LOCK_TIME' then value == 'UNLIMITED'
+                        when 'FAILED_LOGIN_ATTEMPTS'
+                          value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= input('failed_logon_attempts').to_i
+                        when 'INACTIVE_ACCOUNT_TIME'
+                          value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= input('account_inactivity_age').to_i
+                        end
+            expect(compliant || (profile == 'RDSADMIN' && value == accepted)).to eq(true)
+          end
+        end
+      end
+    end
+  end
+
+  control 'SV-270563' do
+    impact 0.5
+    title 'Oracle Database must enforce password maximum lifetime restrictions.'
+    desc 'AWS RDS accepted exception: only the RDSADMIN profile may retain a ' \
+         'noncompliant effective PASSWORD_LIFE_TIME plus PASSWORD_GRACE_TIME. ' \
+         'An effective value above 60 or UNLIMITED is NOT STIG compliant; ' \
+         'customer-assigned profiles must still meet the 60-day bound. ' \
+         'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
+    tag responsibility: 'customer'
+    tag rds_exception: 'RDSADMIN only; accepted AWS RDS deviation, not technical compliance'
+    sql = rds_profile_sql.call
+    # Carry the profile name through the DISA effective-lifetime calculation.
+    # Assess every profile as the inherited check does, not only assigned ones.
+    # A left join keeps a profile with a missing limit visible as a failure.
+    effective = sql.query(%q{
+      SELECT u.profile || '|' ||
+        CASE WHEN p1.limit IS NULL OR p2.limit IS NULL OR p3.limit IS NULL OR p4.limit IS NULL
+          THEN 'MISSING'
+          WHEN DECODE(p1.limit, 'DEFAULT', p3.limit, p1.limit) = 'UNLIMITED'
+            OR DECODE(p2.limit, 'DEFAULT', p4.limit, p2.limit) = 'UNLIMITED'
+          THEN 'UNLIMITED'
+          ELSE TO_CHAR(TO_NUMBER(DECODE(p1.limit, 'DEFAULT', p3.limit, p1.limit)) +
+                       TO_NUMBER(DECODE(p2.limit, 'DEFAULT', p4.limit, p2.limit)))
+        END AS profile_lifetime
+      FROM (SELECT DISTINCT profile FROM dba_profiles) u
+      LEFT JOIN dba_profiles p1 ON p1.profile = u.profile AND p1.resource_name = 'PASSWORD_LIFE_TIME'
+      LEFT JOIN dba_profiles p2 ON p2.profile = u.profile AND p2.resource_name = 'PASSWORD_GRACE_TIME'
+      LEFT JOIN dba_profiles p3 ON p3.profile = 'DEFAULT' AND p3.resource_name = 'PASSWORD_LIFE_TIME'
+      LEFT JOIN dba_profiles p4 ON p4.profile = 'DEFAULT' AND p4.resource_name = 'PASSWORD_GRACE_TIME'
+      ORDER BY 1;
+    }).column('profile_lifetime').map { |row| row.to_s.strip.split('|', 2).map { |part| part.to_s.strip.upcase } }
+    describe 'Effective password lifetime all-profile inventory (AWS RDS exception assessment)' do
+      subject { effective }
+      it { should_not be_empty }
+    end
+    effective.each do |profile, value|
+      describe "Profile #{profile}: effective password lifetime=#{value} (accepted AWS RDS exception only for RDSADMIN)" do
+        it 'is at most 60 days or is the accepted AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(value).not_to be_empty
+          compliant = value.match?(/\A[0-9]+\z/) && value.to_i <= 60
+          expect(compliant || (profile == 'RDSADMIN' && %w[65 UNLIMITED].include?(value))).to eq(true)
+        end
+      end
+    end
+  end
+
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
   # SV-270496 (DoS mitigation, SC-5/AC-10). The baseline check inspects
   # $ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT. On

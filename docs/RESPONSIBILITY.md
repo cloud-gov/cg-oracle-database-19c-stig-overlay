@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-08-20"
+last_updated: "2026-11-03"
 ---
 
 # Control responsibility: platform vs. customer
@@ -313,6 +313,44 @@ canonical example:
 
 Therefore SV-270495 is a **customer responsibility**: skipped on a platform-only
 run, assessed under `--all` once the customer has applied a limit.
+
+### Accepted AWS RDS RDSADMIN exceptions (five controls)
+
+On an `--all` run the overlay keeps the SQL assertions for every profile and
+allows **only the named RDSADMIN profile** to retain the exact AWS RDS values
+below. A passing control means *all other assessed profiles passed and this
+named AWS RDS exception was accepted*, **not** that RDSADMIN meets the STIG.
+The result description and `rds_exception` tag expose the deviation. Empty
+inventory, missing limits, and unexpected values fail. The platform-only
+customer skip gate remains unchanged.
+
+| Control | RDSADMIN exception accepted by overlay | Customer profiles |
+| --- | --- | --- |
+| SV-270495 | `SESSIONS_PER_USER` = `UNLIMITED` or `DEFAULT` | Positive numeric limit required; `DEFAULT`/`UNLIMITED` still fail. |
+| SV-270549 | `PASSWORD_LOCK_TIME` = `1` | Must equal `UNLIMITED`. |
+| SV-270550 | `FAILED_LOGIN_ATTEMPTS` = `10` | Must be numeric and within `failed_logon_attempts` (default 3). |
+| SV-270551 | `INACTIVE_ACCOUNT_TIME` = `UNLIMITED` | Must be numeric and within `account_inactivity_age` (default 35). |
+| SV-270563 | Effective lifetime = `65` or `UNLIMITED` | All other profiles (including unused ones) must be numeric and no more than 60 days. |
+
+**Evidence boundary:** The 2026-10-28 live report in
+`docs/HANDOFF-2026-10-28.md` identifies RDSADMIN for 549/550/551, but the
+inherited 495 and 563 assertions omit profile names. The override preserves
+the profile alongside its value and **will not turn those findings into PASS**
+unless the remaining noncompliance actually belongs to RDSADMIN. A read-only
+`DBA_PROFILES`/`DBA_USERS` inventory, evidence that RDSADMIN's limits cannot
+be changed, and a live `--all` report are still required for assessor review.
+Acceptance here is an overlay disposition, not formal ISSO acceptance or
+accepted compliance evidence.
+
+**Two separate controls remain findings:** SV-270561 and SV-270587 still fail
+on RDSADMIN's `NULL` password verification function. Issue
+[#77](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/77)
+tracks their per-profile AWS RDS disposition; do not skip these entire controls
+or treat an unapproved function as compliant. After human review, override each
+with an explicit RDSADMIN-only accepted exception while checking nonempty,
+resolved effective functions on all customer profiles, including the approved
+function allowlist for SV-270587. Record the observed RDSADMIN value and AWS
+`ORA-20900` rejection in each result and tag, then rerun `--all` against RDS.
 
 ## Current customer-responsibility controls
 

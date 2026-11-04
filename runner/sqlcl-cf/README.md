@@ -46,6 +46,10 @@ unzip sqlcl-*.zip -d runner/sqlcl-cf/vendor/     # yields runner/sqlcl-cf/vendor
 `vendor/sqlcl/` is git-ignored (large, license-restricted). Record the version +
 verified checksum in `vendor/README.md`.
 
+The explicit route-less worker command keeps the container available for `cf
+ssh`; it does not connect to the database. SQLcl runs only on demand through
+`cf ssh` and `entrypoint.sh`.
+
 ## Deploy + run (Cloud.gov)
 
 ```bash
@@ -72,7 +76,7 @@ identical to `runner/sqlcl/README.md` — that logic lives in the shared
 
 | Path | Purpose |
 | --- | --- |
-| `manifest.yml` | `cf push` config: Java buildpack (pinned) + pinned JRE 17, idle worker, no route. |
+| `manifest.yml` | `cf push` config: platform Java buildpack + JRE 17, sleeping worker, no route. |
 | `entrypoint.sh` | cf-ssh entrypoint: resolve+export JAVA_HOME (buildpack JRE), locate vendored SQLcl, ensure truststore, delegate to shared `sqlcl-connect.sh`. |
 | `build-truststore.sh` | Shared truststore builder (PEM→PKCS12 via buildpack `keytool`); called by both `.profile.d` and `entrypoint.sh`. |
 | `.profile.d/10-build-truststore.sh` | Best-effort truststore build at container start; delegates to `build-truststore.sh`. |

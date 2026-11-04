@@ -75,7 +75,7 @@ case "$TLS_MODE" in
         ;;
 esac
 
-echo "sqlcl-connect: target ${DB_HOST}:${DB_PORT}/${DB_SERVICE} as ${DB_USER} (TLS mode: ${TLS_MODE})" >&2
+echo "sqlcl-connect: connection resolved (TLS mode: ${TLS_MODE})" >&2
 
 # We NEVER put the password on argv (it would show in `ps`). We issue the CONNECT
 # from a transient SQL file (mode 0600, in a 0700 temp dir removed on exit); the

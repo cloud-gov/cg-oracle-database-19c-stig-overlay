@@ -21,15 +21,19 @@ APP_ROOT="$(cd "$(dirname "$0")" && pwd)"
 # `cf ssh ... -c` exec session (observed: JAVA_HOME empty, `java` not on PATH → SQLcl
 # fell back to a system Java 8 and refused to run). Resolve it ourselves from the
 # buildpack's installed JRE so SQLcl (and keytool) reliably get Java 17+. Honor a
-# preset JAVA_HOME first; else find the buildpack `java` under the app dir.
+# preset JAVA_HOME first; else find the buildpack `java` under the app dir or
+# droplet dependency directory. `cf ssh` does not preserve the start command's
+# JAVA_HOME/DEPS_DIR exports, but the Java buildpack JRE is installed at
+# /home/vcap/deps/0/jre on cflinuxfs.
 if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/java" ]; then
     _java_bin="$(find "${APP_ROOT}/.java-buildpack" "${HOME}/.java-buildpack" "${HOME}/.java" \
-                     -type f -name java 2>/dev/null | head -n1 || true)"
+                      "${DEPS_DIR:-/home/vcap/deps}" "${HOME}/deps" \
+                      -type f -name java 2>/dev/null | head -n1 || true)"
     if [ -n "$_java_bin" ] && [ -x "$_java_bin" ]; then
         JAVA_HOME="$(cd "$(dirname "$_java_bin")/.." && pwd)"
         export JAVA_HOME
     else
-        echo "entrypoint: could not locate a buildpack JRE (searched ${APP_ROOT}/.java-buildpack, ${HOME}/.java-buildpack, ${HOME}/.java)" >&2
+        echo "entrypoint: could not locate a buildpack JRE" >&2
         echo "entrypoint: SQLcl requires Java 11+; ensure the Java buildpack staged a JRE" >&2
         exit 1
     fi

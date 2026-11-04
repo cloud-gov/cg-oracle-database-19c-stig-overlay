@@ -67,6 +67,8 @@ make sqlcl-repl
 # Run a hardening/assessment script (baked at /opt/hardening):
 make sqlcl-run SQL=00_connectivity_check.sql
 make sqlcl-run SQL=10_profiles.sql
+# Supply SQLcl positional parameters to scripts that require them:
+make sqlcl-run SQL=15_concurrent_sessions.sql SQLCL_ARGS=64
 
 make db-down                                 # stop the DB
 ```

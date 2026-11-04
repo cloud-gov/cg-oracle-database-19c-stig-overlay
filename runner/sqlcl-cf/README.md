@@ -62,10 +62,13 @@ ssh`; it does not connect to the database. SQLcl runs only on demand through
 ## Deploy + run (Cloud.gov)
 
 ```bash
-# Log in to Cloud Foundry beforehand (in CI, use the CI-managed CF session).
-# The target does not accept or pass CF credentials; it fails if the session is
-# not authenticated. It loads CF_API from .env (or the environment), stages
-# shared files, downloads and verifies SQLcl, then pushes via the buildpack.
+# Use an existing Cloud Foundry session, or set CF_API plus CI deployer credentials
+# in the environment (CF_DEPLOYER_USERNAME and CF_DEPLOYER_PASSWORD). The target
+# preserves an existing session; only when no session exists does it select CF_API
+# and authenticate with the deployer credentials. It stages shared files, downloads
+# and verifies SQLcl, then pushes via the buildpack. Never commit those credentials.
+# It reads .env by default for an operator workflow; CI should inject its secret-store
+# variables and set CF_ENV_FILE=/nonexistent (or another approved env-file path).
 # Set both CF_ORG and CF_SPACE to target explicitly, or pre-target both with cf.
 make push-sqlcl-cf
 

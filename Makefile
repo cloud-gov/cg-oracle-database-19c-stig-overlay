@@ -130,7 +130,10 @@ sqlcl-repl: build-sqlcl ## Interactive SQLcl REPL against the running local 23ai
 # Run one hardening/assessment SQL script against the running local 23ai DB.
 # The scripts are baked into the image at /opt/hardening; pick one with SQL=<name>.
 #   make sqlcl-run SQL=00_connectivity_check.sql
+# Scripts with SQLcl positional parameters accept them through SQLCL_ARGS, e.g.
+#   make sqlcl-run SQL=15_concurrent_sessions.sql SQLCL_ARGS=64
 SQL ?= 00_connectivity_check.sql
+SQLCL_ARGS ?=
 .PHONY: sqlcl-run
 sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the running local 23ai DB
 	@docker compose -f $(COMPOSE_FILE) ps --status running --services 2>/dev/null | grep -qx oracle \
@@ -139,7 +142,7 @@ sqlcl-run: build-sqlcl ## Run a hardening/sql script (SQL=<file>) against the ru
 	  --network $(COMPOSE_NETWORK) \
 	  $(LOCAL_DB_ENV) \
 	  -e ORAQUERY_TLS=disable \
-	  $(SQLCL_IMAGE) -f /opt/hardening/$(SQL)
+	$(SQLCL_IMAGE) -f /opt/hardening/$(SQL) $(SQLCL_ARGS)
 
 # --- SQLcl via the Java buildpack (Cloud.gov — the ONLY supported in-boundary path) --
 # For Cloud.gov we cf push the pure-Java SQLcl through the Java buildpack:
@@ -156,6 +159,9 @@ SQLCL_CF_SHA1 := c858adea26aca18496a8b638b953285839fecbce
 SQLCL_CF_SHA256 := eb0dca2becc30e9aa1c700ae71e5df6efde8a33d098d7d23405b6558bbb81a81
 # Override only for offline verification, e.g. SQLCL_CF_ARCHIVE_PATH=$(CURDIR)/$(SQLCL_CF_ARCHIVE).
 SQLCL_CF_ARCHIVE_PATH ?=
+# Optional environment file for operator credentials/configuration. CI can set this
+# to a non-existent path and inject variables through its secret store instead.
+CF_ENV_FILE ?= .env
 
 .PHONY: vendor-sqlcl-cf
 vendor-sqlcl-cf: ## Download, verify, and extract the pinned SQLcl distribution
@@ -208,11 +214,16 @@ stage-sqlcl-cf: ## Copy the single-source files into runner/sqlcl-cf/ (no drift)
 .PHONY: push-sqlcl-cf
 push-sqlcl-cf: vendor-sqlcl-cf stage-sqlcl-cf ## Download verified SQLcl and deploy it via the Java buildpack
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
-	@set -eu; set -a; [ ! -f .env ] || . ./.env; set +a; \
-	  : "$${CF_API:?ERROR: CF_API is not set. Add it to .env or export it.}"; \
-	  cf api "$$CF_API"; \
-	  cf oauth-token >/dev/null 2>&1 \
-	    || { echo "ERROR: Cloud Foundry is not authenticated; log in to CF_API before running push-sqlcl-cf." >&2; exit 1; }; \
+	@set -eu; set -a; [ -z "$(CF_ENV_FILE)" ] || [ ! -f "$(CF_ENV_FILE)" ] || . "$(CF_ENV_FILE)"; set +a; \
+	  if cf oauth-token >/dev/null 2>&1; then \
+	    echo "push-sqlcl-cf: using the existing Cloud Foundry session."; \
+	  else \
+	    : "$${CF_API:?ERROR: CF_API is required when no authenticated Cloud Foundry session exists.}"; \
+	    : "$${CF_DEPLOYER_USERNAME:?ERROR: CF_DEPLOYER_USERNAME is required when no authenticated Cloud Foundry session exists.}"; \
+	    : "$${CF_DEPLOYER_PASSWORD:?ERROR: CF_DEPLOYER_PASSWORD is required when no authenticated Cloud Foundry session exists.}"; \
+	    cf api "$$CF_API"; \
+	    CF_USERNAME="$$CF_DEPLOYER_USERNAME" CF_PASSWORD="$$CF_DEPLOYER_PASSWORD" cf auth; \
+	  fi; \
 	  if [ -n "$${CF_ORG:-}" ] || [ -n "$${CF_SPACE:-}" ]; then \
 	    [ -n "$${CF_ORG:-}" ] && [ -n "$${CF_SPACE:-}" ] \
 	      || { echo "ERROR: set both CF_ORG and CF_SPACE, or neither." >&2; exit 1; }; \
@@ -310,10 +321,11 @@ test-go: deps ## Unit-test the oraquery client (go test, in a Go container — n
 	  go test -v ./...
 
 .PHONY: test-bats
-test-bats: deps ## Unit-test the db-connect.sh pure-shell helpers (bats — no Ruby/jq/DB)
-	@# Exercises the JSON escaper that guards the .meta.json sidecar and the report
-	@# label/host helpers. Bash + sed only, so it runs in the stock bats image.
-	docker run --rm -v "$(CURDIR)/runner/lib":/code -w /code $(BATS_IMAGE) db-connect.bats
+test-bats: deps ## Unit-test shell helpers, SQLcl wrappers, and SQL contracts (bats — no DB/CF)
+	@# These suites use mocked executables and static SQL contracts; they never access
+	@# a real Oracle instance or local .env credentials.
+	docker run --rm -v "$(CURDIR)":/repo -w /repo/runner/tests $(BATS_IMAGE) \
+	  db-connect.bats sqlcl-connect.bats customer-hardening.bats
 
 .PHONY: test-vcap
 test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; Ruby + jq fallback)
@@ -327,13 +339,13 @@ test-vcap: deps ## Regression-test the VCAP ORCL binding selection (issue #21; R
 	status=0; \
 	docker run --rm \
 	  -v "$$tmp/bats":/opt/bats:ro \
-	  -v "$(CURDIR)/runner/lib":/code:ro \
-	  -w /code --entrypoint bash $(AUDITOR_IMAGE) \
+	  -v "$(CURDIR)/runner":/runner:ro \
+	  -w /runner/tests --entrypoint bash $(AUDITOR_IMAGE) \
 	  -c 'export PATH="/opt/cinc-auditor/embedded/bin:$$PATH"; /opt/bats/bin/bats vcap-select.bats' \
 	  || status=$$?; \
 	if [ "$$status" -eq 0 ]; then \
 	  if command -v jq >/dev/null 2>&1; then \
-	    PATH="$$tmp/bats/bin:$$PATH" VCAP_SELECT_FORCE_JQ=1 bats runner/lib/vcap-select.bats || status=$$?; \
+	    PATH="$$tmp/bats/bin:$$PATH" VCAP_SELECT_FORCE_JQ=1 bats runner/tests/vcap-select.bats || status=$$?; \
 	  else \
 	    echo "test-vcap: WARNING: jq not found on host; skipping forced jq fallback coverage" >&2; \
 	  fi; \

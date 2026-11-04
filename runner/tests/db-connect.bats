@@ -12,7 +12,7 @@ setup() {
   # Source ONLY the library. It is a sourced fragment (no shebang, no top-level
   # side effects), so pulling it into the test shell just defines the functions.
   # shellcheck disable=SC1091
-  source "${BATS_TEST_DIRNAME}/db-connect.sh"
+  source "${BATS_TEST_DIRNAME}/../lib/db-connect.sh"
 }
 
 # --- _dbc_json_escape ------------------------------------------------------

@@ -28,14 +28,16 @@ PEM_SHA256="bae59f78f2e2ba789e734cdcac78c13a0f0e99aa3f7bd49f1f37477c815b9b33"
 log() { printf 'build-truststore: %s\n' "$*" >&2; }
 
 # Resolve keytool from the buildpack JRE. Honor JAVA_HOME if it already points at a
-# valid JRE; else find the buildpack `keytool` under the app dir (java_buildpack
-# lays the JRE at <app>/.java-buildpack/**), then $HOME layouts, then PATH.
+# valid JRE; else find the buildpack `keytool` under the app dir, its droplet
+# dependency directory, then PATH. `cf ssh` does not preserve DEPS_DIR, so use
+# its cflinux default when it is unset.
 find_keytool() {
   if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/keytool" ]; then
     printf '%s' "${JAVA_HOME}/bin/keytool"; return 0
   fi
   local kt
   kt="$(find "${APP_ROOT}/.java-buildpack" "${HOME:-/home/vcap}/.java-buildpack" "${HOME:-/home/vcap}/.java" \
+             "${DEPS_DIR:-/home/vcap/deps}" "${HOME:-/home/vcap}/deps" \
              -type f -name keytool 2>/dev/null | head -n1 || true)"
   if [ -n "$kt" ] && [ -x "$kt" ]; then printf '%s' "$kt"; return 0; fi
   command -v keytool 2>/dev/null && return 0
@@ -44,7 +46,7 @@ find_keytool() {
 
 KEYTOOL="$(find_keytool || true)"
 [ -n "$KEYTOOL" ] && [ -x "$KEYTOOL" ] \
-  || { log "keytool not found (JAVA_HOME=${JAVA_HOME:-unset}; searched ${APP_ROOT}/.java-buildpack, \$HOME/.java-buildpack, PATH)"; exit 1; }
+  || { log "keytool not found (JAVA_HOME=${JAVA_HOME:-unset})"; exit 1; }
 
 [ -r "$PEM_IN" ] || { log "cannot read PEM bundle: ${PEM_IN}"; exit 1; }
 

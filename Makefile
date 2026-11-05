@@ -246,16 +246,28 @@ harden-customer-cloudgov: ## Apply all customer hardening scripts through cg-sql
 	@[ -f "$(HARDENING_INPUT)" ] || { echo "ERROR: HARDENING_INPUT is not a file: $(HARDENING_INPUT)" >&2; exit 1; }
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
 	@set -eu; \
-	  remote_input="/tmp/customer-hardening-input-$$(date +%s)-$$$$.sql"; \
+	  remote_root="/tmp/hardening"; \
+	  remote_dir=""; \
+	  cleanup() { \
+	    trap - EXIT; \
+	    if [ -n "$$remote_dir" ]; then \
+	      if cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "rm -rf '$$remote_dir'"; then \
+	        echo "harden-customer-cloudgov: removed temporary hardening directory $$remote_dir"; \
+	      else \
+	        echo "ERROR: could not remove temporary hardening directory $$remote_dir from $(SQLCL_CF_APP) instance $(CF_APP_INSTANCE)." >&2; \
+	        [ "$$status" -ne 0 ] || status=1; \
+	      fi; \
+	    fi; \
+	    exit "$$status"; \
+	  }; \
+	  trap 'status=$$?; cleanup' EXIT; \
+	  remote_dir="$$(cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "umask 077; mkdir -p '$$remote_root'; mktemp -d '$$remote_root/hardening.XXXX'")"; \
+	  remote_input="$$remote_dir/customer-hardening-input.sql"; \
 	  echo "harden-customer-cloudgov: uploading reviewed input to $(SQLCL_CF_APP) instance $(CF_APP_INSTANCE)"; \
-	  cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "umask 077; cat > '$$remote_input'" < "$(HARDENING_INPUT)"; \
-	  if cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "set -eu; driver=\$$(mktemp); trap 'rm -f \"$$remote_input\" \"\$$driver\"' EXIT HUP INT TERM; printf '@%s\\n@%s\\n' '$$remote_input' \"\$$HOME/app/hardening/customer-hardening.sql\" > \"\$$driver\"; \"\$$HOME/app/entrypoint.sh\" -f \"\$$driver\""; then \
+	  cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "cat > '$$remote_input'" < "$(HARDENING_INPUT)"; \
+	  if cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "set -eu; driver='$$remote_dir/driver.sql'; printf '@%s\\n@%s\\n' '$$remote_input' \"\$$HOME/app/hardening/customer-hardening.sql\" > \"\$$driver\"; bash \"\$$HOME/app/entrypoint.sh\" -f \"\$$driver\""; then \
 	    status=0; \
-	  else \
-	    status=$$?; \
-	  fi; \
-	  cf ssh "$(SQLCL_CF_APP)" -i "$(CF_APP_INSTANCE)" -c "rm -f '$$remote_input'" \
-	    || { echo "ERROR: could not remove temporary input $$remote_input from $(SQLCL_CF_APP) instance $(CF_APP_INSTANCE)." >&2; exit 1; }; \
+	  else status=$$?; fi; \
 	  exit $$status
 
 .PHONY: build-cloudgov

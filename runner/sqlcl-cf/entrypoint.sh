@@ -66,9 +66,9 @@ RDS_TRUSTSTORE="${RDS_TRUSTSTORE:-${APP_ROOT}/rds-truststore.p12}"
 RDS_TRUSTSTORE_PASS="${RDS_TRUSTSTORE_PASS:-changeit}"
 if [ ! -r "$RDS_TRUSTSTORE" ]; then
     echo "entrypoint: truststore ${RDS_TRUSTSTORE} missing — building it now" >&2
-    RDS_TRUSTSTORE="$("${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"
+    RDS_TRUSTSTORE="$(bash "${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"
 fi
 export RDS_TRUSTSTORE RDS_TRUSTSTORE_PASS
 
 # --- Delegate to the SHARED connect wrapper (single source of truth) -------
-exec "${APP_ROOT}/sqlcl-connect.sh" "$@"
+exec bash "${APP_ROOT}/sqlcl-connect.sh" "$@"

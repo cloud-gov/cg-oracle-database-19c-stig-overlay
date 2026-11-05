@@ -193,10 +193,9 @@ vendor-sqlcl-cf: ## Download, verify, and extract the pinned SQLcl distribution
 	    || { echo "ERROR: verified SQLcl archive lacks executable sqlcl/bin/sql." >&2; exit 1; }; \
 	  grep -qx 'RELEASE=$(SQLCL_CF_VERSION)' "$$tmp/extracted/sqlcl/bin/version.txt" \
 	    || { echo "ERROR: SQLcl archive version does not match $(SQLCL_CF_VERSION)." >&2; exit 1; }; \
-	  rm -rf "$(SQLCL_CF_DIR)/vendor/sqlcl.new"; \
-	  mv "$$tmp/extracted/sqlcl" "$(SQLCL_CF_DIR)/vendor/sqlcl.new"; \
+	  # Deployments run through the serialized DB acceptance-test workflow; do not add locking for unsupported concurrent pushes. \
 	  rm -rf "$(SQLCL_CF_DIR)/vendor/sqlcl"; \
-	  mv "$(SQLCL_CF_DIR)/vendor/sqlcl.new" "$(SQLCL_CF_DIR)/vendor/sqlcl"; \
+	  mv "$$tmp/extracted/sqlcl" "$(SQLCL_CF_DIR)/vendor/sqlcl"; \
 	  echo "vendor-sqlcl-cf: verified and installed SQLcl $(SQLCL_CF_VERSION)."
 
 .PHONY: stage-sqlcl-cf
@@ -214,7 +213,8 @@ stage-sqlcl-cf: ## Copy the single-source files into runner/sqlcl-cf/ (no drift)
 .PHONY: push-sqlcl-cf
 push-sqlcl-cf: vendor-sqlcl-cf stage-sqlcl-cf ## Download verified SQLcl and deploy it via the Java buildpack
 	@command -v cf >/dev/null 2>&1 || { echo "ERROR: cf not found on PATH." >&2; exit 1; }
-	@set -eu; set -a; [ -z "$(CF_ENV_FILE)" ] || [ ! -f "$(CF_ENV_FILE)" ] || . "$(CF_ENV_FILE)"; set +a; \
+	@# An invalid env-file path fails before CF authentication or push; avoid a mocked-CF regression harness for this loud configuration error.
+	@set -eu; set -a; [ -z "$(CF_ENV_FILE)" ] || [ ! -f "$(CF_ENV_FILE)" ] || . "$(abspath $(CF_ENV_FILE))"; set +a; \
 	  if cf oauth-token >/dev/null 2>&1; then \
 	    echo "push-sqlcl-cf: using the existing Cloud Foundry session."; \
 	  else \

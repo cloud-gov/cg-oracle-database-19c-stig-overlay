@@ -75,13 +75,13 @@ make push-sqlcl-cf
 cf bind-service cg-sqlcl-oracle-cf <oracle-db>
 cf restart cg-sqlcl-oracle-cf
 
-# The default `cf ssh` working directory is $HOME/app, so invoke with $HOME/app
-# paths (or `./entrypoint.sh` after `cd ~/app`).
+# The default `cf ssh` working directory is $HOME/app. Invoke through Bash so the
+# command does not depend on the file's executable bit.
 # Run a SELECT-only assessment script (verify-ca on TCPS 2484; VCAP resolves ORCL):
-cf ssh cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
+cf ssh cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
 
 # Interactive REPL (note -t for a TTY):
-cf ssh -t cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh'
+cf ssh -t cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh'
 ```
 
 TLS modes (`ORAQUERY_TLS`), credential handling, and script/exit behavior are

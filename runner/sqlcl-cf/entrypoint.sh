@@ -8,8 +8,8 @@
 #
 # Usage (over cf ssh) — the default cf ssh cwd is $HOME/app, so use $HOME/app paths
 # (or ./entrypoint.sh from that cwd). Same argument surface as the Docker path:
-#   cf ssh cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
-#   cf ssh -t cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh'     # interactive REPL
+#   cf ssh cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
+#   cf ssh -t cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh'     # interactive REPL
 set -euo pipefail
 
 # App root: on a buildpack app, pushed files land under $HOME (…/app). Resolve

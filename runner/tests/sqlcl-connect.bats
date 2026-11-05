@@ -25,7 +25,7 @@ teardown() {
   run env SQLCL_BIN="$work/bin/sql" SQLCL_DRIVER_CAPTURE="$work/driver" \
     DB_USER=user DB_PASSWORD=password DB_HOST=127.0.0.1 DB_PORT=1521 \
     DB_SERVICE=FREEPDB1 ORAQUERY_TLS=disable \
-    "$work/sqlcl-connect.sh" -f "$work/script.sql" 64
+    bash "$work/sqlcl-connect.sh" -f "$work/script.sql" 64
   [ "$status" -eq 0 ]
   grep -Fx "@$work/script.sql 64" "$work/driver"
 }
@@ -34,7 +34,7 @@ teardown() {
   run env SQLCL_BIN="$work/bin/sql" SQLCL_DRIVER_CAPTURE="$work/driver" \
     DB_USER=user DB_PASSWORD=password DB_HOST=127.0.0.1 DB_PORT=1521 \
     DB_SERVICE=FREEPDB1 ORAQUERY_TLS=disable \
-    "$work/sqlcl-connect.sh" -f "$work/missing.sql"
+    bash "$work/sqlcl-connect.sh" -f "$work/missing.sql"
   [ "$status" -eq 2 ]
   [[ "$output" == *"script not readable"* ]]
   [ ! -e "$work/driver" ]

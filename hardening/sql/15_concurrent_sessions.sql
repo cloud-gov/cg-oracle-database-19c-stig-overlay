@@ -46,13 +46,23 @@ WHENEVER SQLERROR EXIT FAILURE
 -- consume the entire pool — leaving free sessions for an RDS/operator account to
 -- log in and remediate. Org-defined; 64 is a conservative default (e.g. on an
 -- se2.medium with SESSIONS=614 this caps a user at 550, ~90% of the pool).
-DEFINE session_headroom = 64
+DEFINE session_headroom = &1
 
 DECLARE
-  v_headroom  PLS_INTEGER := &&session_headroom;
-  v_sessions  PLS_INTEGER;
-  v_limit     PLS_INTEGER;
+  v_headroom_text VARCHAR2(100) := '&&session_headroom';
+  v_headroom      NUMBER;
+  v_sessions      NUMBER;
+  v_limit         NUMBER;
 BEGIN
+  -- Validate the substitution as text before converting it: Oracle's PLS_INTEGER
+  -- conversion can round fractional input instead of rejecting it.
+  IF NOT REGEXP_LIKE(TRIM(v_headroom_text), '^[0-9]+$') THEN
+    RAISE_APPLICATION_ERROR(-20016,
+      '15_concurrent_sessions: headroom must be a positive whole number; got "'||
+      v_headroom_text||'"');
+  END IF;
+  v_headroom := TO_NUMBER(TRIM(v_headroom_text));
+
   -- Read the instance session ceiling. On RDS this is set by the parameter group
   -- but remains SQL-readable (set_by <> verified_by; see control-layers.yml).
   -- No inner handler: any failure here propagates and, with WHENEVER SQLERROR EXIT
@@ -60,14 +70,14 @@ BEGIN
   SELECT TO_NUMBER(value) INTO v_sessions
     FROM V$PARAMETER WHERE name = 'sessions';
 
-  v_limit := v_sessions - v_headroom;
-
-  -- Guard against a misconfigured/tiny ceiling producing a non-positive limit.
-  IF v_limit < 1 THEN
+  -- Keep a positive diagnostic reserve: zero/negative values are rejected by the
+  -- lexical check above, and a reserve at or above the instance ceiling is invalid.
+  IF v_headroom < 1 OR v_headroom >= v_sessions THEN
     RAISE_APPLICATION_ERROR(-20016,
       '15_concurrent_sessions: SESSIONS ('||v_sessions||') - headroom ('||
-      v_headroom||') = '||v_limit||' is not a usable per-user limit; lower the headroom');
+      v_headroom||') must leave a positive per-user limit; choose headroom below SESSIONS');
   END IF;
+  v_limit := v_sessions - v_headroom;
 
   -- ALTER PROFILE is idempotent: re-running with the same limit is a no-op. Setting
   -- an explicit integer clears the non-compliant 'UNLIMITED'/'DEFAULT' state that

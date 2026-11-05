@@ -37,15 +37,16 @@ SET SERVEROUTPUT ON
 SET DEFINE ON
 SET FEEDBACK OFF
 SET VERIFY OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
--- Set to N to only report the DEFAULT profile's verify function (no ALTER PROFILE).
+-- This driver always applies the reviewed function. Run this script directly
+-- with a function-name argument after reviewing its current-state report.
 DEFINE apply_fix = Y
 
 -- Org-defined verify function. ORA12C_STIG_VERIFY_FUNCTION is the Oracle-supplied
 -- STIG-compliant function named by the DISA fix. A site with a customized function
 -- overrides this DEFINE with its own function name.
-DEFINE verify_function = ORA12C_STIG_VERIFY_FUNCTION
+DEFINE verify_function = &1
 
 DECLARE
   v_apply    VARCHAR2(1)   := UPPER('&&apply_fix');

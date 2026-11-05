@@ -8,8 +8,8 @@
 #
 # Usage (over cf ssh) — the default cf ssh cwd is $HOME/app, so use $HOME/app paths
 # (or ./entrypoint.sh from that cwd). Same argument surface as the Docker path:
-#   cf ssh cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
-#   cf ssh -t cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh'     # interactive REPL
+#   cf ssh cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
+#   cf ssh -t cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh'     # interactive REPL
 set -euo pipefail
 
 # App root: on a buildpack app, pushed files land under $HOME (…/app). Resolve
@@ -66,9 +66,9 @@ RDS_TRUSTSTORE="${RDS_TRUSTSTORE:-${APP_ROOT}/rds-truststore.p12}"
 RDS_TRUSTSTORE_PASS="${RDS_TRUSTSTORE_PASS:-changeit}"
 if [ ! -r "$RDS_TRUSTSTORE" ]; then
     echo "entrypoint: truststore ${RDS_TRUSTSTORE} missing — building it now" >&2
-    RDS_TRUSTSTORE="$("${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"
+    RDS_TRUSTSTORE="$(bash "${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"
 fi
 export RDS_TRUSTSTORE RDS_TRUSTSTORE_PASS
 
 # --- Delegate to the SHARED connect wrapper (single source of truth) -------
-exec "${APP_ROOT}/sqlcl-connect.sh" "$@"
+exec bash "${APP_ROOT}/sqlcl-connect.sh" "$@"

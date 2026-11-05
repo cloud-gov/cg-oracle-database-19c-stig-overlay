@@ -33,6 +33,7 @@
 -- reassigns accounts that are:
 --   * not Oracle-supplied (DBA_USERS.ORACLE_MAINTAINED = 'N'), and
 --   * not on the operator/platform exclusion list below, and
+--   * not on TEMPORARY_USERS (preserve script 60's 72-hour lifecycle), and
 --   * not already on ORA_STIG_PROFILE.
 -- It reports what it will do first, then acts. To assess WITHOUT changing
 -- assignments, run with:  DEFINE assign_users = N
@@ -40,10 +41,11 @@ SET SERVEROUTPUT ON
 SET DEFINE ON
 SET FEEDBACK OFF
 SET VERIFY OFF
-WHENEVER SQLERROR CONTINUE
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
--- Set to N to only report candidate accounts (no ALTER USER ... PROFILE).
-DEFINE assign_users = Y
+-- The positional argument is Y to assign or N to only report candidates. The
+-- customer-hardening driver supplies it from its reviewed input file.
+DEFINE assign_users = &1
 
 DECLARE
   v_assign      VARCHAR2(1) := UPPER('&&assign_users');
@@ -86,6 +88,7 @@ BEGIN
       FROM DBA_USERS du
      WHERE du.ORACLE_MAINTAINED = 'N'
        AND du.PROFILE <> 'ORA_STIG_PROFILE'
+       AND du.PROFILE <> 'TEMPORARY_USERS'
        AND INSTR(c_exclusions, ','||du.USERNAME||',') = 0
      ORDER BY du.USERNAME
   ) LOOP

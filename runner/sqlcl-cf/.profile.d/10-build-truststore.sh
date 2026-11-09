@@ -13,7 +13,7 @@ set -euo pipefail
 # Resolve the app dir from this script's own location so it is correct regardless.
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if p12="$("${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"; then
+if p12="$(bash "${APP_ROOT}/build-truststore.sh" "${APP_ROOT}")"; then
   export RDS_TRUSTSTORE="$p12"
   export RDS_TRUSTSTORE_PASS="changeit"
 fi

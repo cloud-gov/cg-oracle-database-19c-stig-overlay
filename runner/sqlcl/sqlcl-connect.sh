@@ -113,20 +113,19 @@ fi
 # SQLcl does NOT auto-exit at end-of-script, so we drive it through a tiny wrapper
 # script that: CONNECTs, sets WHENEVER SQLERROR/OSERROR EXIT (so a failing statement
 # returns a non-zero code instead of dropping to the prompt), runs the target with
-# `@`, and EXITs. This keeps batch/`cf ssh` runs deterministic. Non-`-f` args are
-# forwarded verbatim (advanced/native SQLcl usage — the caller then owns exit).
+# `@`, and EXITs. This keeps batch/`cf ssh` runs deterministic. SQLcl positional
+# arguments after -f/@ are appended to that @ command. Non-`-f` args are forwarded
+# verbatim (advanced/native SQLcl usage — the caller then owns exit).
 script_file=""
 if [ "$1" = "-f" ] || [ "$1" = "--file" ]; then
     shift
     [ "$#" -gt 0 ] || { echo "sqlcl-connect: -f/--file requires a path" >&2; exit 2; }
     script_file="$1"
     shift
-    [ "$#" -eq 0 ] || { echo "sqlcl-connect: -f/--file takes no further arguments (got: $*)" >&2; exit 2; }
 elif [ "${1#@}" != "$1" ]; then
     # First arg is a native @file token.
     script_file="${1#@}"
     shift
-    [ "$#" -eq 0 ] || { echo "sqlcl-connect: @<file> takes no further arguments (got: $*)" >&2; exit 2; }
 fi
 
 if [ -n "$script_file" ]; then
@@ -136,7 +135,11 @@ if [ -n "$script_file" ]; then
         printf '%s\n' "$CONNECT_CMD"
         printf 'WHENEVER SQLERROR EXIT SQL.SQLCODE\n'
         printf 'WHENEVER OSERROR EXIT FAILURE\n'
-        printf '@%s\n' "$script_file"
+        printf '@%s' "$script_file"
+        for sqlcl_arg in "$@"; do
+            printf ' %s' "$sqlcl_arg"
+        done
+        printf '\n'
         printf 'EXIT\n'
     } > "$driver"
     exec "$SQLCL_BIN" /nolog "@$driver"

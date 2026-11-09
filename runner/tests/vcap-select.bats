@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Regression tests for the VCAP_SERVICES binding contract in db-connect.sh
+# Regression tests for the VCAP_SERVICES binding contract in ../lib/db-connect.sh
 # (issue #21): the runner supports exactly ONE aws-rds binding, and it must be the
 # Oracle (ORCL) database. Zero bindings, more than one binding, or a single
 # non-ORCL binding each fail closed. More than one is REFUSED rather than guessed
@@ -18,7 +18,7 @@
 setup() {
   bats_require_minimum_version 1.5.0  # `run --separate-stderr` needs 1.5.0+
   # shellcheck disable=SC1091
-  source "${BATS_TEST_DIRNAME}/db-connect.sh"
+  source "${BATS_TEST_DIRNAME}/../lib/db-connect.sh"
   if [ "${VCAP_SELECT_FORCE_JQ:-}" = "1" ]; then
     command -v jq >/dev/null 2>&1 || skip "jq not available for forced jq fallback coverage"
     _dbc_ruby_bin() { return 1; }
@@ -60,7 +60,7 @@ _vcap() {
     fi
     _dbc_parse_vcap || exit $?
     printf "%s|%s|%s|%s\n" "$DB_USER" "$DB_HOST" "$DB_SERVICE" "$DB_INSTANCE_NAME"
-  ' bash "${BATS_TEST_DIRNAME}/db-connect.sh"
+  ' bash "${BATS_TEST_DIRNAME}/../lib/db-connect.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "u_only-orcl|h_only-orcl.example.com|ORCL|only-orcl" ]
 }

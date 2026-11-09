@@ -11,9 +11,13 @@ public-registry-derived, non-`ubuntu-hardened` image and so must first be re-bas
 `ubuntu-hardened` and onboarded to the mandatory container-scanning/hardening pipeline
 (ECR/Grype/ClamAV/`usg`), which also collides with the Oracle OTN redistribution
 restriction. The buildpack app avoids all of that: it pulls from no public registry
-and — as a `cflinuxfs` buildpack app — is outside that pipeline's scope. It is also the
-form a **customer** (who owns final DB hardening) can self-service `cf push` into their
-own space.
+and — as a `cflinuxfs` buildpack app — is outside that pipeline's scope. It also
+models the deployment path for a **customer** (who owns final DB hardening); customers
+must assess their own license rights before using SQLcl.
+
+GSA Tech Law confirmed by email on November 2, 2026 that our internal SQLcl testing
+use conforms to the OTN license. That confirmation does not authorize redistribution
+or establish rights for customer or other uses.
 
 > The Docker image in [`../sqlcl/`](../sqlcl/) is retained for **local 23ai dev testing
 > only** (`make sqlcl-repl` / `make sqlcl-run`) — built locally, never pushed. It runs
@@ -33,18 +37,23 @@ These staged copies are git-ignored (see `.gitignore`) so the single sources sta
 authoritative. Only `manifest.yml`, `entrypoint.sh`, `build-truststore.sh`,
 `.profile.d/`, and this README are committed.
 
-## One-time: vendor the SQLcl distribution
+## Verified SQLcl distribution
 
-The OTN EULA governs **use**; you download SQLcl from Oracle and vendor it here (the
-same discipline as the Docker path's pinned digest, applied to a zip).
+`make push-sqlcl-cf` downloads SQLcl 26.3.0 directly from Oracle and verifies
+Oracle's published MD5 and SHA1 checksums before extracting it. A failed download,
+checksum, archive, or version check stops before `cf push` and does not replace an
+existing verified distribution.
 
 ```bash
-# Download SQLcl (e.g. 26.2.1.0) from Oracle, verify its published SHA256, then:
-unzip sqlcl-*.zip -d runner/sqlcl-cf/vendor/     # yields runner/sqlcl-cf/vendor/sqlcl/bin/sql
+# Download, verify, and extract without deploying:
+make vendor-sqlcl-cf
+
+# Offline development only (the normal path downloads directly from Oracle):
+make vendor-sqlcl-cf SQLCL_CF_ARCHIVE_PATH="$PWD/sqlcl-26.3.0.260.1620.zip"
 ```
 
-`vendor/sqlcl/` is git-ignored (large, license-restricted). Record the version +
-verified checksum in `vendor/README.md`.
+`vendor/sqlcl/` is git-ignored because the distribution is large and Oracle-licensed.
+The pinned source and checksums are recorded in `vendor/README.md` and the Makefile.
 
 The explicit route-less worker command keeps the container available for `cf
 ssh`; it does not connect to the database. SQLcl runs only on demand through
@@ -53,19 +62,26 @@ ssh`; it does not connect to the database. SQLcl runs only on demand through
 ## Deploy + run (Cloud.gov)
 
 ```bash
-# Stage shared files + push via the Java buildpack (see Makefile target):
+# Use an existing Cloud Foundry session, or set CF_API plus CI deployer credentials
+# in the environment (CF_DEPLOYER_USERNAME and CF_DEPLOYER_PASSWORD). The target
+# preserves an existing session; only when no session exists does it select CF_API
+# and authenticate with the deployer credentials. It stages shared files, downloads
+# and verifies SQLcl, then pushes via the buildpack. Never commit those credentials.
+# It reads .env by default for an operator workflow; CI should inject its secret-store
+# variables and set CF_ENV_FILE=/nonexistent (or another approved env-file path).
+# Set both CF_ORG and CF_SPACE to target explicitly, or pre-target both with cf.
 make push-sqlcl-cf
 
 cf bind-service cg-sqlcl-oracle-cf <oracle-db>
 cf restart cg-sqlcl-oracle-cf
 
-# The default `cf ssh` working directory is $HOME/app, so invoke with $HOME/app
-# paths (or `./entrypoint.sh` after `cd ~/app`).
+# The default `cf ssh` working directory is $HOME/app. Invoke through Bash so the
+# command does not depend on the file's executable bit.
 # Run a SELECT-only assessment script (verify-ca on TCPS 2484; VCAP resolves ORCL):
-cf ssh cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
+cf ssh cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh -f $HOME/app/hardening/00_connectivity_check.sql'
 
 # Interactive REPL (note -t for a TTY):
-cf ssh -t cg-sqlcl-oracle-cf -c '$HOME/app/entrypoint.sh'
+cf ssh -t cg-sqlcl-oracle-cf -c 'bash $HOME/app/entrypoint.sh'
 ```
 
 TLS modes (`ORAQUERY_TLS`), credential handling, and script/exit behavior are

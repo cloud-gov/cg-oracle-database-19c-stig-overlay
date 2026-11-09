@@ -17,7 +17,7 @@ directives (`SET`, `PROMPT`, `WHENEVER`, `DEFINE`, substitution variables, a bar
 `/`, anonymous PL/SQL blocks). That makes it unsuitable for an interactive session
 and for the `hardening/sql/*.sql` scripts, which are written for a full interpreter.
 
-This image fills that gap **locally** using **Oracle SQLcl** (Java-based, free under
+This image fills that gap **locally** using **Oracle SQLcl** (Java-based, under
 the OTN license) — a full SQL\*Plus/SQLcl interpreter that **can** run those scripts
 and provides a REPL. It reuses the **same** connection discovery
 (`lib/db-connect.sh`: env + `VCAP_SERVICES`) and the **same** fail-closed TLS posture
@@ -44,6 +44,10 @@ official SQLcl image (`container-registry.oracle.com/database/sqlcl`) that adds 
 > in-boundary container-scanning/hardening pipeline (internal ADR-0007). The Makefile
 > has **no** push target for this image by design.
 
+> GSA Tech Law confirmed by email on November 2, 2026 that our internal SQLcl
+> testing use conforms to the OTN license. This does not establish permission to
+> redistribute the image or use SQLcl for other purposes.
+
 > **Base image is pinned by digest.** The dependency policy forbids floating tags,
 > so both the Dockerfile `BASE_IMAGE` ARG and the Makefile `SQLCL_BASE_IMAGE`
 > default to a pinned digest:
@@ -63,6 +67,8 @@ make sqlcl-repl
 # Run a hardening/assessment script (baked at /opt/hardening):
 make sqlcl-run SQL=00_connectivity_check.sql
 make sqlcl-run SQL=10_profiles.sql
+# Supply SQLcl positional parameters to scripts that require them:
+make sqlcl-run SQL=15_concurrent_sessions.sql SQLCL_ARGS=64
 
 make db-down                                 # stop the DB
 ```

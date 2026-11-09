@@ -38,12 +38,42 @@ here (see `../control-layers.yml`).
 
 ## Script groups
 
+### Apply all customer hardening scripts through Cloud.gov
+
+`customer-hardening.sql` is the ordered driver for every database-altering customer
+hardening script: `10`, `11`, `12`, `15`, `20`, `30`, and `60`. It intentionally
+excludes assessment-only and rollback scripts. Run it through the bound Cloud.gov
+SQLcl app with:
+
+```sh
+make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.sql
+```
+
+Start from `customer-hardening-input.sql.example`. The input is a reviewed,
+non-secret SQLcl file that requires the customer to make and record the
+organization-defined decisions for account-profile assignment, the approved password
+verification function, and session headroom. Do not add credentials: the runner
+reads them only from its bound service. The target uploads the input only to the
+selected app instance for the duration of the run, then removes it.
+
+The input is trusted, privileged operational input and is not validated or
+sanitized before SQLcl processes it. The operator who controls it also controls the
+Cloud Foundry account and bound-service access that execute it, so has full authority
+to run SQL against the target instance. Do not accept this file from an untrusted
+source; review it under the same change-control process as other database-altering
+operations.
+
+When running `11_ora_stig_profile.sql`, `12_password_verify_function.sql`, or
+`15_concurrent_sessions.sql` outside this driver, pass their required positional
+argument respectively: `Y|N`, the approved verification-function identifier, or a
+positive integer session headroom.
+
 | Script | Kind | Purpose |
 |--------|------|---------|
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout limits on the **DEFAULT** profile (incl. SV-270549/550/551) |
-| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Does not create/modify/verify the profile. |
+| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Preserves accounts on `TEMPORARY_USERS` so script `60`'s 72-hour lock job continues to cover them. Does not create/modify/verify the profile. |
 | `12_password_verify_function.sql` | harden | bind the Oracle-supplied **`ORA12C_STIG_VERIFY_FUNCTION`** to the **DEFAULT** profile for DOD password complexity (SV-270561), detect-first (`apply_fix=N` to report only). Preferred path is `11` (`ORA_STIG_PROFILE` already binds a compliant verify function); `12` covers accounts that stay on DEFAULT. |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
@@ -65,7 +95,8 @@ here (see `../control-layers.yml`).
 > `FAILED_LOGIN_ATTEMPTS 3`, `INACTIVE_ACCOUNT_TIME 35`). Per the STIG the supplied
 > profile can be used as-is, so `11` does **not** create, modify, or verify it — it
 > only **assigns** it, **detect-first**, to org-defined non-Oracle accounts
-> (`DBA_USERS.ORACLE_MAINTAINED='N'`, excluding the operator/platform list). The
+> (`DBA_USERS.ORACLE_MAINTAINED='N'`, excluding the operator/platform list and
+> accounts on `TEMPORARY_USERS`, whose lifecycle profile must remain intact). The
 > baseline checks assert these limits on **every user-assigned profile**, so run
 > `11` if any account is on a profile other than a hardened DEFAULT. Run with
 > `DEFINE assign_users = N` to report candidate accounts without changing their

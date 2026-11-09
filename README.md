@@ -45,6 +45,18 @@ make push-cloudgov   # Push an idle Docker image app to Cloud.gov for cf ssh val
 make report-cloudgov # Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/
 ```
 
+### Cloud.gov Docker image credentials
+
+Cloud.gov staging uses the ECR IAM user's AWS credentials to fetch the image.
+For this deployment, `DOCKER_USER` and `CF_DOCKER_PASSWORD` come from the
+Terraform module `module.cinc_auditor_iam.module.ecr_user`; retrieve them only
+through the approved secure state workflow. Protect Terraform state and keep
+`.env` local, ignored, and permission-restricted. Do not use
+`aws ecr get-login-password` as `CF_DOCKER_PASSWORD`: it returns a Docker token,
+not the AWS secret access key staging needs. For `InvalidSignatureException`,
+check the matching credentials, GovCloud account/region, and clock; share only
+the request ID and timestamp when escalating.
+
 Customer-style database hardening uses the SQLcl buildpack app (`make
 push-sqlcl-cf`). We chose a direct, checksum-verified Oracle SQLcl download because
 it mirrors the customer deployment path for internal testing. GSA Tech Law confirmed

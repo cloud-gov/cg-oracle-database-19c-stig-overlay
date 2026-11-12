@@ -28,4 +28,16 @@ setup() {
   grep -Fqx '@@11_ora_stig_profile.sql &&assign_users' "$driver"
   grep -Fqx '@@12_password_verify_function.sql &&verify_function' "$driver"
   grep -Fqx '@@15_concurrent_sessions.sql &&session_headroom' "$driver"
+  completion_line="$(grep -n '^@@16_profile_completion.sql$' "$driver" | cut -d: -f1)"
+  temporary_line="$(grep -n '^@@60_temporary_users.sql$' "$driver" | cut -d: -f1)"
+  [ "$completion_line" -gt "$temporary_line" ]
+}
+
+@test "profile completion validates cap and grace before any DDL" {
+  script="$repo_root/hardening/sql/16_profile_completion.sql"
+  grep -Fq "IF v_sessions IS NULL OR NOT REGEXP_LIKE(v_sessions, '^[1-9][0-9]*$') THEN" "$script"
+  grep -Fq "IF v_grace IS NULL OR v_grace <> '5' THEN" "$script"
+  guard_line="$(grep -n 'RAISE_APPLICATION_ERROR(-20018' "$script" | cut -d: -f1)"
+  alter_line="$(grep -n "EXECUTE IMMEDIATE 'ALTER PROFILE ORA_STIG_PROFILE" "$script" | cut -d: -f1)"
+  [ "$guard_line" -lt "$alter_line" ]
 }

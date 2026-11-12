@@ -470,9 +470,10 @@ controls:
       Customer-defined SESSIONS_PER_USER is assessed in SQL under --all and
       skipped in platform-only posture. On AWS RDS the overlay accepts only
       RDSADMIN's UNLIMITED or DEFAULT as an explicitly named deviation; every
-      other profile must have a positive numeric limit. The 2026-10-28 report
-      loses profile names; live DBA_PROFILES inventory and immutability evidence
-      are still required before calling the residual finding RDSADMIN-only.
+      other profile must have a positive numeric limit. Live inventory on
+      2026-11-12 identified DEFAULT-inheriting ORA_STIG_PROFILE and TEMPORARY_USERS;
+      customer ALTER PROFILE statements successfully set explicit caps on both.
+      Script 16 repeats this completion after scripts 15 and 60.
       See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270520"
     set_by: sql_hardening
@@ -510,7 +511,7 @@ controls:
       per-profile DBA_PROFILES query, should cmp 'UNLIMITED'). Remediated via
       hardening/sql/10_profiles.sql (DEFAULT profile) and/or
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied,
-      immutable ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
+      ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
       the profile already carries PASSWORD_LOCK_TIME UNLIMITED). skip_control
       under --skip-customer-controls; runs under --all. On AWS RDS the overlay
       accepts only RDSADMIN PASSWORD_LOCK_TIME=1 as a named deviation; every
@@ -560,10 +561,11 @@ controls:
       profile) and/or hardening/sql/11_ora_stig_profile.sql (assign the
       Oracle-supplied ORA_STIG_PROFILE, which already binds a compliant verify
       function). skip_control under --skip-customer-controls; runs under --all.
-      KNOWN RESIDUAL FINDING on RDS: the RDSADMIN profile can never pass — RDS
-      blocks ALTER PROFILE RDSADMIN (ORA-20900), so no compliant
-      PASSWORD_VERIFY_FUNCTION can be bound to it; DEFAULT is customer-remediable.
-      Tracked in issue #77 (per-profile carve-out for SV-270561/SV-270587).
+      Issue #77: the overlay accepts only RDSADMIN's literal NULL function as an
+      explicitly named AWS RDS deviation, citing the recorded ORA-20900 rejection.
+      Every other assigned profile requires a resolved non-null function; missing
+      rows, empty inventory, and unresolved DEFAULT values fail. Function source
+      review remains required; exception acceptance is not technical compliance.
   - id_pattern: "SV-270587"
     set_by: sql_hardening
     verified_by: sql
@@ -578,11 +580,11 @@ controls:
       (cloud-gov/oracle-database-19c-stig-baseline#16, MERGED into cloudgov at
       4534af38; pinned in inspec.lock) — baseline_status: fixed. skip_control under
       --skip-customer-controls; runs under --all.
-      KNOWN RESIDUAL FINDING on RDS: the RDSADMIN profile can never pass — RDS
-      blocks ALTER PROFILE RDSADMIN (ORA-20900), so no compliant
-      PASSWORD_VERIFY_FUNCTION can be bound to it; DEFAULT is customer-remediable.
-      Tracked in issue #77 (per-profile carve-out for SV-270561/SV-270587).
-      See controls/overlay.rb skip gate and the SV-270561 baseline .rb.
+      Issue #77: the overlay accepts only RDSADMIN's literal NULL function as an
+      explicitly named AWS RDS deviation, citing the recorded ORA-20900 rejection.
+      Other assigned profiles require resolved non-null functions on the approved
+      allowlist. Missing data and unapproved functions remain findings, including
+      unapproved non-null functions on RDSADMIN. See controls/overlay.rb.
   - id_pattern: "SV-270551"
     set_by: sql_hardening
     verified_by: sql
@@ -632,12 +634,13 @@ controls:
       (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
       fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
       responsibility on the SV-270495 pattern. Remediated via
-      hardening/sql/10_profiles.sql. skip_control under
+      hardening/sql/10_profiles.sql and 16_profile_completion.sql. skip_control under
       --skip-customer-controls; runs under --all. See controls/overlay.rb
-      `SV-270563`. On AWS RDS the overlay accepts only an assigned RDSADMIN
+      `SV-270563`. On AWS RDS the overlay accepts only the named RDSADMIN
       effective lifetime of 65 or UNLIMITED as a named deviation, not as
-      technical compliance. The 2026-10-28 report does not identify profiles
-      for those values; a live profile inventory is still required. See
+      technical compliance. Live inventory on 2026-11-12 identified 65 as
+      ORA_STIG_PROFILE's 60+5; an authorized ALTER PROFILE changed its lifetime
+      to 55, preserving five days of grace and meeting the 60-day bound. See
       docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
 
   # --- SQL parameter/account controls verified in SQL, inherited from platform ---

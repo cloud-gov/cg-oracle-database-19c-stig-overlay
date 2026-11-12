@@ -72,7 +72,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'UNLIMITED or DEFAULT. This is not STIG-compliant configuration; ' \
          'customer profiles must have a positive numeric site-defined limit. ' \
          'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     tag rds_exception: 'RDSADMIN only; accepted AWS RDS deviation, not technical compliance'
     limits = rds_profile_limits.call(rds_profile_sql.call, 'SESSIONS_PER_USER', false)
     describe 'SESSIONS_PER_USER profile inventory (AWS RDS exception assessment)' do
@@ -93,42 +93,69 @@ include_controls 'oracle-database-19c-stig-baseline' do
 
   # These three observed RDSADMIN values are accepted on AWS RDS only. The
   # individual descriptions and JSON results retain the original, unmet values.
-  {
-    'SV-270549' => ['PASSWORD_LOCK_TIME', '1', 'UNLIMITED',
-                    'Oracle Database must verify account lockouts persist until reset by an administrator.'],
-    'SV-270550' => ['FAILED_LOGIN_ATTEMPTS', '10', '3',
-                    'Oracle Database must set the maximum number of consecutive invalid logon attempts to three.'],
-    'SV-270551' => ['INACTIVE_ACCOUNT_TIME', 'UNLIMITED', '35',
-                    'Oracle Database must disable user accounts after 35 days of inactivity.']
-  }.each do |id, (resource, accepted, required, control_title)|
-    control id do
-      impact 0.5
-      title control_title
-      desc "AWS RDS accepted exception: RDSADMIN #{resource}=#{accepted} " \
-           "does not meet the STIG target (#{required}). Only this exact AWS " \
-           'profile and value are accepted; customer profiles remain assessed. ' \
-           'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
-      tag responsibility: 'customer'
-      tag rds_exception: "RDSADMIN #{resource}=#{accepted}; accepted AWS RDS deviation"
-      limits = rds_profile_limits.call(rds_profile_sql.call, resource, true)
-      describe "#{resource} assigned-profile inventory (AWS RDS exception assessment)" do
-        subject { limits }
-        it { should_not be_empty }
+  control 'SV-270549' do
+    impact 0.5
+    title 'Oracle Database must verify account lockouts persist until reset by an administrator.'
+    desc 'AWS RDS accepted exception: RDSADMIN PASSWORD_LOCK_TIME=1; other assigned profiles require UNLIMITED. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN PASSWORD_LOCK_TIME=1; accepted AWS RDS deviation, not technical compliance'
+    limits = rds_profile_limits.call(rds_profile_sql.call, 'PASSWORD_LOCK_TIME', true)
+    describe 'PASSWORD_LOCK_TIME assigned-profile inventory' do
+      subject { limits }
+      it { should_not be_empty }
+    end
+    limits.each do |profile, value|
+      describe "Profile #{profile}: PASSWORD_LOCK_TIME=#{value} (RDSADMIN-only exception: 1)" do
+        it 'meets the STIG target or the exact AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(value == 'UNLIMITED' || (profile == 'RDSADMIN' && value == '1')).to eq(true)
+        end
       end
-      limits.each do |profile, value|
-        describe "Profile #{profile}: #{resource}=#{value} (accepted AWS RDS exception only for RDSADMIN #{accepted})" do
-          it 'meets the STIG target or is the exact accepted AWS RDS deviation' do
-            expect(profile).not_to be_empty
-            expect(value).not_to be_empty
-            compliant = case resource
-                        when 'PASSWORD_LOCK_TIME' then value == 'UNLIMITED'
-                        when 'FAILED_LOGIN_ATTEMPTS'
-                          value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= input('failed_logon_attempts').to_i
-                        when 'INACTIVE_ACCOUNT_TIME'
-                          value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= input('account_inactivity_age').to_i
-                        end
-            expect(compliant || (profile == 'RDSADMIN' && value == accepted)).to eq(true)
-          end
+    end
+  end
+
+  control 'SV-270550' do
+    impact 0.5
+    title 'Oracle Database must set the maximum number of consecutive invalid logon attempts to three.'
+    desc 'AWS RDS accepted exception: RDSADMIN FAILED_LOGIN_ATTEMPTS=10; other assigned profiles must meet the configured bound. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN FAILED_LOGIN_ATTEMPTS=10; accepted AWS RDS deviation, not technical compliance'
+    limits = rds_profile_limits.call(rds_profile_sql.call, 'FAILED_LOGIN_ATTEMPTS', true)
+    bound = input('failed_logon_attempts').to_i
+    describe 'FAILED_LOGIN_ATTEMPTS assigned-profile inventory' do
+      subject { limits }
+      it { should_not be_empty }
+    end
+    limits.each do |profile, value|
+      describe "Profile #{profile}: FAILED_LOGIN_ATTEMPTS=#{value} (RDSADMIN-only exception: 10)" do
+        it 'meets the STIG target or the exact AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          compliant = value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= bound
+          expect(compliant || (profile == 'RDSADMIN' && value == '10')).to eq(true)
+        end
+      end
+    end
+  end
+
+  control 'SV-270551' do
+    impact 0.5
+    title 'Oracle Database must disable user accounts after 35 days of inactivity.'
+    desc 'AWS RDS accepted exception: RDSADMIN INACTIVE_ACCOUNT_TIME=UNLIMITED; other assigned profiles must meet the configured bound. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN INACTIVE_ACCOUNT_TIME=UNLIMITED; accepted AWS RDS deviation, not technical compliance'
+    limits = rds_profile_limits.call(rds_profile_sql.call, 'INACTIVE_ACCOUNT_TIME', true)
+    bound = input('account_inactivity_age').to_i
+    describe 'INACTIVE_ACCOUNT_TIME assigned-profile inventory' do
+      subject { limits }
+      it { should_not be_empty }
+    end
+    limits.each do |profile, value|
+      describe "Profile #{profile}: INACTIVE_ACCOUNT_TIME=#{value} (RDSADMIN-only exception: UNLIMITED)" do
+        it 'meets the STIG target or the exact AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(value).not_to be_empty
+          compliant = value.match?(/\A[1-9][0-9]*\z/) && value.to_i <= bound
+          expect(compliant || (profile == 'RDSADMIN' && value == 'UNLIMITED')).to eq(true)
         end
       end
     end
@@ -142,7 +169,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'An effective value above 60 or UNLIMITED is NOT STIG compliant; ' \
          'customer-assigned profiles must still meet the 60-day bound. ' \
          'See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     tag rds_exception: 'RDSADMIN only; accepted AWS RDS deviation, not technical compliance'
     sql = rds_profile_sql.call
     # Carry the profile name through the DISA effective-lifetime calculation.
@@ -181,6 +208,75 @@ include_controls 'oracle-database-19c-stig-baseline' do
     end
   end
 
+  # Issue #77: keep the observed AWS-managed NULL distinct from missing SQL data.
+  # Resolve inherited DEFAULT functions, retaining every assigned profile via LEFT
+  # JOINs. Only RDSADMIN's literal NULL is excepted; no customer profile is exempt.
+  profile_functions = lambda do |sql|
+    sql.query(%q{
+      SELECT u.profile || '|' ||
+        CASE WHEN p.limit IS NULL THEN 'MISSING'
+          WHEN p.limit = 'DEFAULT' THEN NVL(dp.limit, 'MISSING')
+          ELSE p.limit END AS profile_function
+      FROM (SELECT DISTINCT profile FROM dba_users) u
+      LEFT JOIN dba_profiles p ON p.profile = u.profile
+        AND p.resource_name = 'PASSWORD_VERIFY_FUNCTION'
+      LEFT JOIN dba_profiles dp ON dp.profile = 'DEFAULT'
+        AND dp.resource_name = 'PASSWORD_VERIFY_FUNCTION'
+      ORDER BY 1;
+    }).column('profile_function').map do |row|
+      row.to_s.strip.split('|', 2).map { |part| part.to_s.strip.upcase }
+    end
+  end
+
+  control 'SV-270561' do
+    impact 0.5
+    title 'Oracle Database must enforce the DOD standards for password complexity.'
+    desc 'AWS RDS accepted exception: RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL; recorded ALTER PROFILE rejection ORA-20900 (#77). Other assigned profiles require resolved non-null functions. Function source review remains required. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL only; ORA-20900; accepted AWS RDS deviation, not technical compliance'
+    functions = profile_functions.call(rds_profile_sql.call)
+    describe 'Assigned-profile password function inventory (AWS RDS exception assessment)' do
+      subject { functions }
+      it { should_not be_empty }
+    end
+    functions.each do |profile, function|
+      describe "Profile #{profile}: effective PASSWORD_VERIFY_FUNCTION=#{function} (RDSADMIN NULL exception; ORA-20900)" do
+        it 'has a resolved function or the exact accepted AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(function).not_to be_empty
+          exception = profile == 'RDSADMIN' && function == 'NULL'
+          present = !%w[NULL DEFAULT MISSING UNLIMITED].include?(function)
+          expect(exception || present).to eq(true)
+        end
+      end
+    end
+  end
+
+  control 'SV-270587' do
+    impact 0.5
+    title 'Oracle Database must reject commonly used, expected, or compromised passwords.'
+    desc 'AWS RDS accepted exception: RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL; recorded ALTER PROFILE rejection ORA-20900 (#77). Other assigned profiles require resolved non-null approved functions. Function source review remains required. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL only; ORA-20900; accepted AWS RDS deviation, not technical compliance'
+    functions = profile_functions.call(rds_profile_sql.call)
+    approved = Array(input('approved_password_verify_functions')).map { |name| name.to_s.strip.upcase }
+    describe 'Assigned-profile approved password function inventory (AWS RDS exception assessment)' do
+      subject { functions }
+      it { should_not be_empty }
+    end
+    functions.each do |profile, function|
+      describe "Profile #{profile}: effective PASSWORD_VERIFY_FUNCTION=#{function} (RDSADMIN NULL exception; ORA-20900)" do
+        it 'has an approved resolved function or the exact accepted AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(function).not_to be_empty
+          exception = profile == 'RDSADMIN' && function == 'NULL'
+          present = !%w[NULL DEFAULT MISSING UNLIMITED].include?(function)
+          expect(exception || (present && approved.include?(function))).to eq(true)
+        end
+      end
+    end
+  end
+
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
   # SV-270496 (DoS mitigation, SC-5/AC-10). The baseline check inspects
   # $ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT. On
@@ -209,7 +305,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'org-defined resource limits on the customer-responsibility hardening ' \
          'path (see SV-270495, docs/RESPONSIBILITY.md), not this control\'s ' \
          'listener.ora assertion.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270496 (DoS mitigation) is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the listener is AWS-managed on ' \
            'RDS; the listener.ora RATE_LIMIT check is neither tenant-applicable ' \
@@ -243,7 +339,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'signal. Access restrictions to the DBMS software are inherited from the ' \
          'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270512 (logical access restrictions on DBMS config/software) ' \
              'is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check reads OS filesystem ' \
@@ -283,7 +379,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'privilege restriction is inherited from the AWS platform ' \
          '(control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270515 (OS privileges over DBMS software libraries) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check enumerates OS ' \
@@ -324,7 +420,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Directory isolation of the DBMS software is inherited from the AWS ' \
          'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270517 (dedicated DBMS software/config directories, CM-5(6)) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check inspects the DBMS ' \
@@ -366,7 +462,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'producing a misleading result. Listener administration authentication is ' \
          'inherited from the AWS platform (control-layers.yml: set_by ' \
          'aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270531 (Oracle Listener administration authentication, CM-6 b) ' \
              'is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check enumerates host ' \
@@ -412,7 +508,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'devices. Control-file redundancy and separation are inherited from the ' \
          'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-275999 (three+ control files on separate devices, CM-6 b) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): control-file count, ' \
@@ -481,7 +577,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'satisfies the requirement as written. See ' \
          'docs/DEVIATIONS-AND-COMPENSATING-CONTROLS.md (D-5) and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'SV-276000 (three+ redo log groups, two+ members each) is an ' \
              'accepted deviation with a compensating control on managed AWS RDS' do
       skip 'Accepted deviation D-5 (PENDING ISSO ACCEPTANCE): redo log member ' \
@@ -518,7 +614,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'satisfied by documentation (the Cloud.gov SSP data-classification / ' \
          'AC-16 posture) or a compensating control, not by an automated ' \
          'assertion. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, associating "organization-defined ' \
              'types of security labels having organization-defined security label ' \
              'values with information in storage", is a manual/documentation ' \
@@ -552,7 +648,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'the ATO granted to Cloud.gov by the customer\'s agency; it is satisfied ' \
          'by the platform, not by tenant SQL. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'The implementation of this control, integration "with an ' \
              'organization-level authentication/access mechanism providing account ' \
              'management and automation for all users, groups, roles, and any other ' \
@@ -589,7 +685,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'tenant SQL assertion. If the customer creates additional users or roles, ' \
          'maintaining appropriate authorizations for them is the customer\'s ' \
          'responsibility. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'The implementation of this control, enforcing "approved ' \
              'authorizations for logical access to the system in accordance with ' \
              'applicable policy", is satisfied at provision: the broker provisions ' \
@@ -629,7 +725,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'additional users, maintaining individual attribution/nonrepudiation for ' \
          'them is the customer\'s responsibility. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'The implementation of this control, protecting against a shared-' \
              'account user "falsely denying having performed a particular action", ' \
              'is satisfied at provision: the broker issues a single customer user ' \
@@ -674,7 +770,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'determination is a documentation/policy fact (audit-management ' \
          'authorization), not a tenant SQL assertion. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, allowing "designated ' \
              'organizational personnel to select which auditable events are to be ' \
              'audited by the database", is a manual/documentation determination: ' \
@@ -740,7 +836,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'required_audit_policies and customer_audit_policies inputs are ' \
          'org-defined; an empty customer list skips the customer-posture ' \
          'assertion. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     tag cci: ['CCI-000172']
     tag nist: ['AU-12 c']
 
@@ -834,7 +930,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'component, documented and authorized here). Any component outside the ' \
          'allowlist is a finding for review. Detect-first: removal is not ' \
          'possible on RDS. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     tag cci: ['CCI-000381']
     tag nist: ['CM-7 a']
 
@@ -902,7 +998,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'defines additional detailed-audit requirements, deploying/verifying FGA ' \
          'to cover them becomes the customer\'s responsibility. See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, including "organization-defined ' \
              'additional, more detailed information in the audit records", is a ' \
              'manual/documentation determination: per the DISA check, if no ' \
@@ -957,7 +1053,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'assertion applies. The inherited baseline is not SQL-based ' \
          '(a manual-review stub skip). See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'Procedures for establishing DOD-compliant temporary passwords for ' \
              'new accounts are a manual/documentation determination: database ' \
              'credentials are issued through the Cloud.gov brokered-credentials ' \
@@ -1010,7 +1106,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'applies. The inherited baseline is not SQL-based (a manual-review ' \
          'stub skip). See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'Approved salted hashing of stored passwords is a ' \
              'manual/documentation determination: Oracle stores password ' \
              'verifiers as one-way salted hashes by design, and confirming no ' \
@@ -1055,7 +1151,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'access the tenant does not have on RDS. Audit-storage capacity is ' \
          'inherited from the AWS platform (control-layers.yml: set_by ' \
          'aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270506 (audit record storage capacity, AU-4) is Not Applicable ' \
              'on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): audit-store tablespace ' \
@@ -1097,7 +1193,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'and it is not SQL-verifiable by the tenant. Audit off-loading is ' \
          'inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by ' \
          'aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270507 (off-load audit data to a central log facility, AU-4(1)) ' \
              'is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): RDS for Oracle off-loads the ' \
@@ -1134,7 +1230,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'managed log path are inherited from the AWS/Cloud.gov platform, not ' \
          'tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270508 (75 percent audit-log capacity warning, AU-5(1)) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): audit-log storage capacity ' \
@@ -1164,7 +1260,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'the AWS/Cloud.gov monitoring posture. There is no tenant SQL assertion ' \
          'that can prove the external alert delivery path (control-layers.yml: ' \
          'set_by aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270509 (real-time audit-failure alert, AU-5(2)) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): real-time audit-failure alerting ' \
@@ -1198,7 +1294,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'AWS/Cloud.gov platform; any customer-created application audit tooling ' \
          'is outside the broker baseline (control-layers.yml: set_by aws_inherited ' \
          '/ verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270511 (protect audit tools, AU-9 a/b/c) is Not Applicable on ' \
              'managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): platform audit tooling is ' \
@@ -1229,7 +1325,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'condition in the database. Vendor-support lifecycle management is ' \
          'inherited from the AWS/Cloud.gov platform (control-layers.yml: set_by ' \
          'aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270513 (vendor-supported Oracle version, SA-22 a) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): RDS Oracle engine-version support, ' \
@@ -1261,7 +1357,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'platform components is inherited from AWS/Cloud.gov operational controls, ' \
          'not tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270514 (monitor DBMS software/configuration changes, CM-5(6)) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): DBMS software/configuration file ' \
@@ -1292,7 +1388,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'installation account is inherited from AWS/Cloud.gov platform controls, ' \
          'not tenant SQL (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270516 (restrict Oracle software installation account, CM-5(6)) ' \
              'is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the Oracle software installation ' \
@@ -1322,7 +1418,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'account is inherited from AWS/Cloud.gov platform controls, not tenant SQL ' \
          '(control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270537 (log Oracle software installation account use, CM-6 b) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the Oracle software installation ' \
@@ -1354,7 +1450,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'database files from software/application files is inherited from the AWS ' \
          'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270538 (separate data/log/audit directories, CM-6 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): database data/log/audit file ' \
@@ -1393,7 +1489,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'security groups and the Cloud.gov brokered private-networking posture, ' \
          'not a tenant SQL/OS setting (control-layers.yml: set_by aws_inherited / ' \
          'verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270539 (restrict network access, CM-6 b) is Not Applicable on ' \
              'managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): IP-address restriction is set at ' \
@@ -1433,7 +1529,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'diagnostic directory is inherited from the AWS platform ' \
          '(control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270541 (protect <DIAGNOSTIC_DEST>/diag, CM-6 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check inspects OS filesystem ' \
@@ -1472,7 +1568,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'misleading signal. Connection Manager configuration is inherited from the ' \
          'AWS platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270542 (disable Connection Manager remote admin, CM-6 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check reads cman.ora in ' \
@@ -1521,7 +1617,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Directory protection of the archive logs is inherited from the AWS ' \
          'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270534 (protect LOG_ARCHIVE_DEST* directories, CM-6 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the control\'s real requirement ' \
@@ -1564,7 +1660,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'sqlnet.ora layer as the SSL option group) and is inherited from the AWS ' \
          'platform (control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270543 (restrict clients to supported logon versions, CM-6 b) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check reads ' \
@@ -1613,7 +1709,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'not the DB server, producing a meaningless signal. DBA OS-privilege ' \
          'restriction is inherited from the AWS platform (control-layers.yml: ' \
          'set_by aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270544 (limit DBA OS-account host privileges, CM-6 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check enumerates host OS ' \
@@ -1661,7 +1757,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'not_applicable_rds). In-database developer-privilege appropriateness on ' \
          'customer-created accounts remains a customer responsibility, covered by ' \
          'the role/authorization controls.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270548 (protect DB from developers on shared prod/dev hosts, ' \
              'AC-5 c) is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check is a host/OS review ' \
@@ -1706,7 +1802,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'signal. External-procedure OS-account privilege restriction is inherited ' \
          'from the AWS platform (control-layers.yml: set_by aws_inherited / ' \
          'verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270555 (limit extproc OS-account privileges, CM-6 b / CM-7 a) is ' \
              'Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check reads ' \
@@ -1757,7 +1853,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'External-executable restriction is inherited from the AWS platform ' \
          '(control-layers.yml: set_by aws_inherited / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270557 (disable/restrict access to external executables, CM-7 a) ' \
              'is Not Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check inspects the extproc ' \
@@ -1800,7 +1896,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'there is no valid tenant signal. File-level access protection is ' \
          'inherited from the AWS platform (control-layers.yml: set_by ' \
          'aws_inherited / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270578 (limit access to Oracle Database files, SC-4) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check is OS filesystem ' \
@@ -1852,7 +1948,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
           'set_by aws_rds_option_group / verified_by not_applicable_rds). A true ' \
           'TLS-only posture also depended on the platform blocking 1521 ' \
           '(terraform-provision#2351, implemented).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270579 (encrypt information in transit, SC-8(1)/SC-8(2)) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check/fix target ' \
@@ -1899,7 +1995,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'customer/documentation responsibility. A documentation/policy ' \
          'determination, not a tenant SQL assertion. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, ensuring users are ' \
              '"authenticated with an individual authenticator prior to using a ' \
              'shared authenticator", is a manual/documentation determination: the ' \
@@ -1948,7 +2044,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'SQL assertion. If the customer creates additional users, issuing each a ' \
          'separate account is a customer responsibility. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, uniquely identifying and ' \
              'authenticating "organizational users (or processes acting on behalf ' \
              'of organizational users)", is satisfied by the FedRAMP-authorized ' \
@@ -1995,7 +2091,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'baseline is a documentation/manual control with no SQL body. Trust-anchor ' \
          'management is inherited from the AWS platform (control-layers.yml: ' \
          'set_by aws_rds_option_group / verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270589 (only approved trust anchors, SC-17 b) is Not Applicable ' \
              'on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check inspects the Oracle ' \
@@ -2040,7 +2136,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'not tenant SQL. FIPS authentication cryptography is inherited from the ' \
          'AWS platform (control-layers.yml: set_by aws_rds_option_group / ' \
          'verified_by not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270569 (FIPS 140 cryptography for authentication, IA-7) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the check/fix target ' \
@@ -2093,7 +2189,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'cryptographic modules are inherited from the AWS platform ' \
          '(control-layers.yml: set_by aws_rds_option_group / verified_by ' \
          'not_applicable_rds).'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270571 (FIPS 140 validated cryptographic modules, SC-13 b) is Not ' \
              'Applicable on managed AWS RDS' do
       skip 'Not Applicable (not_applicable_rds): the FIPS mode checks target ' \
@@ -2150,7 +2246,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'overrides to Not Applicable (impact 0.0). If a data owner/AO requires ' \
          'column/tablespace TDE beyond volume encryption, deploying and verifying ' \
          'that TDE is the customer\'s responsibility.'
-    tag responsibility: 'platform'
+    tag 'responsibility' => 'platform'
     describe 'SV-270574 (protect data at rest, SC-28) is Not Applicable on ' \
              'managed AWS RDS' do
       skip 'Not Applicable (platform): storage encryption at rest is enabled by ' \
@@ -2195,7 +2291,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'platform fact, the same mechanism behind SV-270574. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, cryptographic protection ' \
              'against unauthorized modification of organization-defined data at ' \
              'rest, is a manual/documentation determination: per the DISA check, ' \
@@ -2238,7 +2334,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'database setting. The inherited baseline is a manual-review skip. ' \
          'Satisfied by system documentation / the Cloud.gov SSP (IA-5); no tenant ' \
           'SQL assertion applies. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'SV-270567 (map authenticated identity to the user account via ' \
              'PKI-based authentication, IA-5(2)) is a manual/documentation ' \
              'determination: PKI-to-account mapping is not a queryable database ' \
@@ -2274,7 +2370,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          '(SC-3/SC-2), and the broker provisions the database with distinct ' \
          'privileged versus application accounts. The inherited baseline is a ' \
          'manual-review skip. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, isolating security functions ' \
              'from nonsecurity functions via separate security domains, is a ' \
              'design/documentation determination: Oracle by default stores ' \
@@ -2314,7 +2410,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'non-production environments is a customer responsibility. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, protecting database contents ' \
              'from unauthorized/unintended transfer by enforcing a data-transfer ' \
              'policy, is a policy/procedure determination: review of dev/test ' \
@@ -2354,7 +2450,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'validation in the customer application schema is a customer ' \
          'responsibility. The inherited baseline is a manual-review skip. See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, checking the validity of data ' \
              'inputs, is a source-code/schema-design determination reviewed ' \
              'against the customer-owned application schema (field definitions, ' \
@@ -2393,7 +2489,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'dynamic code in the customer application is a customer responsibility. ' \
          'The inherited baseline is a manual-review skip. See ' \
          'docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, reserving dynamic code ' \
              'execution for situations that require it, is a source-code review ' \
              'of customer-owned stored procedures/functions/triggers and ' \
@@ -2440,7 +2536,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'approval, applicable user training, and the approved alternative logon ' \
          'method for any plain-text-capable tools. The inherited baseline is a ' \
          'manual-review skip. See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'SV-270568 (alternative logon for plain-text-capable CLI tools, ' \
              'CM-6 b / IA-6) is a customer manual/documentation determination: it ' \
              'requires system documentation, AO approval, user training evidence, ' \
@@ -2482,7 +2578,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Satisfied by system documentation / the Cloud.gov SSP (IA-8); no tenant ' \
          'SQL assertion applies. The inherited baseline is a manual-review skip. ' \
          'See docs/RESPONSIBILITY.md and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'SV-270570 (uniquely identify and authenticate nonorganizational ' \
              'users, IA-8) is a manual/documentation determination satisfied at ' \
              'provision by the FedRAMP-authorized CloudFoundry brokered-credentials ' \
@@ -2525,7 +2621,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'Cloud.gov SSP (SC-2), not a queryable database setting. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
           'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'SV-270572 (separate user functionality from database management ' \
              'functionality, SC-2) is a manual/documentation determination: ' \
              'separation of duties is a design/documentation posture, not a SQL ' \
@@ -2567,7 +2663,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'governed by the Cloud.gov SSP (SI-10). Sibling to SV-270581. The ' \
          'inherited baseline is a manual-review skip. See docs/RESPONSIBILITY.md ' \
          'and control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, taking steps against invalid ' \
              'values usable in a SQL injection attack, is a source-code review of ' \
              'customer-owned dynamic code (stored procedures/functions/triggers ' \
@@ -2613,7 +2709,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'responsibility governed by the Cloud.gov SSP (SI-11). The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, generating error messages that ' \
              'do not reveal sensitive/harmful information, is a DBMS-settings and ' \
              'application source-code determination. Oracle does not divulge ' \
@@ -2662,7 +2758,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'by the Cloud.gov SSP (SI-11). Sibling to SV-270583. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, restricting error messages to ' \
              'authorized personnel, is a procedural review of customer end-user ' \
              'applications and tool access. Tenant isolation of the CloudWatch / ' \
@@ -2706,7 +2802,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
          'by the Cloud.gov SSP (IA-5). Sibling to SV-270562/564. The inherited ' \
          'baseline is a manual-review skip. See docs/RESPONSIBILITY.md and ' \
          'control-layers.yml.'
-    tag responsibility: 'customer'
+    tag 'responsibility' => 'customer'
     describe 'The implementation of this control, requiring immediate selection ' \
              'of a new password upon account recovery (ALTER USER ... PASSWORD ' \
              'EXPIRE in account-creation/reset code), is a procedural code review ' \

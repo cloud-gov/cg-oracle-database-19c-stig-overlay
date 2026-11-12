@@ -27,6 +27,8 @@ class RdsadminExceptionsTest < Minitest::Test
                    'FAILED_LOGIN_ATTEMPTS'
                  elsif sql.include?("'INACTIVE_ACCOUNT_TIME'")
                    'INACTIVE_ACCOUNT_TIME'
+                 elsif sql.include?("'PASSWORD_VERIFY_FUNCTION'")
+                   'PASSWORD_VERIFY_FUNCTION'
                  else
                    'PASSWORD_LIFE_TIME'
                  end
@@ -37,15 +39,19 @@ class RdsadminExceptionsTest < Minitest::Test
   class Context
     attr_reader :failures, :descriptions, :tags
 
-    def initialize(rows)
+    def initialize(rows, skip_customer: false, approved: ['ORA12C_STIG_VERIFY_FUNCTION'])
       @rows = rows
+      @skip_customer = skip_customer
+      @approved = approved
+      @skipped = []
       @failures = []
       @descriptions = []
       @tags = []
     end
 
     def input(name)
-      { 'skip_customer_responsibility_controls' => false,
+      { 'skip_customer_responsibility_controls' => @skip_customer,
+        'approved_password_verify_functions' => @approved,
         'failed_logon_attempts' => 3, 'account_inactivity_age' => 35 }[name]
     end
 
@@ -54,8 +60,14 @@ class RdsadminExceptionsTest < Minitest::Test
     end
 
     def control(id, &block)
+      return if @skipped.include?(id)
+
       @id = id
       instance_eval(&block)
+    end
+
+    def skip_control(id)
+      @skipped << id
     end
 
     def impact(*_args) ; end
@@ -119,11 +131,11 @@ class RdsadminExceptionsTest < Minitest::Test
     end
   end
 
-  # Only evaluate the five new controls; other overlay controls require live SQL.
+  # Evaluate the seven exception controls; other controls are outside this harness.
   SOURCE = File.read(File.join(__dir__, 'overlay.rb')).split('  # --- PLATFORM disposition:').first + "\nend\n"
 
-  def evaluate(rows)
-    context = Context.new(rows)
+  def evaluate(rows, **options)
+    context = Context.new(rows, **options)
     context.instance_eval(SOURCE, 'controls/overlay.rb')
     context
   end
@@ -133,7 +145,8 @@ class RdsadminExceptionsTest < Minitest::Test
       'PASSWORD_LOCK_TIME' => %w[RDSADMIN|1 DEFAULT|UNLIMITED],
       'FAILED_LOGIN_ATTEMPTS' => %w[RDSADMIN|10 DEFAULT|3],
       'INACTIVE_ACCOUNT_TIME' => %w[RDSADMIN|UNLIMITED DEFAULT|35],
-      'PASSWORD_LIFE_TIME' => %w[RDSADMIN|65 DEFAULT|42] }
+      'PASSWORD_LIFE_TIME' => %w[RDSADMIN|65 DEFAULT|42],
+      'PASSWORD_VERIFY_FUNCTION' => %w[RDSADMIN|NULL DEFAULT|ORA12C_STIG_VERIFY_FUNCTION] }
   end
 
   def test_only_named_aws_rds_exceptions_pass
@@ -170,6 +183,51 @@ class RdsadminExceptionsTest < Minitest::Test
 
   def test_empty_inventories_fail
     rows = compliant_rows.transform_values { [] }
-    assert_equal 5, evaluate(rows).failures.length
+    assert_equal 7, evaluate(rows).failures.length
+  end
+
+  def test_null_or_unresolved_customer_functions_fail_both_controls
+    ['', 'NULL', 'DEFAULT', 'MISSING', 'UNLIMITED'].each do |value|
+      rows = compliant_rows
+      rows['PASSWORD_VERIFY_FUNCTION'] << "SITE|#{value}"
+      assert_equal 2, evaluate(rows).failures.length, value.inspect
+    end
+  end
+
+  def test_missing_rdsadmin_function_is_not_the_literal_null_exception
+    ['', 'MISSING', 'DEFAULT', 'UNLIMITED'].each do |value|
+      rows = compliant_rows
+      rows['PASSWORD_VERIFY_FUNCTION'] = ["RDSADMIN|#{value}"]
+      assert_equal 2, evaluate(rows).failures.length, value.inspect
+    end
+  end
+
+  def test_unapproved_function_fails_587_even_on_rdsadmin
+    %w[SITE RDSADMIN].each do |profile|
+      rows = compliant_rows
+      rows['PASSWORD_VERIFY_FUNCTION'] = ["#{profile}|UNAPPROVED_FUNCTION"]
+      failures = evaluate(rows).failures
+      assert_equal 1, failures.length
+      assert_match(/SV-270587/, failures.first)
+    end
+  end
+
+  def test_resolved_inherited_function_and_reviewed_custom_function_pass
+    rows = compliant_rows
+    rows['PASSWORD_VERIFY_FUNCTION'] += %w[SITE|ORA12C_STIG_VERIFY_FUNCTION CUSTOM|SITE_VERIFY]
+    assert_empty evaluate(rows, approved: %w[ORA12C_STIG_VERIFY_FUNCTION SITE_VERIFY]).failures
+    assert_equal 1, evaluate(compliant_rows, approved: []).failures.length
+  end
+
+  def test_missing_profile_name_fails_both_password_controls
+    rows = compliant_rows
+    rows['PASSWORD_VERIFY_FUNCTION'] = ['|ORA12C_STIG_VERIFY_FUNCTION']
+    assert_equal 2, evaluate(rows).failures.length
+  end
+
+  def test_platform_only_posture_does_not_execute_customer_assertions
+    result = evaluate({}, skip_customer: true)
+    assert_empty result.failures
+    assert_empty result.descriptions
   end
 end

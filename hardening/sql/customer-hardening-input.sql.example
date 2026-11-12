@@ -16,7 +16,7 @@
 -- Y assigns Oracle-supplied ORA_STIG_PROFILE to eligible non-Oracle accounts.
 -- Set N to report profile-assignment candidates without assigning them; review
 -- candidates before choosing Y. The combined run still alters the database via
--- scripts 10, 12, 15, 20, 30, and 60; N is not a dry-run mode.
+-- scripts 10, 12, 15, 20, 30, 60, and 16; N is not a dry-run mode.
 DEFINE assign_users = Y
 
 -- Oracle identifier for the approved password verification function applied to
@@ -27,4 +27,6 @@ DEFINE verify_function = ORA12C_STIG_VERIFY_FUNCTION
 -- Positive whole-number reserve subtracted from the instance SESSIONS ceiling
 -- to set DEFAULT.SESSIONS_PER_USER. This is organization-defined: account for
 -- the connection-pool workload and retain enough capacity for RDS operations.
+-- Script 16 copies this cap to ORA_STIG_PROFILE and TEMPORARY_USERS and sets
+-- ORA_STIG_PROFILE's lifetime to 55, preserving its observed five-day grace.
 DEFINE session_headroom = 64

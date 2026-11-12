@@ -29,5 +29,8 @@ applications:
       # SQLcl 26.x needs Java 11+; the buildpack otherwise defaulted to Java 8 on the
       # cell ("SQLcl requires Java 11 and above"). 17 is the current LTS SQLcl supports.
       JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 17.+ } }'
+      # Identify the nested SQLcl distribution during buildpack staging (#110).
+      # The explicit worker command above still controls application startup.
+      JBP_CONFIG_JAVA_MAIN: '{ java_main_class: "oracle.dbtools.raptor.scriptrunner.cmdline.SqlCli" }'
       # Fail-closed TLS default for the live RDS target. Overridable.
       ORAQUERY_TLS: verify-ca

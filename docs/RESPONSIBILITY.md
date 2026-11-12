@@ -354,9 +354,64 @@ The new 561/587 overrides implement the per-profile disposition tracked in
 Only the literal `NULL` value on RDSADMIN is excepted: a missing row or SQL NULL
 is `MISSING` and fails, as do unresolved DEFAULT values. The recorded
 `ORA-20900` is historical evidence, not a newly attempted RDSADMIN alteration.
-An AWS-pipeline-built auditor containing these overrides still needs a live
-`--all` run before claiming their deployment is verified. Acceptance here is an
-overlay disposition, not technical compliance or formal ISSO acceptance.
+**Final live verification, 2026-11-12 at 20:58:55 UTC:** After the operator's
+updated AWS-pipeline image deployment and customer hardening, the full `--all`
+report recorded **33 successful controls, zero control failures, and 63 skipped
+controls; 81 successful tests, zero failures, and 63 skipped tests**. Inspection
+of the saved JSON confirmed that all seven controls above executed and passed,
+retained their `rds_exception` tags, and retained inherited STIG identifiers.
+The JSON report and metadata sidecar are retained under the authorized local
+`out/` evidence directory; do not publish their connection metadata. These
+results establish the automated overlay outcome, not technical compliance of
+the excepted settings or formal ISSO acceptance.
+
+#### Issue #77: final technical disposition and supporting evidence
+
+**Decision:** For SV-270561 and SV-270587, accept only the literal
+`PASSWORD_VERIFY_FUNCTION=NULL` on the named AWS-managed `RDSADMIN` profile as
+an explicitly reported platform deviation. Do not skip either entire control.
+All other assigned profiles must have resolved, non-null functions; SV-270587
+also enforces the approved-function allowlist. Missing data, unresolved DEFAULT
+values, and unapproved non-null functions remain findings. The implementation
+was delivered through PR #109; the operator authorized the changes and reported
+the final successful live run. Formal security acceptance is a separate decision.
+
+**AWS documentation:** [Administering your Oracle DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.CommonDBATasks.html)
+explains the managed-service administration boundary. During this documentation
+review, the current AWS site was unreachable from the agent environment. The
+[AWS-authored archived source (2023-06-09)](https://github.com/awsdocs/amazon-rds-user-guide/blob/50e7617a861617feb57905ab25adb629c31cb98e/doc_source/Appendix.Oracle.CommonDBATasks.md)
+states that RDS does not provide shell access and restricts access to certain
+system procedures and tables requiring advanced privileges. This supports the
+general platform-responsibility rationale; it does **not** explicitly establish
+that every RDSADMIN profile limit is immutable. The archived text is not a
+verification of the current page's wording.
+
+**Direct evidence for #77:** The issue preserves the attempted
+`ALTER PROFILE RDSADMIN LIMIT PASSWORD_VERIFY_FUNCTION ORA12C_STIG_VERIFY_FUNCTION`
+and AWS's rejection, `ORA-20900: ALTER PROFILE RDSADMIN not allowed.`, through the
+RDS DDL trigger. Together with the observed literal NULL value, this directly
+demonstrates that the attempted customer remediation for these two controls was
+blocked. No additional mutation attempt is needed to reproduce that evidence
+for #77. The message suggests a profile-wide restriction, but the captured
+operation alone does not test every other limit in the seven-control table.
+
+**Residual risk and acceptance:** RDSADMIN's profile lacks the password
+verification function required by the two STIG checks. This assessment does not
+establish an equivalent AWS password policy or another compensating control.
+AWS ownership and the inability to apply the customer fix explain the exception;
+they do not remove the unmet requirement. Function source review remains required
+for customer-selected functions. The designated system risk-acceptance authority
+must record acceptance, scope, date, and review date in the authorized assessment
+record; no such formal acceptance is evidenced here.
+
+**Closeout status:** The #77 implementation and final live automated verification
+are complete. The issue tracks the remaining evidence/acceptance record: formal
+disposition by the designated authority and, for the other five profile controls,
+explicit AWS documentation or support confirmation of the scope of the profile
+restriction. Reassess the disposition if AWS changes the supported remediation,
+the engine behavior, or the observed profile values. The full `make verify`
+aggregate was blocked in the agent environment by the unavailable Docker daemon;
+the passing component checks and live report do not substitute for that aggregate.
 
 ## Current customer-responsibility controls
 

@@ -131,7 +131,7 @@ class RdsadminExceptionsTest < Minitest::Test
     end
   end
 
-  # Evaluate only the password-function exceptions; other controls are inherited.
+  # Evaluate the seven exception controls; other controls are outside this harness.
   SOURCE = File.read(File.join(__dir__, 'overlay.rb')).split('  # --- PLATFORM disposition:').first + "\nend\n"
 
   def evaluate(rows, **options)
@@ -152,13 +152,38 @@ class RdsadminExceptionsTest < Minitest::Test
   def test_only_named_aws_rds_exceptions_pass
     result = evaluate(compliant_rows)
     assert_empty result.failures
-    assert result.descriptions.any? { |text| text.include?('RDSADMIN') && text.include?('NULL') }
+    assert result.descriptions.any? { |text| text.include?('RDSADMIN') && text.include?('65') }
     assert result.tags.any? { |tag| tag[:rds_exception].to_s.include?('accepted AWS RDS') }
+  end
+
+  def test_customer_deviations_fail
+    rows = compliant_rows
+    rows['SESSIONS_PER_USER'] << 'SITE|UNLIMITED'
+    rows['PASSWORD_LOCK_TIME'] << 'SITE|1'
+    rows['FAILED_LOGIN_ATTEMPTS'] << 'SITE|10'
+    rows['INACTIVE_ACCOUNT_TIME'] << 'SITE|UNLIMITED'
+    rows['PASSWORD_LIFE_TIME'] << 'SITE|65'
+    assert_equal 5, evaluate(rows).failures.length
+  end
+
+  def test_missing_values_and_unexpected_rdsadmin_values_fail
+    rows = compliant_rows
+    rows['PASSWORD_LOCK_TIME'] = ['RDSADMIN|2']
+    rows['INACTIVE_ACCOUNT_TIME'] = ['DEFAULT|']
+    rows['PASSWORD_LIFE_TIME'] = ['RDSADMIN|MISSING']
+    assert_equal 3, evaluate(rows).failures.length
+  end
+
+  def test_missing_profile_limit_fails
+    rows = compliant_rows
+    rows['SESSIONS_PER_USER'] = ['SITE|MISSING']
+    rows['FAILED_LOGIN_ATTEMPTS'] = ['SITE|MISSING']
+    assert_equal 2, evaluate(rows).failures.length
   end
 
   def test_empty_inventories_fail
     rows = compliant_rows.transform_values { [] }
-    assert_equal 2, evaluate(rows).failures.length
+    assert_equal 7, evaluate(rows).failures.length
   end
 
   def test_null_or_unresolved_customer_functions_fail_both_controls

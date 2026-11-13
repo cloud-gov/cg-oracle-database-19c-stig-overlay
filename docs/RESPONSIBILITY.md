@@ -370,6 +370,38 @@ as gates. Reassess if supported remediation, engine behavior, observed values or
 account assignments change. PR #109 is implementation history merged into
 develop, not delivery to main.
 
+### Accepted AWS RDS RDSADMIN exceptions (#112)
+
+In addition to the two #77 password-function controls, these five controls retain
+profile-named SQL assertions and accept only the exact RDSADMIN deviations below.
+They remain customer controls skipped in platform-only posture and assessed under
+`--all`. A PASS means the nonexcepted assertions passed, not that RDSADMIN meets
+the STIG. Empty inventory, missing limits, unidentified profiles and unexpected
+values remain findings. Result descriptions and rds_exception tags expose the
+original values.
+
+| Control | RDSADMIN-only exception | Other profiles |
+| --- | --- | --- |
+| SV-270495 | SESSIONS_PER_USER=UNLIMITED or DEFAULT | Positive numeric cap required; DEFAULT/UNLIMITED fail. |
+| SV-270549 | PASSWORD_LOCK_TIME=1 | Assigned profiles require UNLIMITED. |
+| SV-270550 | FAILED_LOGIN_ATTEMPTS=10 | Assigned profiles must meet failed_logon_attempts (default 3). |
+| SV-270551 | INACTIVE_ACCOUNT_TIME=UNLIMITED | Assigned profiles must meet account_inactivity_age (default 35). |
+| SV-270563 | Effective lifetime=65 or UNLIMITED | All profiles, including unused profiles, must meet the 60-day bound. |
+
+The AWS Support confirmation and per-instance ownership-review condition in #77
+above apply to all five controls: ALTER PROFILE RDSADMIN is blocked profile-wide,
+with no supported remediation mechanism. Ownership is separately evidenced; the
+automated checks do not establish it. Formal risk acceptance remains separate.
+
+The prior combined develop deployment's 2026-11-12 full-posture report confirmed
+all five executed and retained exception tags and inherited STIG identifiers.
+That historical outcome does not validate this split revision. Live inventory
+showed that the non-RDSADMIN DEFAULT session values belonged to ORA_STIG_PROFILE
+and TEMPORARY_USERS, and lifetime 65 belonged to ORA_STIG_PROFILE (60+5), not
+RDSADMIN. These are customer-remediable findings, not additional exceptions.
+The separately tracked #111 completion script addresses them; this PR does not
+alter database state or introduce that script.
+
 ## Current customer-responsibility controls
 
 Controls marked `baseline manual skip` are already skipped by the baseline manual

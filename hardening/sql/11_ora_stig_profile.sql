@@ -6,9 +6,9 @@
 -- "ALTER USER <user> PROFILE ora_stig_profile" as the remediation.
 -- ORA_STIG_PROFILE is an Oracle-supplied, Oracle-MAINTAINED profile that already
 -- carries the required limits (PASSWORD_LOCK_TIME UNLIMITED, FAILED_LOGIN_ATTEMPTS
--- 3, INACTIVE_ACCOUNT_TIME 35) and is effectively immutable — Oracle rejects
--- ALTER PROFILE on it (ORA-41724). Per the STIG, the supplied profile can be used
--- as-is; this script therefore does NOT create or modify the profile and does NOT
+-- 3, INACTIVE_ACCOUNT_TIME 35). Live RDS validation on 2026-11-12 permitted
+-- ALTER PROFILE for its session cap and password lifetime (script 70). This
+-- assignment script does NOT create or modify the profile and does NOT
 -- verify its limits. It only ASSIGNS ORA_STIG_PROFILE to the appropriate user
 -- accounts, which is what satisfies SV-270549/550/551 for those users (the
 -- baseline InSpec checks assert the limits on every profile a user is on).
@@ -76,7 +76,7 @@ BEGIN
       'on Oracle 19c/23ai. Do not create it here — investigate the instance.');
   END IF;
   DBMS_OUTPUT.PUT_LINE('using Oracle-supplied ORA_STIG_PROFILE '||
-    '(immutable; limits not modified or verified here)');
+    '(limits not modified or verified by this assignment script)');
 
   ----------------------------------------------------------------------------
   -- Detect-first assignment: move non-Oracle, non-excluded accounts that are NOT

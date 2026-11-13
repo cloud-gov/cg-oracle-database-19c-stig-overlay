@@ -1,7 +1,7 @@
 -- rollback/11_ora_stig_profile_rollback.sql — reverses 11_ora_stig_profile.sql.
 --
 -- 11_ only ASSIGNS the Oracle-supplied ORA_STIG_PROFILE to accounts; it never
--- creates or modifies the (immutable, Oracle-maintained) profile. This rollback
+-- creates or modifies the Oracle-maintained profile. This rollback
 -- therefore only moves the accounts 11_ reassigned back to the DEFAULT profile.
 -- It never drops ORA_STIG_PROFILE (it is Oracle-supplied and cannot be dropped —
 -- ORA-02384 — and its presence is not a finding).

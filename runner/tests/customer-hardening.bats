@@ -3,6 +3,12 @@
 # assertions protect the reviewed predicates and guard ordering without pretending
 # to replace a live Oracle/Cloud Foundry run.
 
+@test "overlay responsibility tags use explicit string keys" {
+  overlay="${BATS_TEST_DIRNAME}/../../controls/overlay.rb"
+  ! grep -Eq '^[[:space:]]+tag responsibility:' "$overlay"
+  [ "$(grep -Ec "^[[:space:]]+tag 'responsibility' => '(platform|customer)'" "$overlay")" -ge 57 ]
+}
+
 setup() {
   repo_root="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
 }

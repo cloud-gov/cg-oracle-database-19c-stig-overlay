@@ -18,5 +18,6 @@ SET DEFINE ON
 @@20_users_roles_privileges.sql
 @@30_audit_policies.sql
 @@60_temporary_users.sql
+@@70_profile_completion.sql
 
 PROMPT customer-hardening: all customer hardening scripts completed.

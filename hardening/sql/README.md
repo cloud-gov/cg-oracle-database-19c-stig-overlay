@@ -1,3 +1,11 @@
+---
+title: "Oracle 19c STIG SQL hardening and assessment"
+description: "RDS-aware customer hardening scripts, execution order, and rollback guidance."
+status: canonical
+tier: 2
+last_updated: "2026-11-12"
+---
+
 # Oracle 19c STIG SQL hardening & assessment (RDS-aware)
 
 > Filed from the aws-broker Oracle 19c epic
@@ -41,7 +49,10 @@ here (see `../control-layers.yml`).
 ### Apply all customer hardening scripts through Cloud.gov
 
 `customer-hardening.sql` is the ordered driver for every database-altering customer
-hardening script: `10`, `11`, `12`, `15`, `20`, `30`, and `60`. It intentionally
+hardening script: `10`, `11`, `12`, `15`, `20`, `30`, `60`, then `70`. Script `70`
+runs last so the temporary profile exists and DEFAULT has its reviewed session
+cap. It also sets ORA_STIG_PROFILE's lifetime to 55 while retaining five days of
+grace, failing before alteration if a different grace value requires review. It intentionally
 excludes assessment-only and rollback scripts. Run it through the bound Cloud.gov
 SQLcl app with:
 
@@ -73,7 +84,7 @@ positive integer session headroom.
 | `00_connectivity_check.sql` | assess | verify connection + effective user/privs |
 | `01_inventory.sql` | assess | inventory users, profiles, roles, audit state |
 | `10_profiles.sql` | harden | enforce password/lockout limits on the **DEFAULT** profile (incl. SV-270549/550/551) |
-| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (immutable; already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Preserves accounts on `TEMPORARY_USERS` so script `60`'s 72-hour lock job continues to cover them. Does not create/modify/verify the profile. |
+| `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Preserves accounts on `TEMPORARY_USERS` so script `60`'s 72-hour lock job continues to cover them. Does not create/modify/verify the profile. |
 | `12_password_verify_function.sql` | harden | bind the Oracle-supplied **`ORA12C_STIG_VERIFY_FUNCTION`** to the **DEFAULT** profile for DOD password complexity (SV-270561), detect-first (`apply_fix=N` to report only). Preferred path is `11` (`ORA_STIG_PROFILE` already binds a compliant verify function); `12` covers accounts that stay on DEFAULT. |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
@@ -81,6 +92,7 @@ positive integer session headroom.
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
 | `60_temporary_users.sql` | harden | SAMPLE mechanism for SV-270547: create a distinctively named `TEMPORARY_USERS` profile + an hourly job that LOCKS accounts on it older than 72h (SV-270546 sibling) — assigning accounts to the profile is a per-account customer step |
+| `70_profile_completion.sql` | harden | after `15` and `60`, copy DEFAULT's reviewed numeric session cap to ORA_STIG_PROFILE and TEMPORARY_USERS; set ORA_STIG_PROFILE lifetime to 55 with its observed five-day grace (SV-270495/563). No changes to RDSADMIN or unidentified profiles. |
 | `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `12`, `15`, `30`, `60`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script
@@ -90,10 +102,10 @@ positive integer session headroom.
 > **`10` vs `11` (profile-lockout controls SV-270549/550/551):** `10_profiles.sql`
 > hardens the **DEFAULT** profile (which on brokered RDS governs the app + master
 > account). `11_ora_stig_profile.sql` uses the DISA-named, **Oracle-supplied**
-> **`ORA_STIG_PROFILE`** — an immutable, Oracle-maintained profile that already
+> **`ORA_STIG_PROFILE`** — an Oracle-maintained profile that already
 > carries the three lockout limits (`PASSWORD_LOCK_TIME UNLIMITED`,
 > `FAILED_LOGIN_ATTEMPTS 3`, `INACTIVE_ACCOUNT_TIME 35`). Per the STIG the supplied
-> profile can be used as-is, so `11` does **not** create, modify, or verify it — it
+> profile supplies these lockout limits, so `11` does **not** create, modify, or verify it — it
 > only **assigns** it, **detect-first**, to org-defined non-Oracle accounts
 > (`DBA_USERS.ORACLE_MAINTAINED='N'`, excluding the operator/platform list and
 > accounts on `TEMPORARY_USERS`, whose lifecycle profile must remain intact). The
@@ -111,7 +123,7 @@ positive integer session headroom.
 - `rollback/11_ora_stig_profile_rollback.sql` — moves the accounts `11` assigned
   back to the **DEFAULT** profile (not each account's pre-hardening profile —
   capture from `01_inventory` for a true restore). Never drops `ORA_STIG_PROFILE`
-  (it is Oracle-supplied/immutable). Reassigning to DEFAULT **re-opens**
+  (it is Oracle-supplied). Reassigning to DEFAULT **re-opens**
   SV-270549/550/551 for those accounts unless DEFAULT was hardened by `10`.
 - `rollback/12_password_verify_function_rollback.sql` — resets DEFAULT
   `PASSWORD_VERIFY_FUNCTION` to **NULL** (the Oracle out-of-the-box value), which
@@ -134,6 +146,14 @@ positive integer session headroom.
   are still assigned (reassign them first) — never CASCADEs.
 
 ## RDS caveats
+
+- Live RDS testing on 2026-11-12 successfully changed ORA_STIG_PROFILE's session
+  cap and password lifetime. Do not assume it is immutable or extend RDSADMIN's
+  exception to it. For script `70`, restore the captured pre-change profile limits
+  with reviewed `ALTER PROFILE` statements; there is no generic rollback script.
+  On that assessed instance the old session values were `DEFAULT` on both
+  profiles, and ORA_STIG_PROFILE's old lifetime was 60 (grace 5). Restoring them
+  reopens the findings. Script `15`'s rollback changes only DEFAULT.
 
 - No `SYS`/`SYSDBA`; some `V$`/`DBA_` views and `ALTER SYSTEM` are restricted — the
   scripts guard these and skip with a reason rather than error.

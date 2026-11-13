@@ -499,7 +499,7 @@ controls:
       per-profile DBA_PROFILES query, should cmp 'UNLIMITED'). Remediated via
       hardening/sql/10_profiles.sql (DEFAULT profile) and/or
       hardening/sql/11_ora_stig_profile.sql (assign the Oracle-supplied,
-      immutable ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
+      ORA_STIG_PROFILE to the site's accounts — the STIG-named vehicle;
       the profile already carries PASSWORD_LOCK_TIME UNLIMITED). skip_control
       under --skip-customer-controls; runs under --all.
   - id_pattern: "SV-270550"
@@ -612,7 +612,7 @@ controls:
       (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
       fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
       responsibility on the SV-270495 pattern. Remediated via
-      hardening/sql/10_profiles.sql. skip_control under
+      hardening/sql/10_profiles.sql and 70_profile_completion.sql. skip_control under
       --skip-customer-controls; runs under --all. See controls/overlay.rb
       `SV-270563`.
 

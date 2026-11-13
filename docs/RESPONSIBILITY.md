@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-08-20"
+last_updated: "2026-11-13"
 ---
 
 # Control responsibility: platform vs. customer
@@ -313,6 +313,26 @@ canonical example:
 
 Therefore SV-270495 is a **customer responsibility**: skipped on a platform-only
 run, assessed under `--all` once the customer has applied a limit.
+
+### Customer profile completion (#111)
+
+`70_profile_completion.sql` runs after scripts 15 and 60. It validates DEFAULT's
+reviewed positive numeric session cap and ORA_STIG_PROFILE's five-day grace before
+applying explicit caps to ORA_STIG_PROFILE and TEMPORARY_USERS and setting
+ORA_STIG_PROFILE's lifetime to 55 (effective lifetime 55+5=60). It does not change
+RDSADMIN or unidentified profiles and does not change exception scoring.
+
+The prior authorized live inventory on 2026-11-12 identified those two customer
+profiles with SESSIONS_PER_USER=DEFAULT, and ORA_STIG_PROFILE with lifetime 60+5.
+Authorized ALTER PROFILE statements and an idempotent execution of the completion
+script succeeded on that assessed instance, disproving the earlier assumption
+that ORA_STIG_PROFILE is immutable. This is retained evidence from develop, not
+a live test of this split branch. Unknown values remain findings requiring review.
+
+Database DDL commits independently of git. Restore captured pre-change limits
+only through an authorized change; there is no generic script-70 rollback.
+Restoration reopens findings, and script 15's rollback affects DEFAULT only.
+See `../hardening/sql/README.md` for execution order and rollback limitations.
 
 ## Current customer-responsibility controls
 

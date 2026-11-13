@@ -7,7 +7,7 @@
 -- character; and >= 50% of the minimum length — i.e. 8 — characters changed from
 -- the previous password). The DISA fix names Oracle's supplied sample function
 -- ORA12C_STIG_VERIFY_FUNCTION (from $ORACLE_HOME/rdbms/admin/catpvf.sql) as the
--- starting point, and Oracle also ships the immutable ORA_STIG_PROFILE, which
+-- starting point, and Oracle also ships ORA_STIG_PROFILE, which
 -- already binds a STIG-compliant verify function.
 --
 --   Control satisfied for assigned profiles:

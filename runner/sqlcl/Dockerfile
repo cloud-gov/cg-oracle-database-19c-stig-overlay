@@ -64,6 +64,15 @@ RUN set -eux; \
 
 # The hardening SQL scripts are copied in so `-f /opt/hardening/<x>.sql` works
 # without mounting anything (make sqlcl-run). They are plain SQL text (no secrets).
+#
+# SQL_CONTENT_HASH is a cache-buster: the Makefile passes a digest of hardening/sql
+# so edits ALWAYS invalidate this layer (and only this layer — the heavy base/cert/
+# truststore layers above stay cached). Without it, an interrupted or racy build can
+# leave Docker reusing a stale COPY layer, baking old script content into the image
+# (a false PASS risk — see HANDOFF/issue #98). Declared immediately before the COPY
+# so no earlier layer is invalidated.
+ARG SQL_CONTENT_HASH=unset
+RUN echo "hardening/sql content hash: ${SQL_CONTENT_HASH}" >/dev/null
 COPY hardening/sql /opt/hardening
 
 # Run as the base image's non-root software owner (oracle, uid 54321) rather than

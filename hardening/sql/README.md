@@ -1,3 +1,11 @@
+---
+title: "Oracle 19c STIG SQL hardening and assessment"
+description: "RDS-aware customer hardening scripts, execution order, and rollback guidance."
+status: canonical
+tier: 2
+last_updated: "2026-11-13"
+---
+
 # Oracle 19c STIG SQL hardening & assessment (RDS-aware)
 
 > Filed from the aws-broker Oracle 19c epic
@@ -134,6 +142,13 @@ positive integer session headroom.
   are still assigned (reassign them first) — never CASCADEs.
 
 ## RDS caveats
+
+- SV-270561/587 accept only the AWS-managed RDSADMIN profile's literal NULL
+  password function as the documented #77 exception; customer profiles still
+  require resolved non-null functions, with approved-function enforcement for
+  SV-270587 and source review. Do not attempt to harden RDSADMIN. Repeat the
+  account-ownership review described in `../../docs/RESPONSIBILITY.md`; exception
+  acceptance is not technical compliance or formal risk acceptance.
 
 - No `SYS`/`SYSDBA`; some `V$`/`DBA_` views and `ALTER SYSTEM` are restricted — the
   scripts guard these and skip with a reason rather than error.

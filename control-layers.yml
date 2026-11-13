@@ -473,7 +473,7 @@ controls:
       other profile must have a positive numeric limit. Live inventory on
       2026-11-12 identified DEFAULT-inheriting ORA_STIG_PROFILE and TEMPORARY_USERS;
       customer ALTER PROFILE statements successfully set explicit caps on both.
-      Script 16 repeats this completion after scripts 15 and 60.
+      Script 70 repeats this completion after scripts 15 and 60.
       See docs/RESPONSIBILITY.md (Accepted AWS RDS RDSADMIN exceptions).
   - id_pattern: "SV-270520"
     set_by: sql_hardening
@@ -634,7 +634,7 @@ controls:
       (EFFECTIVE_LIFE_TIME <= 60, neither component UNLIMITED; baseline_status:
       fixed); the db-altering fix is org-defined ALTER PROFILE — a CUSTOMER
       responsibility on the SV-270495 pattern. Remediated via
-      hardening/sql/10_profiles.sql and 16_profile_completion.sql. skip_control under
+      hardening/sql/10_profiles.sql and 70_profile_completion.sql. skip_control under
       --skip-customer-controls; runs under --all. See controls/overlay.rb
       `SV-270563`. On AWS RDS the overlay accepts only the named RDSADMIN
       effective lifetime of 65 or UNLIMITED as a named deviation, not as

@@ -342,11 +342,11 @@ User-authorized SQL successfully set explicit session caps of 550 on both
 customer profiles and changed `ORA_STIG_PROFILE.PASSWORD_LIFE_TIME` to 55,
 preserving its five-day grace. This disproves the earlier assumption that this
 profile cannot be changed on the assessed RDS instance. Script
-`16_profile_completion.sql` applies the same completion using DEFAULT's reviewed
+`70_profile_completion.sql` applies the same completion using DEFAULT's reviewed
 session cap, after scripts 15 and 60; unknown profiles remain findings.
 
 The pre-change full report had four failed controls (495, 561, 563, 587).
-After the approved SQL and an idempotent execution of script 16, a second full
+After the approved SQL and an idempotent execution of the profile-completion script, a second full
 report confirmed 495, 549, 550, 551, and 563 passed. Only 561/587 remained failing
 in the deployed auditor, which did not yet contain their new exceptions.
 The new 561/587 overrides implement the per-profile disposition tracked in

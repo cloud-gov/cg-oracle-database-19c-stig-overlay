@@ -1,4 +1,4 @@
--- 16_profile_completion.sql -- complete the known customer profile limits after
+-- 70_profile_completion.sql -- complete the known customer profile limits after
 -- scripts 15 and 60. Run only with the same reviewed session-cap decision as 15.
 -- Live RDS validation (2026-11-12) permits these ORA_STIG_PROFILE changes; do not
 -- confuse it with the AWS-managed RDSADMIN profile. Unknown profiles stay findings.
@@ -25,6 +25,6 @@ BEGIN
   EXECUTE IMMEDIATE 'ALTER PROFILE ORA_STIG_PROFILE LIMIT SESSIONS_PER_USER ' ||
     v_sessions || ' PASSWORD_LIFE_TIME 55';
   EXECUTE IMMEDIATE 'ALTER PROFILE TEMPORARY_USERS LIMIT SESSIONS_PER_USER ' || v_sessions;
-  DBMS_OUTPUT.PUT_LINE('16_profile_completion: explicit customer session caps applied; ORA_STIG_PROFILE lifetime 55+5=60');
+  DBMS_OUTPUT.PUT_LINE('70_profile_completion: explicit customer session caps applied; ORA_STIG_PROFILE lifetime 55+5=60');
 END;
 /

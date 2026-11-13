@@ -49,7 +49,7 @@ here (see `../control-layers.yml`).
 ### Apply all customer hardening scripts through Cloud.gov
 
 `customer-hardening.sql` is the ordered driver for every database-altering customer
-hardening script: `10`, `11`, `12`, `15`, `20`, `30`, `60`, then `16`. Script `16`
+hardening script: `10`, `11`, `12`, `15`, `20`, `30`, `60`, then `70`. Script `70`
 runs last so the temporary profile exists and DEFAULT has its reviewed session
 cap. It also sets ORA_STIG_PROFILE's lifetime to 55 while retaining five days of
 grace, failing before alteration if a different grace value requires review. It intentionally
@@ -87,12 +87,12 @@ positive integer session headroom.
 | `11_ora_stig_profile.sql` | harden | assign the Oracle-supplied **`ORA_STIG_PROFILE`** (already carries the SV-270549/550/551 lockout limits) to org-defined **non-Oracle** user accounts, detect-first (`assign_users=N` to report only). Preserves accounts on `TEMPORARY_USERS` so script `60`'s 72-hour lock job continues to cover them. Does not create/modify/verify the profile. |
 | `12_password_verify_function.sql` | harden | bind the Oracle-supplied **`ORA12C_STIG_VERIFY_FUNCTION`** to the **DEFAULT** profile for DOD password complexity (SV-270561), detect-first (`apply_fix=N` to report only). Preferred path is `11` (`ORA_STIG_PROFILE` already binds a compliant verify function); `12` covers accounts that stay on DEFAULT. |
 | `15_concurrent_sessions.sql` | harden | set DEFAULT profile `SESSIONS_PER_USER` to instance `SESSIONS` − headroom (SV-270495) — **sample** high per-user cap for the single-app-user case, review before use |
-| `16_profile_completion.sql` | harden | after `15` and `60`, copy DEFAULT's reviewed numeric session cap to ORA_STIG_PROFILE and TEMPORARY_USERS; set ORA_STIG_PROFILE lifetime to 55 with its observed five-day grace (SV-270495/563). No changes to RDSADMIN or unidentified profiles. |
 | `20_users_roles_privileges.sql` | harden | lock/expire Oracle **sample** accounts (does NOT modify roles/privileges — see note) |
 | `30_audit_policies.sql` | harden | create + enable `CG_AUDIT_POLICY` for events the RDS default policies miss (REVOKE, CHANGE PASSWORD, LOGOFF, CREATE SPFILE) |
 | `40_public_grants_assess.sql` | assess | **detect** a curated set of excessive PUBLIC EXECUTE grants (no revoke) |
 | `50_network_related_assess.sql` | assess | report SQL-visible network params (sqlnet/listener are inherited) |
 | `60_temporary_users.sql` | harden | SAMPLE mechanism for SV-270547: create a distinctively named `TEMPORARY_USERS` profile + an hourly job that LOCKS accounts on it older than 72h (SV-270546 sibling) — assigning accounts to the profile is a per-account customer step |
+| `70_profile_completion.sql` | harden | after `15` and `60`, copy DEFAULT's reviewed numeric session cap to ORA_STIG_PROFILE and TEMPORARY_USERS; set ORA_STIG_PROFILE lifetime to 55 with its observed five-day grace (SV-270495/563). No changes to RDSADMIN or unidentified profiles. |
 | `rollback/` | — | reversal for the **reversible** hardening scripts (`10`, `11`, `12`, `15`, `30`, `60`; `20` is only partially reversible — see below) |
 
 > **`20` naming/scope:** the filename says `users_roles_privileges` but the script
@@ -149,7 +149,7 @@ positive integer session headroom.
 
 - Live RDS testing on 2026-11-12 successfully changed ORA_STIG_PROFILE's session
   cap and password lifetime. Do not assume it is immutable or extend RDSADMIN's
-  exception to it. For script `16`, restore the captured pre-change profile limits
+  exception to it. For script `70`, restore the captured pre-change profile limits
   with reviewed `ALTER PROFILE` statements; there is no generic rollback script.
   On that assessed instance the old session values were `DEFAULT` on both
   profiles, and ORA_STIG_PROFILE's old lifetime was 60 (grace 5). Restoring them

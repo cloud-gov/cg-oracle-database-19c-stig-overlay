@@ -7,7 +7,7 @@
 -- ORA_STIG_PROFILE is an Oracle-supplied, Oracle-MAINTAINED profile that already
 -- carries the required limits (PASSWORD_LOCK_TIME UNLIMITED, FAILED_LOGIN_ATTEMPTS
 -- 3, INACTIVE_ACCOUNT_TIME 35). Live RDS validation on 2026-11-12 permitted
--- ALTER PROFILE for its session cap and password lifetime (script 16). This
+-- ALTER PROFILE for its session cap and password lifetime (script 70). This
 -- assignment script does NOT create or modify the profile and does NOT
 -- verify its limits. It only ASSIGNS ORA_STIG_PROFILE to the appropriate user
 -- accounts, which is what satisfies SV-270549/550/551 for those users (the

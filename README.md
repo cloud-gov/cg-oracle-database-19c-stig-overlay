@@ -86,7 +86,7 @@ make harden-customer-cloudgov HARDENING_INPUT=path/to/customer-hardening-input.s
 
 The target runs on the configured `CF_APP_INSTANCE`, connects only through the
 bound service with verified TLS, and removes the temporary in-container input after
-the run. It applies `10`, `11`, `12`, `15`, `20`, `30`, `60`, then `16`; it does not run
+the run. It applies `10`, `11`, `12`, `15`, `20`, `30`, `60`, then `70`; it does not run
 assessment-only or rollback scripts. Review `hardening/sql/README.md` before using
 this database-altering operation.
 

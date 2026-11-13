@@ -1,3 +1,11 @@
+---
+title: "Cloud.gov Oracle Database 19c STIG overlay"
+description: "Oracle STIG validation, responsibility overlays, and customer hardening tooling for Cloud.gov."
+status: canonical
+tier: 1
+last_updated: "2026-11-12"
+---
+
 # cg-oracle-database-19c-stig-overlay
 
 Out-of-band **DISA Oracle Database 19c STIG** hardening + assessment material for the STIG-hardened Oracle 19c offering brokered by [`cloud-gov/aws-broker`](https://github.com/cloud-gov/aws-broker).
@@ -44,6 +52,18 @@ The actual Cloud.gov validation is done by running:
 make push-cloudgov   # Push an idle Docker image app to Cloud.gov for cf ssh validation runs
 make report-cloudgov # Run validation --json on Cloud.gov (cf ssh) and copy the JSON report into $(RESULTS_DIR)/
 ```
+
+### Cloud.gov Docker image credentials
+
+Cloud.gov staging uses the ECR IAM user's AWS credentials to fetch the image.
+For this deployment, `DOCKER_USER` and `CF_DOCKER_PASSWORD` come from the
+Terraform module `module.cinc_auditor_iam.module.ecr_user`; retrieve them only
+through the approved secure state workflow. Protect Terraform state and keep
+`.env` local, ignored, and permission-restricted. Do not use
+`aws ecr get-login-password` as `CF_DOCKER_PASSWORD`: it returns a Docker token,
+not the AWS secret access key staging needs. For `InvalidSignatureException`,
+check the matching credentials, GovCloud account/region, and clock; share only
+the request ID and timestamp when escalating.
 
 Customer-style database hardening uses the SQLcl buildpack app (`make
 push-sqlcl-cf`). We chose a direct, checksum-verified Oracle SQLcl download because

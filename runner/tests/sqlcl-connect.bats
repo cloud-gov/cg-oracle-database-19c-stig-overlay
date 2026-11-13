@@ -21,6 +21,13 @@ teardown() {
   rm -rf "$work"
 }
 
+@test "SQLcl manifest separates staging detection from idle worker startup" {
+  manifest="$repo_root/runner/sqlcl-cf/manifest.yml"
+  grep -Fq 'JBP_CONFIG_JAVA_MAIN: '\''{ java_main_class: "oracle.dbtools.raptor.scriptrunner.cmdline.SqlCli" }'\''' "$manifest"
+  grep -Eq '^[[:space:]]+command:.*sleep' "$manifest"
+  grep -Fq 'ORAQUERY_TLS: verify-ca' "$manifest"
+}
+
 @test "sqlcl batch wrapper forwards positional arguments to the script" {
   run env SQLCL_BIN="$work/bin/sql" SQLCL_DRIVER_CAPTURE="$work/driver" \
     DB_USER=user DB_PASSWORD=password DB_HOST=127.0.0.1 DB_PORT=1521 \

@@ -1,3 +1,11 @@
+---
+title: "Cloud.gov SQLcl buildpack runner"
+description: "Staging and on-demand SQLcl execution through the Cloud.gov Java buildpack."
+status: canonical
+tier: 2
+last_updated: "2026-11-13"
+---
+
 # SQLcl runner — **Cloud.gov (in-boundary)** via the Java buildpack
 
 **Why this subdirectory exists:** this is the **only** supported way to run the SQLcl
@@ -58,6 +66,20 @@ The pinned source and checksums are recorded in `vendor/README.md` and the Makef
 The explicit route-less worker command keeps the container available for `cf
 ssh`; it does not connect to the database. SQLcl runs only on demand through
 `cf ssh` and `entrypoint.sh`.
+
+### Staging detection is separate from worker startup (#110)
+
+The SQLcl distribution is nested under `vendor/sqlcl/`. The manifest supplies
+`JBP_CONFIG_JAVA_MAIN` with `oracle.dbtools.raptor.scriptrunner.cmdline.SqlCli`
+so the Java buildpack can select its Java Main container during staging. The
+explicit idle worker command still controls startup; this setting does not run
+SQLcl or connect to Oracle automatically.
+
+Static regression checks do not establish platform compatibility. Before closing
+#110, an authorized operator must confirm staging with the installed buildpack,
+idle-worker startup, JRE discovery through the entrypoint, and a SELECT-only query
+over verified TLS using the intended bound service. No deployment is authorized
+by the local checks.
 
 ## Deploy + run (Cloud.gov)
 

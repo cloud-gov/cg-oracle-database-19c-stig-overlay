@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-11-12"
+last_updated: "2026-11-13"
 ---
 
 # Control responsibility: platform vs. customer
@@ -376,15 +376,27 @@ values, and unapproved non-null functions remain findings. The implementation
 was delivered through PR #109; the operator authorized the changes and reported
 the final successful live run. Formal security acceptance is a separate decision.
 
-**AWS documentation:** [Administering your Oracle DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.CommonDBATasks.html)
-explains the managed-service administration boundary. During this documentation
-review, the current AWS site was unreachable from the agent environment. The
-[AWS-authored archived source (2023-06-09)](https://github.com/awsdocs/amazon-rds-user-guide/blob/50e7617a861617feb57905ab25adb629c31cb98e/doc_source/Appendix.Oracle.CommonDBATasks.md)
-states that RDS does not provide shell access and restricts access to certain
-system procedures and tables requiring advanced privileges. This supports the
-general platform-responsibility rationale; it does **not** explicitly establish
-that every RDSADMIN profile limit is immutable. The archived text is not a
-verification of the current page's wording.
+**AWS Support confirmation (case 179451894006029, reviewed 2026-11-13):** AWS
+confirmed in writing that RDS blocks `ALTER PROFILE RDSADMIN` as a whole,
+independently of which limit is changed. All limits listed in the request return
+`ORA-20900: ALTER PROFILE RDSADMIN not allowed.` AWS also confirmed there is no
+supported procedure, parameter, option, or Support-assisted mechanism to change
+the profile. This resolves the profile-wide immutability and supported-remediation
+questions for all seven controls in the table above; separate mutation attempts
+for each limit are unnecessary. The original support correspondence is retained
+within the authorized evidence boundary and contains instance-specific information.
+
+AWS cited the following supporting documentation:
+
+- [RDS for Oracle limitations](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Oracle.Concepts.limitations.html)
+- [RDS for Oracle users and privileges](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Oracle.Concepts.Privileges.html)
+- [Security in Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.html)
+- [Amazon RDS in AWS GovCloud (US)](https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-rds.html)
+- [The create_verify_function procedure](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.CommonDBATasks.CustomPassword.Standard.html)
+
+These are references supplied by Support, not independently retrieved page text
+in this review. Support noted that public documentation does not enumerate the
+restriction limit by limit; its written response provides that explicit scope.
 
 **Direct evidence for #77:** The issue preserves the attempted
 `ALTER PROFILE RDSADMIN LIMIT PASSWORD_VERIFY_FUNCTION ORA12C_STIG_VERIFY_FUNCTION`
@@ -392,8 +404,29 @@ and AWS's rejection, `ORA-20900: ALTER PROFILE RDSADMIN not allowed.`, through t
 RDS DDL trigger. Together with the observed literal NULL value, this directly
 demonstrates that the attempted customer remediation for these two controls was
 blocked. No additional mutation attempt is needed to reproduce that evidence
-for #77. The message suggests a profile-wide restriction, but the captured
-operation alone does not test every other limit in the seven-control table.
+for #77. The Support confirmation above establishes the scope beyond this one
+captured operation.
+
+**Account-ownership boundary:** AWS did not confirm whether customers can assign
+customer-created users to RDSADMIN. It recommends customer-managed profiles for
+customer-created accounts and states that their password and lockout controls
+remain the customer's responsibility. Such accounts are not covered by the
+AWS-managed-account rationale, even if assigned to the RDSADMIN profile.
+
+An authorized SELECT-only inventory on 2026-11-13, through the bound SQLcl app
+over verified TLS, found four assigned accounts. All four matched accounts
+explicitly identified as RDS-managed in the Support response; there were no
+unidentified accounts. Three had `ORACLE_MAINTAINED=Y` and one had
+`ORACLE_MAINTAINED=N`. Ownership was established by matching the AWS statement,
+not by treating this flag alone as authoritative. Account identifiers and
+connection metadata are omitted from this public record.
+
+The current automated exceptions are profile-scoped; this ownership inventory is
+a separate evidence check, not an automated ownership assertion. Repeat ownership
+review for each assessed instance and after account/profile-assignment changes.
+Unidentified accounts require review rather than assumed AWS ownership. A
+confirmed customer-created account must be moved to a customer-managed profile
+through an authorized change and assessed under the customer requirements.
 
 **Residual risk and acceptance:** RDSADMIN's profile lacks the password
 verification function required by the two STIG checks. This assessment does not
@@ -405,11 +438,13 @@ must record acceptance, scope, date, and review date in the authorized assessmen
 record; no such formal acceptance is evidenced here.
 
 **Closeout status:** The #77 implementation and final live automated verification
-are complete. The issue tracks the remaining evidence/acceptance record: formal
-disposition by the designated authority and, for the other five profile controls,
-explicit AWS documentation or support confirmation of the scope of the profile
-restriction. Reassess the disposition if AWS changes the supported remediation,
-the engine behavior, or the observed profile values. The full `make verify`
+are complete. AWS Support has resolved the profile-wide restriction and absence
+of supported remediation, and the ownership inventory supports the exception's
+scope on the assessed instance. The issue tracks formal disposition by the
+designated authority and the account-ownership review condition above. No formal
+acceptance is inferred from the Support response. Reassess the disposition if AWS
+changes the supported remediation, the engine behavior, the observed profile
+values, or account assignments. The full `make verify`
 aggregate was blocked in the agent environment by the unavailable Docker daemon;
 the passing component checks and live report do not substitute for that aggregate.
 

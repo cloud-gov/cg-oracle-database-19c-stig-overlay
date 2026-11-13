@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-08-20"
+last_updated: "2026-11-13"
 ---
 
 # Control responsibility: platform vs. customer
@@ -314,6 +314,62 @@ canonical example:
 Therefore SV-270495 is a **customer responsibility**: skipped on a platform-only
 run, assessed under `--all` once the customer has applied a limit.
 
+### Accepted AWS RDS RDSADMIN password-function exceptions (#77)
+
+For SV-270561 and SV-270587, the overlay accepts only the literal
+`PASSWORD_VERIFY_FUNCTION=NULL` on the named `RDSADMIN` profile as an explicitly
+tagged AWS RDS deviation. It does not skip either entire control. Other assigned
+profiles require resolved non-null functions; SV-270587 also enforces
+`approved_password_verify_functions`. Empty inventories, missing rows, SQL NULL,
+unresolved DEFAULT values, and unapproved non-null functions remain findings.
+Function source review remains required. A passing exception assertion is not
+technical STIG compliance or formal risk acceptance.
+
+**Evidence retained from the develop implementation:** #77 records an attempted
+`ALTER PROFILE RDSADMIN LIMIT PASSWORD_VERIFY_FUNCTION ORA12C_STIG_VERIFY_FUNCTION`
+and rejection `ORA-20900: ALTER PROFILE RDSADMIN not allowed.` This is historical
+evidence, not a mutation performed for this PR. AWS Support confirmed in writing
+on 2026-11-13 that the restriction covers ALTER PROFILE RDSADMIN as a whole,
+independent of the limit, with no supported procedure, parameter, option, or
+Support-assisted mechanism to change it. Original correspondence stays within the
+authorized evidence boundary; its instance-specific details are not published.
+
+Support supplied these public references (not independently retrieved in this
+split):
+
+- [RDS for Oracle limitations](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Oracle.Concepts.limitations.html)
+- [RDS for Oracle users and privileges](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Oracle.Concepts.Privileges.html)
+- [Security in Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.html)
+- [Amazon RDS in AWS GovCloud (US)](https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-rds.html)
+- [The create_verify_function procedure](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.CommonDBATasks.CustomPassword.Standard.html)
+
+**Ownership condition:** Support did not confirm whether customers can assign
+customer-created users to RDSADMIN. Customer-created accounts remain customer
+responsibility even if assigned to that profile. The prior authorized SELECT-only
+inventory on 2026-11-13 found four assigned accounts, all matched to accounts
+explicitly identified by Support as RDS-managed. Three had ORACLE_MAINTAINED=Y
+and one had N: that flag alone does not prove ownership. Identifiers are omitted.
+The automated exception is profile-scoped, not an ownership assertion. Repeat
+ownership review per instance and after assignment changes. Unidentified accounts
+require review; confirmed customer accounts require an authorized move to an
+appropriate customer-managed profile, not exception acceptance.
+
+**Prior live outcome, not verification of this split branch:** The operator's
+AWS-pipeline deployment of the combined implementation produced the full `--all`
+report on 2026-11-12 at 20:58:55 UTC: 33 successful controls, zero failures,
+63 skipped; 81 successful tests, zero failures, 63 skipped. Both password-function
+controls executed, with exception tags and inherited STIG identifiers retained.
+Raw JSON and the metadata sidecar remain in the authorized local `out/` evidence
+directory. This split has not been deployed or assessed against Oracle.
+
+**Residual risk and closeout:** The unmet password requirements remain; this
+record does not establish equivalent AWS password controls. The designated risk
+authority must record acceptance, scope, decision date and review date; none is
+inferred here. #77 retains that closeout and full Docker-capable `make verify`
+as gates. Reassess if supported remediation, engine behavior, observed values or
+account assignments change. PR #109 is implementation history merged into
+develop, not delivery to main.
+
 ## Current customer-responsibility controls
 
 Controls marked `baseline manual skip` are already skipped by the baseline manual
@@ -328,9 +384,9 @@ customer skip gate.
 | SV-270549 | Account lockout persists until admin reset (`PASSWORD_LOCK_TIME`, AC-7 b) | Fix is `ALTER PROFILE <profile> LIMIT PASSWORD_LOCK_TIME UNLIMITED` against a site profile — org-defined db-altering SQL. Baseline check correct (`should cmp 'UNLIMITED'` per profile). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270550 | Max consecutive invalid logon attempts = 3 (`FAILED_LOGIN_ATTEMPTS`, CM-6 b) | Fix is `ALTER PROFILE <profile> LIMIT FAILED_LOGIN_ATTEMPTS 3` — org-defined db-altering SQL. Baseline SQL assertion implemented upstream (mitre-baseline `fix/sv-270550-failed-login-attempts`, held for PR). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270551 | Disable accounts after 35 days inactivity (`INACTIVE_ACCOUNT_TIME`, IA-4 e / AC-2(3)(a)) | Fix is `ALTER PROFILE <profile> LIMIT INACTIVE_ACCOUNT_TIME 35` (or `ALTER USER ... PROFILE ORA_STIG_PROFILE`) — org-defined db-altering SQL. Baseline check correct (`should_not cmp 'UNLIMITED'` and `<= account_inactivity_age` per profile). | run `10_profiles.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
-| SV-270561 | Enforce DOD password complexity (`PASSWORD_VERIFY_FUNCTION`, IA-5(1)(a)) | Fix binds a DOD-complexity verify function to the site's profiles (`ALTER PROFILE ... LIMIT PASSWORD_VERIFY_FUNCTION <fn>`, or `ALTER USER ... PROFILE ORA_STIG_PROFILE`) — org-defined db-altering SQL; Not a Finding when accounts are OS/enterprise-authenticated rather than by Oracle. Baseline SQL presence assertion implemented upstream (mitre-baseline `feat/sv-270561-password-verify-function`, held for PR); the complexity-rule code review is satisfied by using Oracle's supplied `ORA12C_STIG_VERIFY_FUNCTION` / `ORA_STIG_PROFILE`. **Known finding on RDS:** the `RDSADMIN` profile cannot be remediated (`ALTER PROFILE RDSADMIN` is blocked, `ORA-20900`) so it can never carry a compliant `PASSWORD_VERIFY_FUNCTION` — tracked in [#77](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/77); `DEFAULT` is customer-remediable. | run `12_password_verify_function.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
+| SV-270561 | Enforce DOD password complexity (`PASSWORD_VERIFY_FUNCTION`, IA-5(1)(a)) | Customer profiles require a resolved non-null function and source-code review. Only RDSADMIN literal NULL is accepted as the #77 deviation; missing data remains a finding. | run `12_password_verify_function.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270563 | Password maximum lifetime (`PASSWORD_LIFE_TIME`/`PASSWORD_GRACE_TIME`, IA-5(1)(a/d)) | Fix is `ALTER PROFILE <profile> LIMIT PASSWORD_LIFE_TIME <=60 ...` (or `ALTER USER ... PROFILE ORA_STIG_PROFILE`) — org-defined db-altering SQL; Not a Finding when accounts are OS/enterprise-authenticated. Baseline check correct (`baseline_status: fixed`; effective-life-time DECODE query, `should_not cmp 'UNLIMITED'` and `<= 60` per profile). The Oracle vendor DEFAULT of `PASSWORD_LIFE_TIME 35` + `PASSWORD_GRACE_TIME 7` = 42 already satisfies the `<= 60` bound. | run `10_profiles.sql` (DEFAULT — keeps `PASSWORD_LIFE_TIME 35`, preserving the vendor `GRACE_TIME 7` warning window; 35+7=42 <= 60) |
-| SV-270587 | Reject commonly-used/expected/compromised passwords (`PASSWORD_VERIFY_FUNCTION`, IA-5(1)(b)) | SV-270561 sibling: same PASSWORD_VERIFY_FUNCTION SQL predicate + remediation; the compromised-password logic lives in the verify-function code (satisfied by Oracle's `ORA12C_STIG_VERIFY_FUNCTION`, allowlisted through the `approved_password_verify_functions` input — a **function** name, not a profile name). Org-defined db-altering SQL on the SV-270495 pattern; Not a Finding when accounts are OS/enterprise-authenticated. Baseline SQL assertion merged upstream (cloud-gov/oracle-database-19c-stig-baseline#16, `cloudgov` @ `4534af38`, pinned in `inspec.lock`). **Known finding on RDS:** the `RDSADMIN` profile cannot be remediated (`ALTER PROFILE RDSADMIN` is blocked) — tracked in [#77](https://github.com/cloud-gov/cg-oracle-database-19c-stig-overlay/issues/77). | run `12_password_verify_function.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
+| SV-270587 | Reject commonly-used/expected/compromised passwords (`PASSWORD_VERIFY_FUNCTION`, IA-5(1)(b)) | SV-270561 sibling; resolved non-null customer functions must also be on approved_password_verify_functions (function names, not profile names). Only RDSADMIN literal NULL is accepted as the #77 deviation; unapproved functions remain findings. | run `12_password_verify_function.sql` (DEFAULT) and/or `11_ora_stig_profile.sql` (`ORA_STIG_PROFILE`) |
 | SV-270504 (customer layer) | DoD-selected audit-event set — events the RDS defaults MISS (AU-12 c) | The RDS defaults (`ORA_SECURECONFIG` / `ORA_LOGON_FAILURES`) do not cover `REVOKE`, `CHANGE PASSWORD`, `LOGOFF`, `CREATE SPFILE`. Enabling a tenant policy that adds them is db-altering SQL against an org-defined action set. | run `30_audit_policies.sql` (creates/enables `CG_AUDIT_POLICY`) |
 | SV-270546 | Identify temporary/emergency accounts (CM-6 b / AC-2(2)) | DISA allows a policy forbidding temporary/emergency accounts or enterprise authentication as Not a Finding; if Oracle-managed temporary accounts are used, the customer must define, create, and assign a distinctive temporary profile. Baseline manual skip. | customer policy, or create/assign a temporary profile |
 | SV-270547 | Auto-remove/disable temporary accounts after 72h (CM-6 b) | Sibling to SV-270546. DISA allows a consistently enforced policy forbidding temporary/emergency accounts, or non-Oracle (OS/enterprise) authentication, as Not a Finding. Satisfied at provisioning (broker issues a single non-temporary account); if the customer creates Oracle-managed temporary accounts, providing the 72-hour auto-lock mechanism is the customer's responsibility. Baseline manual skip (like SV-270546); not in the overlay's SQL-only skip gate. | customer policy, or run `60_temporary_users.sql` (TEMPORARY_USERS profile + 72h lock job) |

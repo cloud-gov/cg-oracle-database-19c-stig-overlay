@@ -34,6 +34,81 @@ include_controls 'oracle-database-19c-stig-baseline' do
     skip_control 'SV-270587'  # PASSWORD_VERIFY_FUNCTION (IA-5(1)(b), compromised-password rejection) — SV-270561 sibling; same org-defined function; 12_password_verify_function.sql / ORA_STIG_PROFILE
   end
 
+  rds_profile_sql = lambda do
+    oracledb_session(user: input('user'), password: input('password'),
+                     host: input('host'), port: input('port'),
+                     service: input('service'), sqlplus_bin: input('sqlplus_bin'))
+  end
+
+  # Issue #77: keep the observed AWS-managed NULL distinct from missing SQL data.
+  # Resolve inherited DEFAULT functions, retaining every assigned profile via LEFT
+  # JOINs. Only RDSADMIN's literal NULL is excepted; no customer profile is exempt.
+  profile_functions = lambda do |sql|
+    sql.query(%q{
+      SELECT u.profile || '|' ||
+        CASE WHEN p.limit IS NULL THEN 'MISSING'
+          WHEN p.limit = 'DEFAULT' THEN NVL(dp.limit, 'MISSING')
+          ELSE p.limit END AS profile_function
+      FROM (SELECT DISTINCT profile FROM dba_users) u
+      LEFT JOIN dba_profiles p ON p.profile = u.profile
+        AND p.resource_name = 'PASSWORD_VERIFY_FUNCTION'
+      LEFT JOIN dba_profiles dp ON dp.profile = 'DEFAULT'
+        AND dp.resource_name = 'PASSWORD_VERIFY_FUNCTION'
+      ORDER BY 1;
+    }).column('profile_function').map do |row|
+      row.to_s.strip.split('|', 2).map { |part| part.to_s.strip.upcase }
+    end
+  end
+
+  control 'SV-270561' do
+    impact 0.5
+    title 'Oracle Database must enforce the DOD standards for password complexity.'
+    desc 'AWS RDS accepted exception: RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL; recorded ALTER PROFILE rejection ORA-20900 (#77). Other assigned profiles require resolved non-null functions. Function source review remains required. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL only; ORA-20900; accepted AWS RDS deviation, not technical compliance'
+    functions = profile_functions.call(rds_profile_sql.call)
+    describe 'Assigned-profile password function inventory (AWS RDS exception assessment)' do
+      subject { functions }
+      it { should_not be_empty }
+    end
+    functions.each do |profile, function|
+      describe "Profile #{profile}: effective PASSWORD_VERIFY_FUNCTION=#{function} (RDSADMIN NULL exception; ORA-20900)" do
+        it 'has a resolved function or the exact accepted AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(function).not_to be_empty
+          exception = profile == 'RDSADMIN' && function == 'NULL'
+          present = !%w[NULL DEFAULT MISSING UNLIMITED].include?(function)
+          expect(exception || present).to eq(true)
+        end
+      end
+    end
+  end
+
+  control 'SV-270587' do
+    impact 0.5
+    title 'Oracle Database must reject commonly used, expected, or compromised passwords.'
+    desc 'AWS RDS accepted exception: RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL; recorded ALTER PROFILE rejection ORA-20900 (#77). Other assigned profiles require resolved non-null approved functions. Function source review remains required. See docs/RESPONSIBILITY.md.'
+    tag 'responsibility' => 'customer'
+    tag rds_exception: 'RDSADMIN PASSWORD_VERIFY_FUNCTION=NULL only; ORA-20900; accepted AWS RDS deviation, not technical compliance'
+    functions = profile_functions.call(rds_profile_sql.call)
+    approved = Array(input('approved_password_verify_functions')).map { |name| name.to_s.strip.upcase }
+    describe 'Assigned-profile approved password function inventory (AWS RDS exception assessment)' do
+      subject { functions }
+      it { should_not be_empty }
+    end
+    functions.each do |profile, function|
+      describe "Profile #{profile}: effective PASSWORD_VERIFY_FUNCTION=#{function} (RDSADMIN NULL exception; ORA-20900)" do
+        it 'has an approved resolved function or the exact accepted AWS RDS deviation' do
+          expect(profile).not_to be_empty
+          expect(function).not_to be_empty
+          exception = profile == 'RDSADMIN' && function == 'NULL'
+          present = !%w[NULL DEFAULT MISSING UNLIMITED].include?(function)
+          expect(exception || (present && approved.include?(function))).to eq(true)
+        end
+      end
+    end
+  end
+
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
   # SV-270496 (DoS mitigation, SC-5/AC-10). The baseline check inspects
   # $ORACLE_HOME/network/admin/listener.ora for a connection RATE_LIMIT. On

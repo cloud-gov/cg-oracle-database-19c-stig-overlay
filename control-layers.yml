@@ -543,10 +543,11 @@ controls:
       profile) and/or hardening/sql/11_ora_stig_profile.sql (assign the
       Oracle-supplied ORA_STIG_PROFILE, which already binds a compliant verify
       function). skip_control under --skip-customer-controls; runs under --all.
-      KNOWN RESIDUAL FINDING on RDS: the RDSADMIN profile can never pass — RDS
-      blocks ALTER PROFILE RDSADMIN (ORA-20900), so no compliant
-      PASSWORD_VERIFY_FUNCTION can be bound to it; DEFAULT is customer-remediable.
-      Tracked in issue #77 (per-profile carve-out for SV-270561/SV-270587).
+      Issue #77: the overlay accepts only RDSADMIN's literal NULL function as an
+      explicitly named AWS RDS deviation, citing the recorded ORA-20900 rejection.
+      Every other assigned profile requires a resolved non-null function; missing
+      rows, empty inventory, and unresolved DEFAULT values fail. Function source
+      review remains required; exception acceptance is not technical compliance.
   - id_pattern: "SV-270587"
     set_by: sql_hardening
     verified_by: sql
@@ -561,11 +562,11 @@ controls:
       (cloud-gov/oracle-database-19c-stig-baseline#16, MERGED into cloudgov at
       4534af38; pinned in inspec.lock) — baseline_status: fixed. skip_control under
       --skip-customer-controls; runs under --all.
-      KNOWN RESIDUAL FINDING on RDS: the RDSADMIN profile can never pass — RDS
-      blocks ALTER PROFILE RDSADMIN (ORA-20900), so no compliant
-      PASSWORD_VERIFY_FUNCTION can be bound to it; DEFAULT is customer-remediable.
-      Tracked in issue #77 (per-profile carve-out for SV-270561/SV-270587).
-      See controls/overlay.rb skip gate and the SV-270561 baseline .rb.
+      Issue #77: the overlay accepts only RDSADMIN's literal NULL function as an
+      explicitly named AWS RDS deviation, citing the recorded ORA-20900 rejection.
+      Other assigned profiles require resolved non-null functions on the approved
+      allowlist. Missing data and unapproved functions remain findings, including
+      unapproved non-null functions on RDSADMIN. See controls/overlay.rb.
   - id_pattern: "SV-270551"
     set_by: sql_hardening
     verified_by: sql

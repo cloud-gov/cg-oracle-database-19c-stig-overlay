@@ -103,4 +103,4 @@ RUN useradd -u 10001 -m scanner \
     && mkdir -p /out && chown scanner:scanner /out
 USER scanner
 
-ENTRYPOINT ["/usr/local/bin/run-validation.sh"]
+#ENTRYPOINT ["/usr/local/bin/run-validation.sh"]

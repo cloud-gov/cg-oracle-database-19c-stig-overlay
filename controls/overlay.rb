@@ -40,6 +40,9 @@ include_controls 'oracle-database-19c-stig-baseline' do
   # Query profile AND value together; the inherited 495/563 checks lose the
   # profile name, making it impossible to distinguish AWS from customer findings.
   # A missing profile/limit or an unrecognized value is a finding, never a pass.
+  # Guard each customer override as well as skipping the inherited control above:
+  # declaring an override after skip_control can select that control again in CINC.
+  # Platform-only runs must never register these overrides or execute their SQL.
   rds_profile_limits = lambda do |sql, resource, in_use|
     source = if in_use
                'FROM (SELECT DISTINCT profile FROM dba_users) u ' \
@@ -89,7 +92,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   # These three observed RDSADMIN values are accepted on AWS RDS only. The
   # individual descriptions and JSON results retain the original, unmet values.
@@ -112,7 +115,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   control 'SV-270550' do
     impact 0.5
@@ -135,7 +138,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   control 'SV-270551' do
     impact 0.5
@@ -159,7 +162,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   control 'SV-270563' do
     impact 0.5
@@ -206,7 +209,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   # Issue #77: keep the observed AWS-managed NULL distinct from missing SQL data.
   # Resolve inherited DEFAULT functions, retaining every assigned profile via LEFT
@@ -250,7 +253,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   control 'SV-270587' do
     impact 0.5
@@ -275,7 +278,7 @@ include_controls 'oracle-database-19c-stig-baseline' do
         end
       end
     end
-  end
+  end unless skip_customer
 
   # --- PLATFORM disposition: not_applicable_rds --------------------------------
   # SV-270496 (DoS mitigation, SC-5/AC-10). The baseline check inspects

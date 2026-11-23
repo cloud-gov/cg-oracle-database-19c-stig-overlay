@@ -3,7 +3,7 @@ title: "Control responsibility model — platform vs. customer"
 description: "How Oracle 19c STIG controls are flagged as a Cloud.gov platform responsibility or a customer responsibility, and how the overlay skips customer-responsibility controls on a platform-only run."
 status: draft
 tier: 2
-last_updated: "2026-11-12"
+last_updated: "2026-11-23"
 ---
 
 # Control responsibility: platform vs. customer
@@ -279,8 +279,21 @@ include_controls 'oracle-database-19c-stig-baseline' do
 end
 ```
 
+The seven customer controls also have AWS RDS exception overrides in this same
+block. Each override is guarded with `end unless skip_customer`: a platform-only
+run must skip the inherited control **and not declare its override**. Declaring
+the override after `skip_control` can select the control again in CINC, causing
+customer-profile findings to appear despite `--skip-customer-controls`.
+
+`make test-rdsadmin` covers both postures using the real CINC engine with a local
+fixture baseline and fake SQL resource. It checks that platform-only mode does
+not query customer profile limits, that a platform sentinel still runs, and that
+full mode retains all seven customer findings for the observed unhardened values.
+These are local runner checks, not live Oracle compliance evidence.
+
 - **`skip_customer_responsibility_controls == false`** (default / `--all`): no
-  `skip_control` is emitted, and the **inherited baseline assertion runs**.
+  `skip_control` is emitted, and the **customer assertions run**, including the
+  seven AWS RDS exception overrides.
 - **`skip_customer_responsibility_controls == true`** (`--skip-customer-controls`):
   qualifying SQL-assessed customer-responsibility controls are skipped in-place —
   they do not run and cannot fail in a platform-provider run.
